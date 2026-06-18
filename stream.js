@@ -6,6 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn, execSync, exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec); 
 const { OBSWebSocket } = require('obs-websocket-js'); 
 
 const obs = new OBSWebSocket(); 
@@ -34,30 +36,14 @@ const STREAM_KEYS = {
     '5'   : '15273689226859_15317451606635_d7zzy3c7qi', 
     '5.1' : '15273713933931_15317494860395_avj47smmim', 
     '5.2' : '15273722257003_15317510195819_6edjluvdqi',
-    '5.3' : '15273739624043_15317541653099_ii4bxpvabe',
-    '5.4' : '15273750175339_15317561707115_csel26ku5a', 
-    '5.5' : '15273760071275_15317579467371_cnewcj54me',
-    '5.6' : '15273767935595_15317595851371_3q43tk7tvm', 
     's1.1'  : '14204232736303_14846150314543_37jq4ryehq',
     's1.2'  : '14204288179759_14846247373359_tnsknmapva',
     's1.3'  : '14204319768111_14846302489135_sr4ht4ccwq',
     's1.4'  : '14204331957807_14846326147631_dji2acqcze',
     's1.5'  : '14204346572335_14846351641135_7gvns4o5ue',
-    's1.6'  : '14204361252399_14846376479279_cjajhf4d3y',
-    's1.7'  : '14204370492975_14846393649711_6fduhdqite',
-    's1.8'  : '14204395527727_14846438017583_s2jlti7lsm',
-    's1.9'  : '14204411387439_14846464887343_f5lxgcqj5y',
-    's1.10' : '14204424691247_14846487562799_xmbvntt6wa',
-
     's2.1'  : '14204490948143_14846603495983_kzevn36tii',
     's2.2'  : '14204506742319_14846634494511_ta2rxyg2oy',
     's2.3'  : '14204523322927_14846661233199_foqb3q7zb4',
-    's2.4'  : '14204540034607_14846689085999_gjejdie4uy',
-    's2.5'  : '14204555304495_14846715497007_zdanghuxzu',
-    's2.6'  : '14204565200431_14846734371375_ap3bqpabpu',
-    's2.7'  : '14204577259055_14846756194863_3ecad2535u',
-    's2.8'  : '14204592528943_14846785227311_4hjl46y62e',
-    's2.9'  : '14204602621487_14846802594351_ilnp6lxekq',
     's2.10' : '14206184136239_14849618610735_ihnbx7hkoi'
 };
 
@@ -83,6 +69,7 @@ let backupUrlIndex = urlList.length > 1 ? 1 : 0;
 const SELECTED_CHANNEL = process.env.OKRU_STREAM_ID || '1';
 const SERVER_SELECTION = process.env.SERVER_SELECTION || 'None'; 
 const PROXY_ENGINE = process.env.PROXY_ENGINE || 'Cloudflare WARP (Recommended)';
+const DYNAMIC_PROXY = process.env.DYNAMIC_PROXY || '';
 
 const ACTIVE_STREAM_KEY = STREAM_KEYS[SELECTED_CHANNEL] || STREAM_KEYS['1'];
 
@@ -107,20 +94,24 @@ async function takeAndBatchScreenshot(page, stepName) {
         pendingScreenshots.push(filePath);
 
         if (pendingScreenshots.length >= 3) {
-            try {
-                const tag = 'live-stream-logs';
-                try { execSync(`gh release view ${tag} || gh release create ${tag} -t "Live Logs"`, { stdio: 'ignore' }); } catch(e) {}
+            const filesToUpload = pendingScreenshots.join(' ');
+            pendingScreenshots = []; 
+            
+            (async () => {
                 try {
-                    const oldAssets = execSync(`gh release view ${tag} --json assets -q ".assets[].name"`, { encoding: 'utf-8' }).trim().split('\n');
-                    for (const asset of oldAssets) if (asset) execSync(`gh release delete-asset ${tag} "${asset}" -y`, { stdio: 'ignore' });
-                } catch(e) {}
-
-                const fileList = pendingScreenshots.join(' ');
-                exec(`gh release upload ${tag} ${fileList} --clobber`, (err) => {
-                    if (!err) uploadCycleCount++;
-                });
-                pendingScreenshots = []; 
-            } catch (err) { }
+                    const tag = 'live-stream-logs';
+                    try { await execPromise(`gh release view ${tag} || gh release create ${tag} -t "Live Logs"`); } catch(e) {}
+                    try {
+                        const { stdout } = await execPromise(`gh release view ${tag} --json assets -q ".assets[].name"`);
+                        const oldAssets = stdout.trim().split('\n');
+                        for (const asset of oldAssets) {
+                            if (asset) await execPromise(`gh release delete-asset ${tag} "${asset}" -y`).catch(e=>{});
+                        }
+                    } catch(e) {}
+                    await execPromise(`gh release upload ${tag} ${filesToUpload} --clobber`).catch(e=>{});
+                    uploadCycleCount++;
+                } catch (err) { }
+            })();
         }
     } catch (e) { }
 }
@@ -401,7 +392,9 @@ async function initializeVideo(page, startMuted, isActivePage) {
             }, 1000); 
         }).catch(() => {});
 
-        await targetFrame.evaluate((muteVideo) => {
+        // 🌟 FIX 2: Dynamic Audio State to prevent "Ghost Audio" fighting
+        await targetFrame.evaluate((initMuted) => {
+            window.__isMuted = initMuted; 
             setInterval(() => {
                 try {
                     const style = document.createElement('style');
@@ -412,12 +405,14 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     const videos = Array.from(document.querySelectorAll('video'));
                     let realVideo = null;
 
+                    // Strictly enforce the global __isMuted variable
                     mediaElements.forEach(media => { 
-                        media.muted = muteVideo; 
-                        media.volume = muteVideo ? 0.0 : 1.0; 
+                        if (media.muted !== window.__isMuted) media.muted = window.__isMuted; 
+                        let targetVol = window.__isMuted ? 0.0 : 1.0;
+                        if (media.volume !== targetVol) media.volume = targetVol; 
                     });
 
-                    if (!muteVideo) {
+                    if (!window.__isMuted) {
                         document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => {
                             try { btn.click(); } catch(e){}
                         });
@@ -449,7 +444,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
     await hideLoadingUI(page);
 }
 
-// 🌟 FIX: Timeout increased from 2.5s to 5.0s to prevent false CPU timeouts
 async function checkPageStatus(page) {
     if (!page) return { status: 'DEAD' };
     try {
@@ -510,7 +504,6 @@ async function startWatchdog() {
     let activeUrlStr = urlList[currentUrlIndex];
     let backupUrlStr = urlList[backupUrlIndex];
 
-    // 🌟 FIX: The Strike Counter Shield
     let failStrikes = 0; 
 
     while (true) {
@@ -526,14 +519,15 @@ async function startWatchdog() {
                 if (Date.now() - frozenCheckTimestamp > FROZEN_THRESHOLD_MS) activeStatus.status = 'FROZEN';
             } else {
                 lastActiveTime = activeStatus.currentTime; frozenCheckTimestamp = Date.now();
-                failStrikes = 0; // 🌟 Reset strikes because video is moving safely!
+                failStrikes = 0; 
                 
+                // 🌟 FIX 2: Correctly UNMUTE Active Tab natively
                 for (const frame of activePage.frames()) {
                     try {
                         if (!frame.isDetached()) {
                             frame.evaluate(() => { 
+                                window.__isMuted = false;
                                 document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
-                                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
                             }).catch(()=>{});
                         }
                     } catch(e) {}
@@ -541,11 +535,15 @@ async function startWatchdog() {
             }
         }
 
+        // 🌟 FIX 2: Correctly Force MUTE Backup Tab natively so it never leaks audio!
         if (backupPage) {
             for (const frame of backupPage.frames()) {
                 try {
                     if (!frame.isDetached()) {
-                        frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }).catch(()=>{});
+                        frame.evaluate(() => { 
+                            window.__isMuted = true;
+                            document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); 
+                        }).catch(()=>{});
                     }
                 } catch(e) {}
             }
@@ -557,10 +555,11 @@ async function startWatchdog() {
             console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
             console.log(`[⏭️] NEXT IN QUEUE    : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
             if (watchdogTicks % 120 === 0) {
-                await takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
+                takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
             }
         }
 
+        // 🌟 FIX 1: Non-Blocking 3-Strike Tolerance Shield (No Stuttering/Stopping)
         if (activeStatus.status === 'FROZEN' || activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD') {
             
             if (isWarmupPhase && (Date.now() - streamSetupTime < WARMUP_MAX_TIME)) { 
@@ -569,72 +568,68 @@ async function startWatchdog() {
                 continue; 
             }
 
-            // 🌟 3-STRIKE FALSE ALARM SHIELD 🌟
             failStrikes++;
             console.log(`[🕵️] Watchdog Shield: Detected '${activeStatus.status}' (Strike ${failStrikes}/3)`);
             
             if (failStrikes < 3) {
-                console.log(`[⏳] Ignoring false alarm. Giving stream a chance to recover...`);
-                await new Promise(r => setTimeout(r, 2000));
-                continue; // Skip the Hot-Swap and check again!
-            }
-
-            // If 3 strikes reached, it is actually DEAD.
-            console.log(`\n==================================================`);
-            console.log(`[!] ❌ WATCHDOG CONFIRMED ISSUE: ${activeStatus.status} (3 Strikes Reached)`);
-            console.log(`[💀] FAILED STREAM: Server [${currentUrlIndex}] -> ${activeUrlStr}`);
-            console.log(`==================================================`);
-            
-            await takeAndBatchScreenshot(activePage, `error-${activeStatus.status.toLowerCase()}`);
-            
-            console.log(`[*] Checking Backup Tab status before switching...`);
-            let backupStatus = await checkPageStatus(backupPage);
-
-            if (backupStatus.status === 'HEALTHY' || backupStatus.status === 'DEAD') { 
-                
-                for (const frame of activePage.frames()) {
-                    try {
-                        if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); });
-                    } catch(e) {}
-                }
-                
-                await showLoadingUI(backupPage, "RECONNECTING", "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
-                await backupPage.bringToFront();
-                await new Promise(r => setTimeout(r, 1000)); 
-                
-                try { await backupPage.mouse.click(10, 10); } catch(e){} 
-
-                console.log(`[*] Initializing Video on the newly active tab...`);
-                await initializeVideo(backupPage, false, true); 
-
-                let brokenPage = activePage; activePage = backupPage; backupPage = brokenPage;
-                lastActiveTime = -1; frozenCheckTimestamp = Date.now();
-
-                currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex]; 
-                backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex]; 
-
-                console.log(`\n==================================================`);
-                console.log(`[🔄] SMART HOT-SWAP EXECUTED SUCCESSFULLY`);
-                console.log(`==================================================`);
-                console.log(`[📺] NEW ACTIVE STREAM : Server [${currentUrlIndex}] -> ${activeUrlStr}`);
-                console.log(`[🔊] LIVE AUDIO STATUS : ON (Unmuted & Forced)`);
-                console.log(`--------------------------------------------------`);
-                console.log(`[🛡️] NEXT BACKUP QUEUE : Server [${backupUrlIndex}] -> ${backupUrlStr}`);
-                console.log(`[🔇] BACKUP AUDIO      : MUTED (Background Loading)`);
-                console.log(`==================================================\n`);
-
-                backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-                
-                failStrikes = 0; // 🌟 Reset strikes after successful swap
-                streamSetupTime = Date.now(); 
-                isWarmupPhase = true;
-
+                console.log(`[⏳] Ignoring false alarm. Giving stream a chance to recover naturally...`);
+                // Continues normal loop without freezing!
             } else {
-                console.error(`[!] ❌ Backup Tab is ALSO DEAD/FROZEN. Hard Restarting System...`);
-                throw new Error("Both Active and Backup tabs failed.");
+                console.log(`\n==================================================`);
+                console.log(`[!] ❌ WATCHDOG CONFIRMED ISSUE: ${activeStatus.status} (3 Strikes Reached)`);
+                console.log(`[💀] FAILED STREAM: Server [${currentUrlIndex}] -> ${activeUrlStr}`);
+                console.log(`==================================================`);
+                
+                await takeAndBatchScreenshot(activePage, `error-${activeStatus.status.toLowerCase()}`);
+                
+                console.log(`[*] Checking Backup Tab status before switching...`);
+                let backupStatus = await checkPageStatus(backupPage);
+
+                if (backupStatus.status === 'HEALTHY' || backupStatus.status === 'DEAD') { 
+                    
+                    for (const frame of activePage.frames()) {
+                        try {
+                            if (!frame.isDetached()) await frame.evaluate(() => { window.__isMuted = true; document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); });
+                        } catch(e) {}
+                    }
+                    
+                    await showLoadingUI(backupPage, "RECONNECTING", "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
+                    await backupPage.bringToFront();
+                    await new Promise(r => setTimeout(r, 1000)); 
+                    
+                    try { await backupPage.mouse.click(10, 10); } catch(e){} 
+
+                    console.log(`[*] Initializing Video on the newly active tab...`);
+                    await initializeVideo(backupPage, false, true); 
+
+                    let brokenPage = activePage; activePage = backupPage; backupPage = brokenPage;
+                    lastActiveTime = -1; frozenCheckTimestamp = Date.now();
+
+                    currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex]; 
+                    backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex]; 
+
+                    console.log(`\n==================================================`);
+                    console.log(`[🔄] SMART HOT-SWAP EXECUTED SUCCESSFULLY`);
+                    console.log(`==================================================`);
+                    console.log(`[📺] NEW ACTIVE STREAM : Server [${currentUrlIndex}] -> ${activeUrlStr}`);
+                    console.log(`[🔊] LIVE AUDIO STATUS : ON (Unmuted & Forced)`);
+                    console.log(`--------------------------------------------------`);
+                    console.log(`[🛡️] NEXT BACKUP QUEUE : Server [${backupUrlIndex}] -> ${backupUrlStr}`);
+                    console.log(`[🔇] BACKUP AUDIO      : MUTED (Background Loading)`);
+                    console.log(`==================================================\n`);
+
+                    backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                    
+                    failStrikes = 0; 
+                    streamSetupTime = Date.now(); 
+                    isWarmupPhase = true;
+
+                } else {
+                    console.error(`[!] ❌ Backup Tab is ALSO DEAD/FROZEN. Hard Restarting System...`);
+                    throw new Error("Both Active and Backup tabs failed.");
+                }
             }
         } else {
-            // Reset strikes if it's HEALTHY and not FROZEN
             failStrikes = 0; 
         }
 
