@@ -236,6 +236,14 @@ x264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0
     fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify(sceneJson, null, 2));
 }
 
+// 🌟 FIX: Attaching listeners to block Javascript Alerts/Popups
+function attachAntiAdListeners(page) {
+    page.on('dialog', async dialog => {
+        console.log(`[🛡️] AD-BLOCKER: Dismissed a Javascript alert/dialog!`);
+        await dialog.dismiss();
+    });
+}
+
 async function initializeVideo(page, startMuted, isActivePage) {
     try {
         if (SERVER_SELECTION !== 'None') {
@@ -350,73 +358,94 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
         if (!targetFrame) targetFrame = page.mainFrame();
 
+        // 🌟 FIX: THE INVINCIBLE LOOP (Main Page Ad Zapper)
         await page.evaluate(() => {
-            document.documentElement.style.setProperty('background-color', 'black', 'important');
-            document.body.style.setProperty('background-color', 'black', 'important');
-            document.body.style.setProperty('overflow', 'hidden', 'important');
+            setInterval(() => {
+                try {
+                    document.documentElement.style.setProperty('background-color', 'black', 'important');
+                    document.body.style.setProperty('background-color', 'black', 'important');
+                    document.body.style.setProperty('overflow', 'hidden', 'important');
 
-            let iframes = Array.from(document.querySelectorAll('iframe'));
-            let mainIframe = null; let maxArea = 0;
+                    let iframes = Array.from(document.querySelectorAll('iframe'));
+                    let mainIframe = null; let maxArea = 0;
 
-            iframes.forEach(ifr => {
-                let area = ifr.clientWidth * ifr.clientHeight;
-                if (area > maxArea && area > 5000) { maxArea = area; mainIframe = ifr; }
-            });
+                    // Find largest iframe (usually the real video player)
+                    iframes.forEach(ifr => {
+                        let area = ifr.clientWidth * ifr.clientHeight;
+                        if (area > maxArea && area > 5000) { maxArea = area; mainIframe = ifr; }
+                    });
 
-            if (mainIframe) {
-                mainIframe.style.setProperty('position', 'fixed', 'important');
-                mainIframe.style.setProperty('top', '0px', 'important');
-                mainIframe.style.setProperty('left', '0px', 'important');
-                mainIframe.style.setProperty('width', '100vw', 'important');
-                mainIframe.style.setProperty('height', '100vh', 'important');
-                mainIframe.style.setProperty('z-index', '2147483645', 'important');
-                mainIframe.style.setProperty('background-color', 'black', 'important');
-                mainIframe.style.setProperty('border', 'none', 'important');
-                mainIframe.style.setProperty('opacity', '1', 'important');
-                mainIframe.style.setProperty('visibility', 'visible', 'important');
-            }
+                    // Hide ALL other iframes (pop-unders/ads)
+                    iframes.forEach(ifr => {
+                        if (ifr !== mainIframe) {
+                            ifr.style.setProperty('opacity', '0', 'important');
+                            ifr.style.setProperty('pointer-events', 'none', 'important');
+                            ifr.style.setProperty('z-index', '-999', 'important');
+                        }
+                    });
 
-            const junk = document.querySelectorAll('.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]');
-            junk.forEach(el => { try { el.style.setProperty('display', 'none', 'important'); } catch(e){} });
+                    if (mainIframe) {
+                        mainIframe.style.setProperty('position', 'fixed', 'important');
+                        mainIframe.style.setProperty('top', '0px', 'important');
+                        mainIframe.style.setProperty('left', '0px', 'important');
+                        mainIframe.style.setProperty('width', '100vw', 'important');
+                        mainIframe.style.setProperty('height', '100vh', 'important');
+                        mainIframe.style.setProperty('z-index', '2147483645', 'important');
+                        mainIframe.style.setProperty('background-color', 'black', 'important');
+                        mainIframe.style.setProperty('border', 'none', 'important');
+                        mainIframe.style.setProperty('opacity', '1', 'important');
+                        mainIframe.style.setProperty('visibility', 'visible', 'important');
+                    }
+
+                    // Destroy all known ad elements dynamically
+                    const junk = document.querySelectorAll('.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"], [id*="pop"], [class*="pop"], a[href*="extension"]');
+                    junk.forEach(el => { try { el.style.setProperty('display', 'none', 'important'); } catch(e){} });
+                } catch (err) {}
+            }, 1000); // Runs every 1 second continuously!
         }).catch(() => {});
 
-        await targetFrame.evaluate(async (muteVideo) => {
-            const style = document.createElement('style');
-            style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
-            document.head.appendChild(style);
+        // 🌟 FIX: THE INVINCIBLE LOOP (Video Frame Keeper)
+        await targetFrame.evaluate((muteVideo) => {
+            setInterval(() => {
+                try {
+                    const style = document.createElement('style');
+                    style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
+                    document.head.appendChild(style);
 
-            const mediaElements = document.querySelectorAll('video, audio');
-            const videos = Array.from(document.querySelectorAll('video'));
-            let realVideo = null;
+                    const mediaElements = document.querySelectorAll('video, audio');
+                    const videos = Array.from(document.querySelectorAll('video'));
+                    let realVideo = null;
 
-            mediaElements.forEach(media => { 
-                media.muted = muteVideo; 
-                media.volume = muteVideo ? 0.0 : 1.0; 
-            });
+                    mediaElements.forEach(media => { 
+                        media.muted = muteVideo; 
+                        media.volume = muteVideo ? 0.0 : 1.0; 
+                    });
 
-            if (!muteVideo) {
-                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => {
-                    try { btn.click(); } catch(e){}
-                });
-            }
+                    if (!muteVideo) {
+                        document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => {
+                            try { btn.click(); } catch(e){}
+                        });
+                    }
 
-            for (const v of videos) {
-                if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; }
-            }
+                    for (const v of videos) {
+                        if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; }
+                    }
 
-            if (realVideo) { 
-                realVideo.style.setProperty('position', 'fixed', 'important');
-                realVideo.style.setProperty('top', '0px', 'important');
-                realVideo.style.setProperty('left', '0px', 'important');
-                realVideo.style.setProperty('width', '100vw', 'important');
-                realVideo.style.setProperty('height', '100vh', 'important');
-                realVideo.style.setProperty('z-index', '2147483647', 'important');
-                realVideo.style.setProperty('background-color', 'black', 'important');
-                realVideo.style.setProperty('object-fit', 'contain', 'important');
-                realVideo.style.setProperty('opacity', '1', 'important');
-                realVideo.style.setProperty('visibility', 'visible', 'important');
-                realVideo.style.setProperty('display', 'block', 'important');
-            }
+                    if (realVideo) { 
+                        realVideo.style.setProperty('position', 'fixed', 'important');
+                        realVideo.style.setProperty('top', '0px', 'important');
+                        realVideo.style.setProperty('left', '0px', 'important');
+                        realVideo.style.setProperty('width', '100vw', 'important');
+                        realVideo.style.setProperty('height', '100vh', 'important');
+                        realVideo.style.setProperty('z-index', '2147483647', 'important'); // Always max z-index
+                        realVideo.style.setProperty('background-color', 'black', 'important');
+                        realVideo.style.setProperty('object-fit', 'contain', 'important');
+                        realVideo.style.setProperty('opacity', '1', 'important');
+                        realVideo.style.setProperty('visibility', 'visible', 'important');
+                        realVideo.style.setProperty('display', 'block', 'important');
+                    }
+                } catch(err) {}
+            }, 1000); // Re-applies z-index every second to beat ads!
         }, startMuted).catch(() => {});
 
     } catch (e) { }
@@ -636,7 +665,6 @@ async function startDirectStreaming() {
 
     console.log(`[*] Starting browser with EXACT viewport dimensions: ${RES_W}x${RES_H} and Cloudflare WARP Proxy...`);
     
-    // 🌟 WARP Proxy Set Back to Safe Port 40000
     browser = await puppeteer.launch({
         headless: false, 
         defaultViewport: { width: RES_W, height: RES_H },
@@ -665,9 +693,25 @@ async function startDirectStreaming() {
         ]
     });
 
+    // 🌟 FIX: THE POP-UP KILLER (Kills any new tab the site tries to open)
+    browser.on('targetcreated', async (target) => {
+        if (target.type() === 'page') {
+            const newPage = await target.page();
+            setTimeout(async () => {
+                if (newPage && newPage !== activePage && newPage !== backupPage) {
+                    console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
+                    try { await newPage.close(); } catch(e) {}
+                }
+            }, 500); // 0.5 sec delay to ensure safe closing
+        }
+    });
+
     activePage = (await browser.pages())[0]; 
     backupPage = await browser.newPage();
     
+    attachAntiAdListeners(activePage);
+    attachAntiAdListeners(backupPage);
+
     await activePage.bringToFront(); 
 
     console.log(`[*] STEP 1: Loading Server [${currentUrlIndex}] on Active Page: ${urlList[currentUrlIndex]}`);
