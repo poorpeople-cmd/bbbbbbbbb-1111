@@ -1,3 +1,28 @@
+
+
+
+# 1. Naye Repo Mein Cancel/Delete Fail Kyun Hua? (The Technical Fix)
+# Naya GitHub account aur nayi repository jab banti hai, toh GitHub by default uski security settings ko bohat strict rakhta hai. Aapka workflow chal gaya aur usne streams.csv se data utha liya (kyunke Read permission default hoti hai), lekin usne baqi workflows ko Cancel ya kachra Delete nahi kiya kyunke uske paas API ke zariye modifications karne ki permission nahi thi.
+
+# Iska Fix Yeh Hai:
+
+# Apni GitHub Repository mein jayen.
+
+# Upar Settings tab par click karein.
+
+# Left menu mein Actions par click karein aur phir General mein jayen.
+
+# Scroll kar ke bilkul neechay Workflow permissions ke section mein aayen.
+
+# Wahan "Read repository contents and packages permissions" select hoga. Aapko usay change kar ke "Read and write permissions" par tick karna hai.
+
+# Usi ke neechay "Allow GitHub Actions to create and approve pull requests" ko bhi check kar dein aur Save karein.
+
+# Ab aapka manager script perfectly workflows ko kill aur delete kar payega.
+
+
+
+
 name: Always-On Stream Manager (All-In-One Control)
 
 on:
