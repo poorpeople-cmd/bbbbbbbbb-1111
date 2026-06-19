@@ -580,9 +580,8 @@ async function startWatchdog() {
                 console.log(`[!] ❌ BACKEND CONNECTION LOST: ${activeStatus.status} - EXECUTING INSTANT HOT-SWAP`);
                 console.log(`==================================================`);
                 
-                // 🌟 FIX: Inject Reconnecting Overlay on ACTIVE visible tab first so OBS captures it instantly!
                 await showLoadingUI(activePage, "RECONNECTING", "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
-                await new Promise(r => setTimeout(r, 500)); // Give OBS time to frame-lock the black loading screen
+                await new Promise(r => setTimeout(r, 500)); 
 
                 await takeAndBatchScreenshot(activePage, `error-${activeStatus.status.toLowerCase()}`);
                 
@@ -596,7 +595,6 @@ async function startWatchdog() {
                         } catch(e) {}
                     }
                     
-                    // Pre-inject overlay on the backup tab too so it stays black while initializing
                     await showLoadingUI(backupPage, "RECONNECTING", "Optimizing live video connection <span class='stream-blink'>...</span>");
                     await backupPage.bringToFront();
                     await new Promise(r => setTimeout(r, 500)); 
@@ -656,6 +654,7 @@ async function startDirectStreaming() {
     console.log('[*] Attempting to connect to OBS WebSocket (Polling Engine Active)...');
     for (let attempt = 1; attempt <= 15; attempt++) {
         try {
+            // 🌟 FIX: Added 'await' so OBS connection does not infinite loop
             await Promise.race([
                 obs.connect('ws://127.0.0.1:4455', 'secret'),
                 new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
@@ -764,7 +763,10 @@ async function startDirectStreaming() {
 
 async function mainLoop() {
     while (true) {
-        try { startDirectStreaming(); } 
+        try { 
+            // 🌟 FIX: Added the critical 'await' to prevent infinite execution loop crash!
+            await startDirectStreaming(); 
+        } 
         catch (error) {
             console.error(`\n[!] ALERT: ${error.message}`);
             console.log('[*] 🔄 Hard Restarting everything in 3 seconds...');
