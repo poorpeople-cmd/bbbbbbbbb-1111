@@ -12,6 +12,16 @@ const { OBSWebSocket } = require('obs-websocket-js');
 
 const obs = new OBSWebSocket(); 
 
+// 🌟 2026 FIX: GLOBAL ANTI-CRASH SHIELD
+// Yeh system ko stealth plugin ke background crashes se bachayega
+process.on('uncaughtException', (err) => {
+    if (err.message && (err.message.includes('Session closed') || err.message.includes('TargetCloseError') || err.message.includes('Requesting main frame too early'))) return;
+    console.error('[!] Uncaught Exception:', err.message);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    if (reason && reason.message && (reason.message.includes('Session closed') || reason.message.includes('TargetCloseError') || reason.message.includes('Requesting main frame too early'))) return;
+});
+
 // 🚀 Multi-Stream Key Manager
 const STREAM_KEYS = {
     '1'   : '15254238731883_15281627925099_najspfkgne', 
@@ -173,7 +183,6 @@ x264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0
     fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify(sceneJson, null, 2));
 }
 
-// 🌟 FIX: Safely attach listeners only if page is valid and ready
 function attachAntiAdListeners(page) {
     if(!page || page.isClosed()) return;
     page.on('dialog', async dialog => {
@@ -184,20 +193,16 @@ function attachAntiAdListeners(page) {
     });
 }
 
-// 🌟 FIX: Safe wrapper to create pages without triggering Stealth plugin early-frame crashes
 async function safeNewPage(browserInst) {
     let newPage = await browserInst.newPage();
-    // A small buffer to ensure the blank page has a document before we do anything
     await new Promise(r => setTimeout(r, 500));
     attachAntiAdListeners(newPage);
     return newPage;
 }
 
-// 🌟 FIX: Safe wrapper to close pages without crashing the loop if already closed
 async function safeClosePage(pageToClose) {
     if (pageToClose && !pageToClose.isClosed()) {
         try {
-            // Remove listeners first to avoid memory leaks
             pageToClose.removeAllListeners('dialog');
             await pageToClose.close();
         } catch(e) {}
@@ -362,7 +367,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
         }
 
         if(page.isClosed()) return;
-        // Setup Smart Audio Controller
         await page.evaluate((initMuted) => {
             window.__isMuted = initMuted; 
             setInterval(() => {
@@ -509,13 +513,15 @@ async function startWatchdog() {
         }
 
         watchdogTicks++;
-        if (watchdogTicks % 4 === 0) {
+        
+        // 🌟 2026 FIX: CLEAN LOGS
+        // Print HEALTHY heartbeats only once every 3 MINUTES (180 seconds)
+        // Errors are printed immediately when they happen.
+        if (watchdogTicks % 180 === 0) {
             console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
-            console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
-            console.log(`[⏭️] NEXT IN QUEUE    : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
-            if (watchdogTicks % 120 === 0) {
-                takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
-            }
+            console.log(`[▶️] CURRENT ACTIVE : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
+            console.log(`[⏭️] BACKUP QUEUE   : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
+            takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
         }
 
         if (activeStatus.status === 'FROZEN' || activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'NO_DATA_FLOW') {
@@ -546,14 +552,14 @@ async function startWatchdog() {
                 // 🌟 TRACK A: SAME LINK RECOVERY ATTEMPT 🌟
                 console.log(`[*] TRACK A: Attempting to recycle the current session (Same Server)...`);
                 
-                let recoveryPage = await safeNewPage(browser); // 🌟 SAFE OPEN
+                let recoveryPage = await safeNewPage(browser); 
                 
                 let isRecovered = false;
                 try {
                     await recoveryPage.evaluateOnNewDocument(() => { window.__isMuted = true; }); 
                     await recoveryPage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 6000 });
                     await initializeVideo(recoveryPage, true, false); 
-                    await new Promise(r => setTimeout(r, 2000)); // Buffer wait
+                    await new Promise(r => setTimeout(r, 2000)); 
                     
                     let recStatus = await checkPageStatus(recoveryPage);
                     if (recStatus.status === 'HEALTHY' || recStatus.status === 'NO_DATA_FLOW') {
@@ -576,7 +582,7 @@ async function startWatchdog() {
                         } catch(e) {}
                     }
                     
-                    await safeClosePage(deadPage); // 🌟 SAFE CLOSE
+                    await safeClosePage(deadPage); 
                     
                     failStrikes = 0; 
                     streamSetupTime = Date.now(); 
@@ -586,7 +592,7 @@ async function startWatchdog() {
 
                 // 🌟 TRACK B: NEXT LINK FALLBACK 🌟
                 console.log(`[-] TRACK A FAILED: Link is completely dead. Moving to Track B (Next Server).`);
-                await safeClosePage(recoveryPage); // 🌟 SAFE CLOSE
+                await safeClosePage(recoveryPage); 
                 
                 let backupStatus = await checkPageStatus(backupPage);
 
@@ -603,9 +609,9 @@ async function startWatchdog() {
                     let deadPage = activePage; 
                     activePage = backupPage; 
                     
-                    backupPage = await safeNewPage(browser); // 🌟 SAFE OPEN
+                    backupPage = await safeNewPage(browser); 
                     
-                    await safeClosePage(deadPage); // 🌟 SAFE CLOSE
+                    await safeClosePage(deadPage); 
 
                     lastActiveTime = -1; frozenCheckTimestamp = Date.now();
 
@@ -643,7 +649,11 @@ async function startDirectStreaming() {
     setupOBSConfig();
 
     obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray']);
-    obsProcess.stdout.on('data', (data) => console.log(`[OBS]: ${data.toString().trim()}`));
+    obsProcess.stdout.on('data', (data) => {
+        const d = data.toString().trim();
+        // Hide spammy generic obs info from terminal unless it's a major error
+        if(d.includes('error') || d.includes('fail')) console.log(`[OBS]: ${d}`);
+    });
     obsProcess.stderr.on('data', (data) => {
         const msg = data.toString().trim();
         if (msg.includes('error') || msg.includes('fail')) console.log(`[OBS Error]: ${msg}`);
@@ -712,22 +722,25 @@ async function startDirectStreaming() {
         args: browserArgs
     });
 
-    // 🌟 FIX: We handle popups but don't close pages prematurely
+    // 🌟 2026 FIX: INCREASED POPUP KILL DELAY to let Stealth finish injecting safely
     browser.on('targetcreated', async (target) => {
         if (target.type() === 'page') {
-            const newPage = await target.page();
-            setTimeout(async () => {
-                if (newPage && !newPage.isClosed() && newPage !== activePage && newPage !== backupPage) {
-                    console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
-                    try { await safeClosePage(newPage); } catch(e) {}
-                }
-            }, 500);
+            try {
+                const newPage = await target.page();
+                // 2500ms delay protects against "Requesting main frame too early" Session crashes
+                setTimeout(async () => {
+                    if (newPage && !newPage.isClosed() && newPage !== activePage && newPage !== backupPage) {
+                        console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
+                        try { await safeClosePage(newPage); } catch(e) {}
+                    }
+                }, 2500);
+            } catch(e){}
         }
     });
 
     activePage = (await browser.pages())[0]; 
     attachAntiAdListeners(activePage);
-    backupPage = await safeNewPage(browser); // 🌟 SAFE OPEN
+    backupPage = await safeNewPage(browser); 
     
     // 🌟 GLOBAL AGGRESSIVE IFRAME PENETRATOR
     setInterval(async () => {
@@ -815,7 +828,9 @@ async function startDirectStreaming() {
 
 async function mainLoop() {
     while (true) {
-        try { await startDirectStreaming(); } 
+        try { 
+            await startDirectStreaming(); 
+        } 
         catch (error) {
             console.error(`\n[!] ALERT: ${error.message}`);
             console.log('[*] 🔄 Hard Restarting everything in 3 seconds...');
@@ -875,6 +890,8 @@ if (exactDurationMs) {
 }
 
 mainLoop();
+
+
 
 
 
