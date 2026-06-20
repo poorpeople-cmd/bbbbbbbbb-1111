@@ -6254,7 +6254,7 @@ async function startWatchdog() {
     // 🧪 STEP 1: CONTINUOUS 1-MINUTE TESTING LOOP (PART A)
     // TESTING ON KARNE KE LIYE NEECHE WALI LINE KO UNCOMMENT KAREIN
     // =========================================================================================
-    // let testLoopStartTime = Date.now();
+    let testLoopStartTime = Date.now();
     // =========================================================================================
 
     while (true) {
@@ -6266,12 +6266,12 @@ async function startWatchdog() {
         // 🧪 STEP 1: CONTINUOUS 1-MINUTE TESTING LOOP (PART B - THE TRIGGER)
         // HAR 60 SECONDS BAAD SWAP TRIGGER KARNE KE LIYE NEECHE WALA BLOCK UNCOMMENT KAREIN
         // =========================================================================================
-        /*
+        // /*
         if (Date.now() - testLoopStartTime > 60000) {
             console.log("\n[🧪 TESTING ENGINE]: 60 Seconds Complete! Forcing 'FROZEN' State To Trigger Next Swap...");
             activeStatus.status = 'FROZEN';
         }
-        */
+        // */
         // =========================================================================================
 
         if (activeStatus.status === 'HEALTHY') {
@@ -6377,7 +6377,7 @@ async function startWatchdog() {
                 // 🧪 STEP 1: CONTINUOUS 1-MINUTE TESTING LOOP (PART C - THE RESET)
                 // TIMER KO RESET KARNE KE LIYE NEECHE WALI LINE KO UNCOMMENT KAREIN
                 // =========================================================================================
-                // testLoopStartTime = Date.now();
+                testLoopStartTime = Date.now();
                 // =========================================================================================
 
             } else {
