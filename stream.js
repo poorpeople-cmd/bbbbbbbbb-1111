@@ -5925,7 +5925,6 @@
 
 
 
-
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -5940,9 +5939,7 @@ const obs = new OBSWebSocket();
 
 // =========================================================================================
 // ⏱️ BIG VARIABLE: FORCE AUTO-REFRESH TIME (IN MINUTES)
-// Yahan par aap time set kar sakte hain. 
 // Testing ke liye isko 1 ya 2 rakhein. Asal live stream ke liye isko 30 kar dein.
-// Agar 30 minute tak video nahi atki, toh system automatically SAME link ko refresh karega.
 // =========================================================================================
 const FORCE_REFRESH_MINUTES = 1; // <--- CHANGE THIS VALUE FOR TESTING (e.g., 30)
 const FORCE_REFRESH_MS = FORCE_REFRESH_MINUTES * 60 * 1000;
@@ -6039,9 +6036,18 @@ if (!fs.existsSync('./screenshots')) fs.mkdirSync('./screenshots');
 let pendingScreenshots = [];
 let uploadCycleCount = 0;
 
+async function safeEvaluateOnNewDocument(page, func) {
+    if (!page || page.isClosed()) return;
+    try {
+        await page.evaluateOnNewDocument(func);
+    } catch (e) {
+        // Ignored to prevent "Main frame too early" crashes
+    }
+}
+
 async function applyPreloadFirewall(page) {
-    if (!page) return;
-    await page.evaluateOnNewDocument(() => {
+    if (!page || page.isClosed()) return;
+    await safeEvaluateOnNewDocument(page, () => {
         const style = document.createElement('style');
         style.textContent = `
             html, body { background-color: #000000 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }
@@ -6054,7 +6060,7 @@ async function applyPreloadFirewall(page) {
 }
 
 async function takeAndBatchScreenshot(page, stepName) {
-    if (!page) return;
+    if (!page || page.isClosed()) return;
     try {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const filePath = `./screenshots/snap_${timestamp}_${stepName}.png`;
@@ -6081,25 +6087,26 @@ async function takeAndBatchScreenshot(page, stepName) {
     } catch (e) { }
 }
 
-async function showLoadingUI(page, title, sub) {
+async function renderAnimationOnLoadingTab(page, title, sub) {
+    if (!page || page.isClosed()) return;
     try {
         await page.evaluate((t, s) => {
-            if (window.self !== window.top) return; 
-            let overlay = document.getElementById('smart-stream-overlay');
-            if (overlay) overlay.remove();
+            document.body.innerHTML = '';
+            document.body.style.backgroundColor = "#000000";
+            document.body.style.overflow = "hidden";
+            document.body.style.margin = "0";
 
-            overlay = document.createElement('div');
+            let overlay = document.createElement('div');
             overlay.id = 'smart-stream-overlay';
             overlay.innerHTML = `
                 <style>
                     #smart-stream-overlay {
-                        position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+                        position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
                         width: 100vw !important; height: 100vh !important;
                         background: #000000 !important;
                         z-index: 2147483647 !important; display: flex !important; flex-direction: column !important;
                         justify-content: center !important; align-items: center !important; color: #ffffff !important;
                         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
-                        pointer-events: all !important;
                     }
                     .stream-spinner {
                         width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1);
@@ -6176,20 +6183,16 @@ x264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0
     fs.writeFileSync(path.join(profilesDir, 'service.json'), JSON.stringify(serviceJson, null, 2));
 
     const sceneJson = {
-        "current_scene": "WaitingScene", 
-        "current_program_scene": "WaitingScene", 
+        "current_scene": "MainScene", 
+        "current_program_scene": "MainScene", 
         "name": "Untitled",
-        "scene_order": [{"name": "WaitingScene"}, {"name": "MainScene"}],
+        "scene_order": [{"name": "MainScene"}],
         "sources": [
             { "id": "xshm_input", "name": "Screen", "settings": { "show_cursor": false } },
             { "id": "pulse_output_capture", "name": "Audio", "settings": {} },
             {
                 "id": "scene", "name": "MainScene",
                 "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true}, {"name": "Audio", "id": 2, "visible": true} ] }
-            },
-            {
-                "id": "scene", "name": "WaitingScene",
-                "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true} ] } 
             }
         ]
     };
@@ -6197,18 +6200,22 @@ x264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0
 }
 
 function attachAntiAdListeners(page) {
+    if (!page || page.isClosed()) return;
     page.on('dialog', async dialog => {
         console.log(`[🛡️] AD-BLOCKER: Dismissed a Javascript alert/dialog!`);
         await dialog.dismiss();
     });
 }
 
-async function initializeVideo(page, startMuted, isActivePage) {
+async function initializeVideo(page, startMuted) {
+    if (!page || page.isClosed()) return false;
+    let videoSuccessfullyPlaying = false;
+
     try {
         if (SERVER_SELECTION !== 'None') {
             console.log(`[*] Clicking specific Server: ${SERVER_SELECTION}`);
             let serverClicked = false; let serverAttempts = 0;
-            while (!serverClicked && serverAttempts < 10) { 
+            while (!serverClicked && serverAttempts < 5) { 
                 serverAttempts++;
                 try {
                     const clickSuccess = await page.evaluate((serverName) => {
@@ -6222,17 +6229,16 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         serverClicked = true; 
                         console.log(`[+] Server Button clicked successfully!`);
                         await takeAndBatchScreenshot(page, `server-clicked`);
-                        await new Promise(r => setTimeout(r, 2000)); 
-                    } else await new Promise(r => setTimeout(r, 2000));
+                    }
+                    await new Promise(r => setTimeout(r, 2000));
                 } catch (err) { await new Promise(r => setTimeout(r, 2000)); }
             }
         }
 
         console.log('[*] Checking if Video is Autoplaying or Needs a Play Button...');
-        let isVideoPlaying = false; 
         let attempts = 0;
         
-        while (!isVideoPlaying && attempts < 15) {
+        while (!videoSuccessfullyPlaying && attempts < 10) {
             for (const frame of page.frames()) {
                 try {
                     const autoPlayed = await frame.evaluate(() => {
@@ -6248,7 +6254,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     });
 
                     if (autoPlayed) {
-                        isVideoPlaying = true;
+                        videoSuccessfullyPlaying = true;
                         break;
                     }
 
@@ -6263,12 +6269,12 @@ async function initializeVideo(page, startMuted, isActivePage) {
                             await frame.evaluate(el => el.click(), playBtn); 
                             await takeAndBatchScreenshot(page, `play-btn-clicked`);
                             await new Promise(r => setTimeout(r, 3000)); 
-                            isVideoPlaying = true;
+                            videoSuccessfullyPlaying = true;
                             break; 
                         }
                     }
 
-                    if (!isVideoPlaying && attempts > 5) {
+                    if (!videoSuccessfullyPlaying && attempts > 4) {
                         const forced = await frame.evaluate(async () => {
                             let played = false;
                             let vids = document.querySelectorAll('video');
@@ -6288,17 +6294,16 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
                         if (forced) {
                             await takeAndBatchScreenshot(page, `force-play-applied`);
-                            isVideoPlaying = true;
+                            videoSuccessfullyPlaying = true;
                             break;
                         }
                     }
                 } catch (err) {}
             }
-            if (!isVideoPlaying) await new Promise(r => setTimeout(r, 2000));
+            if (!videoSuccessfullyPlaying) await new Promise(r => setTimeout(r, 2000));
             attempts++;
         }
 
-        console.log('[*] Scanning for Exact Real Video Player...');
         let targetFrame = null;
         for (const frame of page.frames()) {
             try {
@@ -6308,7 +6313,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
                 });
                 if (isRealLiveStream) { 
                     targetFrame = frame; 
-                    console.log(`[+] Smart Scanner locked onto video frame!`);
                     break; 
                 }
             } catch (e) { }
@@ -6405,10 +6409,11 @@ async function initializeVideo(page, startMuted, isActivePage) {
     } catch (e) { }
 
     await new Promise(r => setTimeout(r, 1000));
+    return videoSuccessfullyPlaying;
 }
 
 async function checkPageStatus(page) {
-    if (!page) return { status: 'DEAD' };
+    if (!page || page.isClosed()) return { status: 'DEAD' };
     try {
         for (const frame of page.frames()) {
             try {
@@ -6505,7 +6510,7 @@ async function startWatchdog() {
             }
         }
 
-        if (backupPage) {
+        if (backupPage && !backupPage.isClosed()) {
             for (const frame of backupPage.frames()) {
                 try {
                     if (!frame.isDetached()) {
@@ -6535,6 +6540,10 @@ async function startWatchdog() {
 
             let isProactiveRefresh = (activeStatus.status === 'FORCE_REFRESH');
 
+            // 🛡️ GUARANTEED ANIMATION TRIGGER BEFORE ANY BACKGROUND SWAPPING HAPPENS!
+            await renderAnimationOnLoadingTab(loadingPage, isProactiveRefresh ? "REFRESHING CONNECTION" : "RECONNECTING", isProactiveRefresh ? "Optimizing current server stream <span class='stream-blink'>...</span>" : "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
+            await loadingPage.bringToFront();
+
             if (isProactiveRefresh) {
                 console.log(`\n==================================================`);
                 console.log(`[!] 🔄 PROACTIVE REFRESH TRIGGERED`);
@@ -6560,14 +6569,13 @@ async function startWatchdog() {
             let backupStatus = await checkPageStatus(backupPage);
 
             // =========================================================================================
-            // 🔄 SOFT RECOVERY ENGINE: If both active and backup tabs are dead
-            // Using DEDICATED LOADING PAGE so animation is guaranteed!
+            // 🔄 SOFT RECOVERY ENGINE
+            // Animation tab remains active throughout the entire recovery process
             // =========================================================================================
             if (backupStatus.status === 'DEAD' && !isProactiveRefresh) {
                 console.log(`\n[⚠️] BOTH TABS FAILED (Data Down). Activating Infinite Soft Recovery Mode...`);
                 
-                // Show Animation ON DEDICATED TAB and bring to front instantly!
-                await showLoadingUI(loadingPage, "NETWORK DROP DETECTED", "Re-establishing live video data feed smoothly <span class='stream-blink'>...</span>");
+                await renderAnimationOnLoadingTab(loadingPage, "NETWORK DROP DETECTED", "Re-establishing live video data feed smoothly <span class='stream-blink'>...</span>");
                 await loadingPage.bringToFront();
                 
                 let dataRecovered = false;
@@ -6581,11 +6589,15 @@ async function startWatchdog() {
                         await new Promise(r => setTimeout(r, 4000));
                         let checkAgain = await checkPageStatus(activePage);
                         if (checkAgain.status === 'HEALTHY') {
-                            console.log(`[+] SUCCESS! Data returned after soft recovery. Resuming stream...`);
-                            await initializeVideo(activePage, false, false);
-                            await activePage.bringToFront(); // Show active page, hides animation tab
-                            dataRecovered = true;
-                            break;
+                            console.log(`[+] SUCCESS! Data returned after soft recovery. Attempting to fullscreen video...`);
+                            
+                            // DO NOT break until video is fully initialized and fullscreen
+                            let isReady = await initializeVideo(activePage, false);
+                            if(isReady) {
+                                await activePage.bringToFront(); // Screen shifts from Animation to ACTUAL VIDEO
+                                dataRecovered = true;
+                                break;
+                            }
                         }
                     } catch (err) {
                         console.log(`[⏳] Target server still unreachable. Checking backup channel link...`);
@@ -6601,10 +6613,12 @@ async function startWatchdog() {
                             currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex];
                             backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex];
                             
-                            await initializeVideo(activePage, false, false);
-                            await activePage.bringToFront(); // Show active page, hides animation tab
-                            dataRecovered = true;
-                            break;
+                            let isReady = await initializeVideo(activePage, false);
+                            if(isReady) {
+                                await activePage.bringToFront(); // Screen shifts from Animation to ACTUAL VIDEO
+                                dataRecovered = true;
+                                break;
+                            }
                         }
                     } catch (err) {}
                     
@@ -6625,13 +6639,17 @@ async function startWatchdog() {
                     }
                 }
                 
-                // Show Animation ON DEDICATED TAB and bring to front safely
-                await showLoadingUI(loadingPage, isProactiveRefresh ? "REFRESHING CONNECTION" : "RECONNECTING", isProactiveRefresh ? "Optimizing current server stream <span class='stream-blink'>...</span>" : "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
-                await loadingPage.bringToFront();
                 await new Promise(r => setTimeout(r, 1000)); 
 
-                console.log(`[*] Initializing Video on the newly active tab in background...`);
-                await initializeVideo(backupPage, false, false); 
+                console.log(`[*] Initializing Video on the newly prepared tab in background...`);
+                // Wait for the background video to actually become FULLSCREEN and HEALTHY before removing animation
+                let backupReady = false;
+                let initAttempts = 0;
+                while (!backupReady && initAttempts < 5) {
+                    backupReady = await initializeVideo(backupPage, false);
+                    if (!backupReady) await new Promise(r => setTimeout(r, 2000));
+                    initAttempts++;
+                }
 
                 let brokenPage = activePage; activePage = backupPage; backupPage = brokenPage;
                 lastActiveTime = -1; frozenCheckTimestamp = Date.now();
@@ -6641,7 +6659,8 @@ async function startWatchdog() {
                     backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex]; 
                 } 
 
-                await activePage.bringToFront(); // Hide animation, show live stream!
+                // 🎬 FINAL REVEAL: Animation Hides, New Live Video Shows INSTANTLY
+                await activePage.bringToFront(); 
 
                 console.log(`\n==================================================`);
                 console.log(isProactiveRefresh ? `[🔄] SAME-SERVER FRESH SWAP EXECUTED SUCCESSFULLY` : `[🔄] SMART HOT-SWAP TO NEXT SERVER EXECUTED SUCCESSFULLY`);
@@ -6698,13 +6717,6 @@ async function startDirectStreaming() {
         }
     }
 
-    if (isObsConnected) {
-        try {
-            await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' });
-            console.log('[+] Enforced WaitingScene (Loading Bar Buffer Active)');
-        } catch(e){}
-    }
-
     let browserArgs = [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
@@ -6742,47 +6754,56 @@ async function startDirectStreaming() {
     });
 
     browser.on('targetcreated', async (target) => {
+        // Fix for "Main frame too early" error - Allow a tiny delay for proper page hydration
+        await new Promise(r => setTimeout(r, 50));
+        
         if (target.type() === 'page') {
-            const newPage = await target.page();
-            setTimeout(async () => {
-                if (newPage && newPage !== activePage && newPage !== backupPage && newPage !== loadingPage) {
-                    console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
-                    try { await newPage.close(); } catch(e) {}
-                }
-            }, 500);
+            try {
+                const newPage = await target.page();
+                setTimeout(async () => {
+                    if (newPage && !newPage.isClosed() && newPage !== activePage && newPage !== backupPage && newPage !== loadingPage) {
+                        console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
+                        try { await newPage.close(); } catch(e) {}
+                    }
+                }, 500);
+            } catch (e) {}
         }
     });
 
     const pages = await browser.pages();
     activePage = pages[0]; 
     backupPage = await browser.newPage();
-    loadingPage = await browser.newPage(); // The Dedicated Animation Tab!
+    loadingPage = await browser.newPage(); 
     
     attachAntiAdListeners(activePage);
     attachAntiAdListeners(backupPage);
 
     await applyPreloadFirewall(activePage);
     await applyPreloadFirewall(backupPage);
-    await applyPreloadFirewall(loadingPage);
 
-    // Initial Loading Animation Guarantee
-    await showLoadingUI(loadingPage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
+    // Render Initial Loading UI and bring to front so OBS sees it instantly
+    await renderAnimationOnLoadingTab(loadingPage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
     await loadingPage.bringToFront(); 
 
-    console.log(`[*] STEP 1: Loading Server [${currentUrlIndex}] on Active Page: ${urlList[currentUrlIndex]}`);
+    console.log(`[*] STEP 1: Loading Server [${currentUrlIndex}] on Active Page (in background): ${urlList[currentUrlIndex]}`);
     await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
     
-    await initializeVideo(activePage, false, false); 
-
-    if (isObsConnected) {
-        console.log('\n[*] Active Video is Ready! Shifting OBS from Animated Buffer to LIVE Video (MainScene)...');
-        try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
+    // Will not proceed until video is definitively playing
+    let isInitialVideoReady = false;
+    while(!isInitialVideoReady) {
+        isInitialVideoReady = await initializeVideo(activePage, false);
+        if(!isInitialVideoReady) {
+            console.log("[⏳] Waiting for video to fully initialize and go fullscreen...");
+            await new Promise(r => setTimeout(r, 2000));
+        }
     }
 
     console.log(`[*] STEP 2: Silently preparing Server [${backupUrlIndex}] on Backup Page: ${urlList[backupUrlIndex]}`);
     backupPage.goto(urlList[backupUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
     
-    await activePage.bringToFront(); // Show actual video
+    console.log('\n[*] Active Video is Ready! Shifting OBS from Animated Buffer to LIVE Video...');
+    // Drop the animation cover, show the playing video
+    await activePage.bringToFront(); 
     try { await activePage.mouse.click(10, 10); } catch(e){} 
 
     console.log(`\n==================================================`);
