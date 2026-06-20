@@ -5924,7 +5924,6 @@
 
 
 
-
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -5934,6 +5933,20 @@ const path = require('path');
 const os = require('os');
 const { spawn, execSync, exec } = require('child_process');
 const { OBSWebSocket } = require('obs-websocket-js'); 
+
+// 🛡️ GLOBAL ERROR SHIELDS (Prevents crashes from Ad-Blocker & Stealth Plugin clashes)
+process.on('uncaughtException', (err) => {
+    if (err && err.message && (err.message.includes('main frame too early') || err.message.includes('Session closed') || err.message.includes('TargetCloseError'))) {
+        return; // Ignore benign Stealth Plugin errors on closed tabs
+    }
+    console.error(`[Uncaught Exception]: ${err.message}`);
+});
+
+process.on('unhandledRejection', (reason) => {
+    if (reason && reason.message && (reason.message.includes('main frame too early') || reason.message.includes('Session closed') || reason.message.includes('TargetCloseError'))) {
+        return; // Ignore benign Stealth Plugin errors
+    }
+});
 
 const obs = new OBSWebSocket(); 
 
@@ -6040,9 +6053,7 @@ async function safeEvaluateOnNewDocument(page, func) {
     if (!page || page.isClosed()) return;
     try {
         await page.evaluateOnNewDocument(func);
-    } catch (e) {
-        // Ignored to prevent "Main frame too early" crashes
-    }
+    } catch (e) { }
 }
 
 async function applyPreloadFirewall(page) {
@@ -6591,10 +6602,9 @@ async function startWatchdog() {
                         if (checkAgain.status === 'HEALTHY') {
                             console.log(`[+] SUCCESS! Data returned after soft recovery. Attempting to fullscreen video...`);
                             
-                            // DO NOT break until video is fully initialized and fullscreen
                             let isReady = await initializeVideo(activePage, false);
                             if(isReady) {
-                                await activePage.bringToFront(); // Screen shifts from Animation to ACTUAL VIDEO
+                                await activePage.bringToFront(); 
                                 dataRecovered = true;
                                 break;
                             }
@@ -6615,7 +6625,7 @@ async function startWatchdog() {
                             
                             let isReady = await initializeVideo(activePage, false);
                             if(isReady) {
-                                await activePage.bringToFront(); // Screen shifts from Animation to ACTUAL VIDEO
+                                await activePage.bringToFront(); 
                                 dataRecovered = true;
                                 break;
                             }
@@ -6642,7 +6652,6 @@ async function startWatchdog() {
                 await new Promise(r => setTimeout(r, 1000)); 
 
                 console.log(`[*] Initializing Video on the newly prepared tab in background...`);
-                // Wait for the background video to actually become FULLSCREEN and HEALTHY before removing animation
                 let backupReady = false;
                 let initAttempts = 0;
                 while (!backupReady && initAttempts < 5) {
@@ -6659,7 +6668,6 @@ async function startWatchdog() {
                     backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex]; 
                 } 
 
-                // 🎬 FINAL REVEAL: Animation Hides, New Live Video Shows INSTANTLY
                 await activePage.bringToFront(); 
 
                 console.log(`\n==================================================`);
@@ -6754,18 +6762,16 @@ async function startDirectStreaming() {
     });
 
     browser.on('targetcreated', async (target) => {
-        // Fix for "Main frame too early" error - Allow a tiny delay for proper page hydration
-        await new Promise(r => setTimeout(r, 50));
-        
         if (target.type() === 'page') {
             try {
                 const newPage = await target.page();
+                // 🛡️ Delay to let Stealth Plugin finish evasion injects BEFORE closing the tab
                 setTimeout(async () => {
                     if (newPage && !newPage.isClosed() && newPage !== activePage && newPage !== backupPage && newPage !== loadingPage) {
                         console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
                         try { await newPage.close(); } catch(e) {}
                     }
-                }, 500);
+                }, 1500); 
             } catch (e) {}
         }
     });
@@ -6781,14 +6787,12 @@ async function startDirectStreaming() {
     await applyPreloadFirewall(activePage);
     await applyPreloadFirewall(backupPage);
 
-    // Render Initial Loading UI and bring to front so OBS sees it instantly
     await renderAnimationOnLoadingTab(loadingPage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
     await loadingPage.bringToFront(); 
 
     console.log(`[*] STEP 1: Loading Server [${currentUrlIndex}] on Active Page (in background): ${urlList[currentUrlIndex]}`);
     await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
     
-    // Will not proceed until video is definitively playing
     let isInitialVideoReady = false;
     while(!isInitialVideoReady) {
         isInitialVideoReady = await initializeVideo(activePage, false);
@@ -6802,7 +6806,6 @@ async function startDirectStreaming() {
     backupPage.goto(urlList[backupUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
     
     console.log('\n[*] Active Video is Ready! Shifting OBS from Animated Buffer to LIVE Video...');
-    // Drop the animation cover, show the playing video
     await activePage.bringToFront(); 
     try { await activePage.mouse.click(10, 10); } catch(e){} 
 
