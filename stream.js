@@ -4539,6 +4539,22 @@ const os = require('os');
 const { spawn, execSync, exec } = require('child_process');
 const { OBSWebSocket } = require('obs-websocket-js'); 
 
+// 🛡️ ANTI-CRASH SHIELD: Prevents Node.js from exiting when Puppeteer Stealth throws background errors
+process.on('uncaughtException', (err) => {
+    if (err.message && (err.message.includes('main frame too early') || err.message.includes('Session closed') || err.message.includes('TargetCloseError'))) {
+        // Ignored safely
+    } else {
+        console.error(`[!] Uncaught Exception:`, err.message);
+    }
+});
+process.on('unhandledRejection', (reason) => {
+    if (reason && reason.message && (reason.message.includes('main frame too early') || reason.message.includes('Session closed') || reason.message.includes('TargetCloseError'))) {
+        // Ignored safely
+    } else {
+        console.error(`[!] Unhandled Rejection:`, reason);
+    }
+});
+
 const obs = new OBSWebSocket(); 
 
 // 🚀 Multi-Stream Key Manager
@@ -4613,7 +4629,6 @@ const FROZEN_THRESHOLD_MS = 8000;
 if (!fs.existsSync('./screenshots')) fs.mkdirSync('./screenshots');
 let pendingScreenshots = []; let uploadCycleCount = 0;
 
-// 🛡️ Removed iframe restriction to prevent accidentally hiding main video
 async function applyPreloadFirewall(page) {
     if (!page) return;
     await page.evaluateOnNewDocument(() => {
@@ -4629,7 +4644,7 @@ async function applyPreloadFirewall(page) {
 }
 
 async function takeAndBatchScreenshot(page, stepName) {
-    if (!page) return;
+    if (!page || page.isClosed()) return;
     try {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const filePath = `./screenshots/snap_${timestamp}_${stepName}.png`;
@@ -4647,6 +4662,7 @@ async function takeAndBatchScreenshot(page, stepName) {
 }
 
 async function showLoadingUI(page, title, sub) {
+    if (!page || page.isClosed()) return;
     try {
         await page.evaluate((t, s) => {
             if (window.self !== window.top) return; 
@@ -4670,6 +4686,7 @@ async function showLoadingUI(page, title, sub) {
 }
 
 async function hideLoadingUI(page) {
+    if (!page || page.isClosed()) return;
     try { await page.evaluate(() => { const overlay = document.getElementById('smart-stream-overlay'); if (overlay) overlay.remove(); }); } catch (e) {}
 }
 
@@ -4685,15 +4702,18 @@ function setupOBSConfig() {
 }
 
 function attachAntiAdListeners(page) {
-    page.on('dialog', async dialog => { await dialog.dismiss(); });
+    if (!page) return;
+    page.on('dialog', async dialog => { try { await dialog.dismiss(); } catch(e){} });
 }
 
 async function initializeVideo(page, startMuted, isActivePage) {
+    if (!page || page.isClosed()) return;
     try {
         if (SERVER_SELECTION !== 'None') {
             let serverClicked = false; let serverAttempts = 0;
             while (!serverClicked && serverAttempts < 10) { 
                 serverAttempts++;
+                if (page.isClosed()) return;
                 try {
                     const clickSuccess = await page.evaluate((serverName) => {
                         const buttons = Array.from(document.querySelectorAll('button'));
@@ -4707,7 +4727,9 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
         let isVideoPlaying = false; let attempts = 0;
         while (!isVideoPlaying && attempts < 15) {
+            if (page.isClosed()) return;
             for (const frame of page.frames()) {
+                if (frame.isDetached()) continue;
                 try {
                     const autoPlayed = await frame.evaluate(() => {
                         let playing = false;
@@ -4736,6 +4758,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
         let targetFrame = null;
         for (const frame of page.frames()) {
+            if (frame.isDetached()) continue;
             try {
                 const isRealLiveStream = await frame.evaluate(() => { const vid = document.querySelector('video'); return vid && (vid.clientWidth > 50 || vid.currentTime > 0); });
                 if (isRealLiveStream) { targetFrame = frame; break; }
@@ -4743,15 +4766,11 @@ async function initializeVideo(page, startMuted, isActivePage) {
         }
         if (!targetFrame) targetFrame = page.mainFrame();
 
-        // 🛡️ BULLETPROOF: Main Page Fullscreen Enforcer (With Background Fallback)
         await page.evaluate(() => {
             setInterval(() => {
                 try {
                     document.documentElement.style.setProperty('background-color', 'black', 'important'); document.body.style.setProperty('background-color', 'black', 'important'); document.body.style.setProperty('overflow', 'hidden', 'important');
-                    
                     let iframes = Array.from(document.querySelectorAll('iframe'));
-                    
-                    // Filter out strict ad-iframes permanently
                     let validIframes = iframes.filter(ifr => {
                         let src = ifr.src.toLowerCase();
                         if (src.includes('ad') || src.includes('bet') || src.includes('banner') || src.includes('pop')) {
@@ -4759,45 +4778,33 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         }
                         return true;
                     });
-
                     let mainIframe = null; let maxArea = 0;
                     validIframes.forEach(ifr => { let area = ifr.clientWidth * ifr.clientHeight; if (area > maxArea && area > 5000) { maxArea = area; mainIframe = ifr; } });
-                    
-                    // 🔥 MAGIC FIX: If backgrounded (area = 0), intelligently guess the player iframe!
                     if (!mainIframe && validIframes.length > 0) {
                         mainIframe = validIframes.find(ifr => ifr.hasAttribute('allowfullscreen') || ifr.src.includes('player') || ifr.src.includes('embed') || ifr.src.includes('php?id=')) || validIframes[0];
                     }
-
                     validIframes.forEach(ifr => { if (ifr !== mainIframe) { ifr.style.setProperty('display', 'none', 'important'); ifr.style.setProperty('opacity', '0', 'important'); ifr.style.setProperty('z-index', '-9999', 'important'); } });
-                    
                     if (mainIframe) {
                         mainIframe.style.setProperty('position', 'fixed', 'important'); mainIframe.style.setProperty('top', '0px', 'important'); mainIframe.style.setProperty('left', '0px', 'important');
                         mainIframe.style.setProperty('width', '100vw', 'important'); mainIframe.style.setProperty('height', '100vh', 'important'); mainIframe.style.setProperty('z-index', '2147483645', 'important');
                         mainIframe.style.setProperty('background-color', 'black', 'important'); mainIframe.style.setProperty('border', 'none', 'important'); mainIframe.style.setProperty('opacity', '1', 'important'); mainIframe.style.setProperty('display', 'block', 'important'); mainIframe.style.setProperty('visibility', 'visible', 'important');
                     }
-                    
                     const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"]';
                     document.querySelectorAll(junkClasses).forEach(el => { try { el.remove(); } catch(e){} });
                 } catch (err) {}
             }, 500); 
         }).catch(() => {});
 
-        // 🛡️ BULLETPROOF: Target Frame Video Fullscreen Enforcer
         await targetFrame.evaluate((muteVideo) => {
             setInterval(() => {
                 try {
                     const style = document.createElement('style'); style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`; document.head.appendChild(style);
                     document.querySelectorAll('video, audio').forEach(media => { media.muted = muteVideo; media.volume = muteVideo ? 0.0 : 1.0; });
                     if (!muteVideo) { document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} }); }
-                    
                     const videos = Array.from(document.querySelectorAll('video'));
                     let realVideo = null; 
                     for (const v of videos) { if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; } }
-                    
-                    // 🔥 MAGIC FIX: Background Fallback for Video element
-                    if (!realVideo && videos.length > 0) {
-                        realVideo = videos.find(v => !v.paused && v.currentTime > 0) || videos[0];
-                    }
+                    if (!realVideo && videos.length > 0) { realVideo = videos.find(v => !v.paused && v.currentTime > 0) || videos[0]; }
 
                     if (realVideo) { 
                         realVideo.style.setProperty('position', 'fixed', 'important'); realVideo.style.setProperty('top', '0px', 'important'); realVideo.style.setProperty('left', '0px', 'important');
@@ -4814,11 +4821,11 @@ async function initializeVideo(page, startMuted, isActivePage) {
 }
 
 async function checkPageStatus(page) {
-    if (!page) return { status: 'DEAD' };
+    if (!page || page.isClosed()) return { status: 'DEAD' };
     try {
         for (const frame of page.frames()) {
+            if (frame.isDetached()) continue;
             try {
-                if (frame.isDetached()) continue;
                 const result = await Promise.race([
                     frame.evaluate(() => {
                         const bodyText = document.body ? document.body.innerText.toLowerCase() : "";
@@ -4845,8 +4852,9 @@ async function startProactiveRefreshEngine() {
 
         if (Date.now() - lastRefreshTime > nextRefreshInterval && !isSystemSwapping) {
             console.log(`\n[🔄] PROACTIVE REFRESH: ~10 minutes passed. Preparing a seamless background reload for Current Link...`);
+            let refreshPage = null;
             try {
-                const refreshPage = await browser.newPage();
+                refreshPage = await browser.newPage();
                 attachAntiAdListeners(refreshPage);
                 await applyPreloadFirewall(refreshPage);
 
@@ -4866,33 +4874,36 @@ async function startProactiveRefreshEngine() {
                     isSystemSwapping = true; 
                     console.log(`[+] Ghost Tab is HEALTHY. Locking perfect fullscreen before visual swap...`);
 
-                    // EXTREME ENFORCEMENT: Last second cleanup before bringing to front!
                     await refreshPage.evaluate(() => { 
                         let ifrs = Array.from(document.querySelectorAll('iframe'));
                         let vIfrs = ifrs.filter(i => { let s = i.src.toLowerCase(); return !s.includes('ad') && !s.includes('bet') && !s.includes('pop'); });
                         let target = vIfrs.find(i => i.hasAttribute('allowfullscreen') || i.src.includes('player')) || vIfrs[0];
-                        if(target) {
-                            target.style.setProperty('position', 'fixed', 'important'); target.style.setProperty('width', '100vw', 'important'); target.style.setProperty('height', '100vh', 'important'); target.style.setProperty('z-index', '2147483645', 'important');
-                        }
+                        if(target) { target.style.setProperty('position', 'fixed', 'important'); target.style.setProperty('width', '100vw', 'important'); target.style.setProperty('height', '100vh', 'important'); target.style.setProperty('z-index', '2147483645', 'important'); }
                     }).catch(()=>{});
 
                     await refreshPage.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); }).catch(()=>{});
-                    await activePage.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }).catch(()=>{});
+                    if (activePage && !activePage.isClosed()) {
+                        await activePage.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }).catch(()=>{});
+                    }
 
                     console.log(`[+] Executing 0-second seamless visual swap NOW!`);
                     await refreshPage.bringToFront();
                     try { await refreshPage.mouse.click(10, 10); } catch(e){}
 
                     let oldActive = activePage; activePage = refreshPage; 
-                    setTimeout(async () => { try { await oldActive.close(); } catch(e){} }, 2000); 
+                    setTimeout(async () => { try { if (oldActive && !oldActive.isClosed()) await oldActive.close(); } catch(e){} }, 2000); 
 
                     console.log(`[✔] SEAMLESS SWAP SUCCESSFUL! Viewer did not notice. Resetting 10-minute timer.`);
                     lastRefreshTime = Date.now(); nextRefreshInterval = (9 + Math.random() * 2) * 60 * 1000; isSystemSwapping = false; 
                 } else {
                     console.log(`[-] Ghost Tab failed to load or Watchdog intervened. Aborting refresh...`);
-                    try { await refreshPage.close(); } catch(e){}
+                    try { if (refreshPage && !refreshPage.isClosed()) await refreshPage.close(); } catch(e){}
                 }
-            } catch (e) { isSystemSwapping = false; console.log(`[!] Proactive Refresh Error: ${e.message}`); }
+            } catch (e) { 
+                isSystemSwapping = false; 
+                console.log(`[!] Proactive Refresh Error: ${e.message}`); 
+                try { if (refreshPage && !refreshPage.isClosed()) await refreshPage.close(); } catch(err){}
+            }
         }
     }
 }
@@ -4913,11 +4924,21 @@ async function startWatchdog() {
             if (activeStatus.currentTime === lastActiveTime) { if (Date.now() - frozenCheckTimestamp > FROZEN_THRESHOLD_MS) activeStatus.status = 'FROZEN'; } 
             else {
                 lastActiveTime = activeStatus.currentTime; frozenCheckTimestamp = Date.now();
-                for (const frame of activePage.frames()) { try { if (!frame.isDetached()) { frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} }); }).catch(()=>{}); } } catch(e) {} }
+                if (activePage && !activePage.isClosed()) {
+                    for (const frame of activePage.frames()) { 
+                        if (frame.isDetached()) continue;
+                        try { frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} }); }).catch(()=>{}); } catch(e) {} 
+                    }
+                }
             }
         }
 
-        if (backupPage) { for (const frame of backupPage.frames()) { try { if (!frame.isDetached()) { frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }).catch(()=>{}); } } catch(e) {} } }
+        if (backupPage && !backupPage.isClosed()) { 
+            for (const frame of backupPage.frames()) { 
+                if (frame.isDetached()) continue;
+                try { frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }).catch(()=>{}); } catch(e) {} 
+            } 
+        }
 
         watchdogTicks++;
         if (watchdogTicks % 6 === 0) { console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`); console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] -> ${activeUrlStr}`); }
@@ -4934,7 +4955,12 @@ async function startWatchdog() {
             let backupStatus = await checkPageStatus(backupPage);
 
             if (backupStatus.status === 'HEALTHY' || backupStatus.status === 'DEAD') { 
-                for (const frame of activePage.frames()) { try { if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {} }
+                if (activePage && !activePage.isClosed()) {
+                    for (const frame of activePage.frames()) { 
+                        if (frame.isDetached()) continue;
+                        try { await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {} 
+                    }
+                }
                 
                 await showLoadingUI(backupPage, "RECONNECTING", "Establishing secure connection to backup server...");
                 await backupPage.bringToFront(); await new Promise(r => setTimeout(r, 1000)); try { await backupPage.mouse.click(10, 10); } catch(e){} 
@@ -4948,8 +4974,11 @@ async function startWatchdog() {
                 console.log(`[🔄] EMERGENCY HOT-SWAP TO BACKUP SERVER EXECUTED!`);
                 lastRefreshTime = Date.now(); nextRefreshInterval = (9 + Math.random() * 2) * 60 * 1000;
 
-                await backupPage.goto('about:blank'); await applyPreloadFirewall(backupPage);
-                backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                if (backupPage && !backupPage.isClosed()) {
+                    await backupPage.goto('about:blank').catch(()=>{}); 
+                    await applyPreloadFirewall(backupPage);
+                    backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                }
                 streamSetupTime = Date.now(); isWarmupPhase = true; isSystemSwapping = false; 
             } else { throw new Error("Both Active and Backup tabs failed."); }
         }
@@ -4979,13 +5008,23 @@ async function startDirectStreaming() {
 
     browser = await puppeteer.launch({ headless: false, defaultViewport: { width: RES_W, height: RES_H }, ignoreDefaultArgs: ['--enable-automation'], args: browserArgs });
 
+    // 🛡️ SAFEST TAB KILLER: Delay popup closure to allow Stealth plugin to finish initialization safely
     browser.on('targetcreated', async (target) => {
         if (target.type() === 'page') {
-            const newPage = await target.page();
-            setTimeout(async () => {
-                const pages = await browser.pages();
-                if (newPage && !pages.includes(activePage) && !pages.includes(backupPage) && pages.length > 3) { try { await newPage.close(); } catch(e) {} }
-            }, 500);
+            try {
+                const newPage = await target.page();
+                if (!newPage) return;
+                
+                setTimeout(async () => {
+                    try {
+                        if (newPage.isClosed()) return;
+                        const pages = await browser.pages();
+                        if (!pages.includes(activePage) && !pages.includes(backupPage) && pages.length > 3) { 
+                            await newPage.close(); 
+                        }
+                    } catch(e) {}
+                }, 2500); // ✨ Increased delay to 2.5 seconds (Fixes "main frame too early")
+            } catch (err) {}
         }
     });
 
@@ -5014,7 +5053,7 @@ async function startDirectStreaming() {
 }
 
 async function mainLoop() {
-    while (true) { try { await startDirectStreaming(); } catch (error) { console.log('[*] 🔄 Hard Restarting everything in 3 seconds...'); await cleanup(); await new Promise(resolve => setTimeout(resolve, 3000)); } }
+    while (true) { try { await startDirectStreaming(); } catch (error) { console.log(`[*] 🔄 System recovery triggered. Reason: ${error.message}`); await cleanup(); await new Promise(resolve => setTimeout(resolve, 3000)); } }
 }
 
 async function cleanup() {
