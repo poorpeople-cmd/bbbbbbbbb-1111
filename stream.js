@@ -4539,20 +4539,14 @@ const os = require('os');
 const { spawn, execSync, exec } = require('child_process');
 const { OBSWebSocket } = require('obs-websocket-js'); 
 
-// 🛡️ ANTI-CRASH SHIELD: Prevents Node.js from exiting when Puppeteer Stealth throws background errors
+// 🛡️ ANTI-CRASH SHIELD
 process.on('uncaughtException', (err) => {
-    if (err.message && (err.message.includes('main frame too early') || err.message.includes('Session closed') || err.message.includes('TargetCloseError'))) {
-        // Ignored safely
-    } else {
-        console.error(`[!] Uncaught Exception:`, err.message);
-    }
+    if (err.message && (err.message.includes('main frame too early') || err.message.includes('Session closed') || err.message.includes('TargetCloseError'))) { /* Ignored */ } 
+    else { console.error(`[!] Uncaught Exception:`, err.message); }
 });
 process.on('unhandledRejection', (reason) => {
-    if (reason && reason.message && (reason.message.includes('main frame too early') || reason.message.includes('Session closed') || reason.message.includes('TargetCloseError'))) {
-        // Ignored safely
-    } else {
-        console.error(`[!] Unhandled Rejection:`, reason);
-    }
+    if (reason && reason.message && (reason.message.includes('main frame too early') || reason.message.includes('Session closed') || reason.message.includes('TargetCloseError'))) { /* Ignored */ } 
+    else { console.error(`[!] Unhandled Rejection:`, reason); }
 });
 
 const obs = new OBSWebSocket(); 
@@ -4619,11 +4613,27 @@ const PROXY_ENGINE = process.env.PROXY_ENGINE || 'Cloudflare WARP (Recommended)'
 
 const ACTIVE_STREAM_KEY = STREAM_KEYS[SELECTED_CHANNEL] || STREAM_KEYS['1'];
 
-let browser = null; let obsProcess = null; let activePage = null; let backupPage = null;
+// 🌟 THE 3 MAIN TABS GLOBALLY TRACKED
+let browser = null; let obsProcess = null; 
+let activePage = null; 
+let backupPage = null;
+let ghostPage = null; // Our new proactive background tab
 
 let isSystemSwapping = false; 
 let lastRefreshTime = Date.now();
-let nextRefreshInterval = (9 + Math.random() * 2) * 60 * 1000; 
+
+// =========================================================================
+// 🟢 🟢 🟢 REFRESH TIMER CONFIGURATION (TESTING VS PRODUCTION) 🟢 🟢 🟢
+// =========================================================================
+
+// YEH ABHI 1 MINUTE (60 SECONDS) PAR SET HAI TESTING KE LIYE!
+let nextRefreshInterval = 1 * 60 * 1000; 
+
+// JAB TESTING MUKAMMAL HO JAYE, UPAR WALI LINE DELETE KAREIN AUR NEECHAY WALI LINE KO UNCOMMENT (Enable) KAR DEIN:
+// let nextRefreshInterval = (9 + Math.random() * 2) * 60 * 1000; // ~10 Minutes for Real Use
+
+// =========================================================================
+
 const FROZEN_THRESHOLD_MS = 8000; 
 
 if (!fs.existsSync('./screenshots')) fs.mkdirSync('./screenshots');
@@ -4817,7 +4827,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
     } catch (e) { }
     await new Promise(r => setTimeout(r, 1000));
-    if (isActivePage) await hideLoadingUI(page);
 }
 
 async function checkPageStatus(page) {
@@ -4845,64 +4854,88 @@ async function checkPageStatus(page) {
     return { status: 'DEAD' };
 }
 
-// 🚀 PROACTIVE ENGINE
+// 🚀 PROACTIVE ENGINE WITH THE "BLACK SHIELD SWAP"
 async function startProactiveRefreshEngine() {
     while (true) {
         await new Promise(r => setTimeout(r, 10000));
 
         if (Date.now() - lastRefreshTime > nextRefreshInterval && !isSystemSwapping) {
-            console.log(`\n[🔄] PROACTIVE REFRESH: ~10 minutes passed. Preparing a seamless background reload for Current Link...`);
-            let refreshPage = null;
+            console.log(`\n[🔄] PROACTIVE REFRESH: Timer triggered. Preparing seamless background reload...`);
             try {
-                refreshPage = await browser.newPage();
-                attachAntiAdListeners(refreshPage);
-                await applyPreloadFirewall(refreshPage);
+                ghostPage = await browser.newPage();
+                attachAntiAdListeners(ghostPage);
+                await applyPreloadFirewall(ghostPage);
 
                 const currentUrl = urlList[currentUrlIndex];
-                refreshPage.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
+                ghostPage.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
                 
-                await initializeVideo(refreshPage, true, false); 
+                await initializeVideo(ghostPage, true, false); 
 
                 let isReady = false; let attempts = 0;
                 while (attempts < 20 && !isSystemSwapping) { 
-                    let status = await checkPageStatus(refreshPage);
+                    let status = await checkPageStatus(ghostPage);
                     if (status.status === 'HEALTHY') { isReady = true; break; }
                     await new Promise(r => setTimeout(r, 2000)); attempts++;
                 }
 
                 if (isReady && !isSystemSwapping) {
                     isSystemSwapping = true; 
-                    console.log(`[+] Ghost Tab is HEALTHY. Locking perfect fullscreen before visual swap...`);
+                    console.log(`[+] Ghost Tab is HEALTHY. Starting precise swap with brief black shield...`);
 
-                    await refreshPage.evaluate(() => { 
+                    // 🛡️ STEP 1: DROP THE BLACK CURTAINS ON BOTH TABS
+                    await showLoadingUI(activePage, "OPTIMIZING STREAM", "Switching to a fresher connection <span class='stream-blink'>...</span>");
+                    await showLoadingUI(ghostPage, "OPTIMIZING STREAM", "Finalizing layout <span class='stream-blink'>...</span>");
+
+                    // 🛡️ STEP 2: BRING GHOST TAB TO FRONT (Hidden behind black curtain)
+                    await ghostPage.bringToFront();
+
+                    // 🛡️ STEP 3: FORCE CLICKS TO EXTRACT & KILL POPUP ADS INSTANTLY
+                    try { await ghostPage.mouse.click(10, 10); } catch(e){}
+                    try { await ghostPage.mouse.click(500, 500); } catch(e){}
+
+                    // Wait 1.5 seconds to let the Ad-Blocker engine kill any popups that tried to spawn
+                    await new Promise(r => setTimeout(r, 1500));
+
+                    // 🛡️ STEP 4: ENFORCE PERFECT FULLSCREEN
+                    await ghostPage.evaluate(() => { 
                         let ifrs = Array.from(document.querySelectorAll('iframe'));
                         let vIfrs = ifrs.filter(i => { let s = i.src.toLowerCase(); return !s.includes('ad') && !s.includes('bet') && !s.includes('pop'); });
                         let target = vIfrs.find(i => i.hasAttribute('allowfullscreen') || i.src.includes('player')) || vIfrs[0];
                         if(target) { target.style.setProperty('position', 'fixed', 'important'); target.style.setProperty('width', '100vw', 'important'); target.style.setProperty('height', '100vh', 'important'); target.style.setProperty('z-index', '2147483645', 'important'); }
                     }).catch(()=>{});
 
-                    await refreshPage.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); }).catch(()=>{});
+                    // 🛡️ STEP 5: AUDIO SWAP
+                    await ghostPage.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); }).catch(()=>{});
                     if (activePage && !activePage.isClosed()) {
                         await activePage.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }).catch(()=>{});
                     }
 
-                    console.log(`[+] Executing 0-second seamless visual swap NOW!`);
-                    await refreshPage.bringToFront();
-                    try { await refreshPage.mouse.click(10, 10); } catch(e){}
+                    // 🛡️ STEP 6: LIFT THE CURTAIN
+                    await hideLoadingUI(ghostPage);
 
-                    let oldActive = activePage; activePage = refreshPage; 
+                    // 🛡️ STEP 7: CLEANUP OLD TAB
+                    let oldActive = activePage; activePage = ghostPage; ghostPage = null;
                     setTimeout(async () => { try { if (oldActive && !oldActive.isClosed()) await oldActive.close(); } catch(e){} }, 2000); 
 
-                    console.log(`[✔] SEAMLESS SWAP SUCCESSFUL! Viewer did not notice. Resetting 10-minute timer.`);
-                    lastRefreshTime = Date.now(); nextRefreshInterval = (9 + Math.random() * 2) * 60 * 1000; isSystemSwapping = false; 
+                    console.log(`[✔] SEAMLESS SWAP SUCCESSFUL! Ads completely destroyed.`);
+                    
+                    lastRefreshTime = Date.now(); 
+                    
+                    // =======================================================================================
+                    // TIMER RESET LOGIC. 1 min testing, uncomment 2nd line for 10 mins!
+                    nextRefreshInterval = 1 * 60 * 1000; 
+                    // nextRefreshInterval = (9 + Math.random() * 2) * 60 * 1000; 
+                    // =======================================================================================
+
+                    isSystemSwapping = false; 
                 } else {
                     console.log(`[-] Ghost Tab failed to load or Watchdog intervened. Aborting refresh...`);
-                    try { if (refreshPage && !refreshPage.isClosed()) await refreshPage.close(); } catch(e){}
+                    try { if (ghostPage && !ghostPage.isClosed()) await ghostPage.close(); ghostPage = null; } catch(e){}
                 }
             } catch (e) { 
                 isSystemSwapping = false; 
                 console.log(`[!] Proactive Refresh Error: ${e.message}`); 
-                try { if (refreshPage && !refreshPage.isClosed()) await refreshPage.close(); } catch(err){}
+                try { if (ghostPage && !ghostPage.isClosed()) await ghostPage.close(); ghostPage = null; } catch(err){}
             }
         }
     }
@@ -4972,7 +5005,7 @@ async function startWatchdog() {
                 currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex]; backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex]; 
 
                 console.log(`[🔄] EMERGENCY HOT-SWAP TO BACKUP SERVER EXECUTED!`);
-                lastRefreshTime = Date.now(); nextRefreshInterval = (9 + Math.random() * 2) * 60 * 1000;
+                lastRefreshTime = Date.now(); nextRefreshInterval = 1 * 60 * 1000;
 
                 if (backupPage && !backupPage.isClosed()) {
                     await backupPage.goto('about:blank').catch(()=>{}); 
@@ -5008,7 +5041,7 @@ async function startDirectStreaming() {
 
     browser = await puppeteer.launch({ headless: false, defaultViewport: { width: RES_W, height: RES_H }, ignoreDefaultArgs: ['--enable-automation'], args: browserArgs });
 
-    // 🛡️ SAFEST TAB KILLER: Delay popup closure to allow Stealth plugin to finish initialization safely
+    // 🛡️ THE ULTIMATE POPUP KILLER
     browser.on('targetcreated', async (target) => {
         if (target.type() === 'page') {
             try {
@@ -5018,12 +5051,13 @@ async function startDirectStreaming() {
                 setTimeout(async () => {
                     try {
                         if (newPage.isClosed()) return;
-                        const pages = await browser.pages();
-                        if (!pages.includes(activePage) && !pages.includes(backupPage) && pages.length > 3) { 
+                        // Agar tab hamari 3 main tabs mein se nahi hai, usay FARIQ kar do
+                        if (newPage !== activePage && newPage !== backupPage && newPage !== ghostPage) { 
+                            console.log(`[🛡️] AD-BLOCKER: Caught and killed a sneaky popup ad!`);
                             await newPage.close(); 
                         }
                     } catch(e) {}
-                }, 2500); // ✨ Increased delay to 2.5 seconds (Fixes "main frame too early")
+                }, 1000); // Trigger in 1 second
             } catch (err) {}
         }
     });
@@ -5037,6 +5071,7 @@ async function startDirectStreaming() {
     await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
     await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection...");
     await initializeVideo(activePage, false, true); 
+    await hideLoadingUI(activePage);
 
     if (isObsConnected) { try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {} }
 
