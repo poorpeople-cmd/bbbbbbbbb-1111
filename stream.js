@@ -5726,9 +5726,9 @@ const obs = new OBSWebSocket();
 // ⏱️ BIG VARIABLE: FORCE AUTO-REFRESH TIME (IN MINUTES)
 // Yahan par aap time set kar sakte hain. 
 // Testing ke liye isko 1 ya 2 rakhein. Asal live stream ke liye isko 30 kar dein.
-// Agar 30 minute tak video nahi atki, toh system automatically naye link par swap kar dega.
+// Agar 30 minute tak video nahi atki, toh system automatically SAME link ko refresh karega.
 // =========================================================================================
-const FORCE_REFRESH_MINUTES = 1; // <--- CHANGE THIS VALUE FOR TESTING
+const FORCE_REFRESH_MINUTES = 1; // <--- CHANGE THIS VALUE FOR TESTING (e.g., 30)
 const FORCE_REFRESH_MS = FORCE_REFRESH_MINUTES * 60 * 1000;
 // =========================================================================================
 
@@ -6259,9 +6259,6 @@ async function startWatchdog() {
     let activeUrlStr = urlList[currentUrlIndex];
     let backupUrlStr = urlList[backupUrlIndex];
 
-    // =========================================================================
-    // TIMER ENGINE: Tracks how long the current stream has been playing smoothly
-    // =========================================================================
     let currentStreamStartTime = Date.now();
 
     while (true) {
@@ -6270,16 +6267,15 @@ async function startWatchdog() {
         let activeStatus = await checkPageStatus(activePage);
 
         // =========================================================================================
-        // ⏱️ AUTO-REFRESH CHECKER: Agar 30 mins ho gaye hain, toh Force Swap trigger kar do
+        // ⏱️ AUTO-REFRESH CHECKER
         // =========================================================================================
         if (activeStatus.status === 'HEALTHY' && !isWarmupPhase) {
             let elapsedMs = Date.now() - currentStreamStartTime;
             if (elapsedMs > FORCE_REFRESH_MS) {
-                console.log(`\n[⏱️ PROACTIVE REFRESH]: Stream ran smoothly for ${FORCE_REFRESH_MINUTES} minutes! Forcing swap to keep connection fresh...`);
-                activeStatus.status = 'FORCE_REFRESH'; // This hijacks the status to trigger the normal swap loop
+                console.log(`\n[⏱️ PROACTIVE REFRESH]: Stream ran smoothly for ${FORCE_REFRESH_MINUTES} minutes! Forcing SAME LINK swap to keep connection fresh...`);
+                activeStatus.status = 'FORCE_REFRESH'; 
             }
         }
-        // =========================================================================================
 
         if (activeStatus.status === 'HEALTHY') {
             await hideLoadingUI(activePage); 
@@ -6322,7 +6318,6 @@ async function startWatchdog() {
             }
         }
 
-        // Updated condition to also catch the new 'FORCE_REFRESH' status
         if (activeStatus.status === 'FROZEN' || activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'FORCE_REFRESH') {
             
             if (isWarmupPhase && (Date.now() - streamSetupTime < WARMUP_MAX_TIME)) { 
@@ -6331,25 +6326,43 @@ async function startWatchdog() {
                 continue; 
             }
 
-            console.log(`\n==================================================`);
-            console.log(`[!] 🔄 WATCHDOG DETECTED ACTION: ${activeStatus.status}`);
-            console.log(`[💀] SWAPPING STREAM: Server [${currentUrlIndex}] -> ${activeUrlStr}`);
-            console.log(`==================================================`);
-            
-            await takeAndBatchScreenshot(activePage, `event-${activeStatus.status.toLowerCase()}`);
+            let isProactiveRefresh = (activeStatus.status === 'FORCE_REFRESH');
+
+            if (isProactiveRefresh) {
+                console.log(`\n==================================================`);
+                console.log(`[!] 🔄 PROACTIVE REFRESH TRIGGERED`);
+                console.log(`[*] Preparing a FRESH copy of SAME Server [${currentUrlIndex}] in background...`);
+                console.log(`==================================================`);
+                
+                // Mute current active page instantly
+                for (const frame of activePage.frames()) {
+                    try { if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {}
+                }
+
+                // Force load the exact SAME url in the backup page BEFORE swapping
+                await backupPage.goto('about:blank');
+                await applyPreloadFirewall(backupPage);
+                await backupPage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
+            } else {
+                console.log(`\n==================================================`);
+                console.log(`[!] ❌ WATCHDOG DETECTED ISSUE: ${activeStatus.status}`);
+                console.log(`[💀] FAILED STREAM: Server [${currentUrlIndex}] -> ${activeUrlStr}`);
+                console.log(`==================================================`);
+                await takeAndBatchScreenshot(activePage, `error-${activeStatus.status.toLowerCase()}`);
+            }
             
             console.log(`[*] Checking Backup Tab status before switching...`);
             let backupStatus = await checkPageStatus(backupPage);
 
             if (backupStatus.status === 'HEALTHY' || backupStatus.status === 'DEAD') { 
                 
-                for (const frame of activePage.frames()) {
-                    try {
-                        if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); });
-                    } catch(e) {}
+                if (!isProactiveRefresh) {
+                    for (const frame of activePage.frames()) {
+                        try { if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {}
+                    }
                 }
                 
-                await showLoadingUI(backupPage, "RECONNECTING", "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
+                await showLoadingUI(backupPage, isProactiveRefresh ? "REFRESHING CONNECTION" : "RECONNECTING", isProactiveRefresh ? "Optimizing current server stream <span class='stream-blink'>...</span>" : "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
                 await backupPage.bringToFront();
                 await new Promise(r => setTimeout(r, 1000)); 
                 
@@ -6361,11 +6374,16 @@ async function startWatchdog() {
                 let brokenPage = activePage; activePage = backupPage; backupPage = brokenPage;
                 lastActiveTime = -1; frozenCheckTimestamp = Date.now();
 
-                currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex]; 
-                backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex]; 
+                // DYNAMIC INDEX HANDLING:
+                if (!isProactiveRefresh) {
+                    // REAL CRASH: Move to the next server in list
+                    currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex]; 
+                    backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex]; 
+                } 
+                // IF PROACTIVE REFRESH: Indices DO NOT CHANGE! Server stays exactly the same.
 
                 console.log(`\n==================================================`);
-                console.log(`[🔄] SMART HOT-SWAP EXECUTED SUCCESSFULLY`);
+                console.log(isProactiveRefresh ? `[🔄] SAME-SERVER FRESH SWAP EXECUTED SUCCESSFULLY` : `[🔄] SMART HOT-SWAP TO NEXT SERVER EXECUTED SUCCESSFULLY`);
                 console.log(`==================================================`);
                 console.log(`[📺] NEW ACTIVE STREAM : Server [${currentUrlIndex}] -> ${activeUrlStr}`);
                 console.log(`[🔊] LIVE AUDIO STATUS : ON (Unmuted & Forced)`);
@@ -6380,11 +6398,6 @@ async function startWatchdog() {
                 
                 streamSetupTime = Date.now(); 
                 isWarmupPhase = true;
-
-                // =========================================================================
-                // ⏱️ TIMER RESET: Jab bhi swap ho jaye (chahay error se ya force refresh se), 
-                // naye link ke liye timer zero se shuru ho jayega.
-                // =========================================================================
                 currentStreamStartTime = Date.now();
 
             } else {
@@ -6590,7 +6603,6 @@ if (exactDurationMs) {
 }
 
 mainLoop();
-
 
 
 
