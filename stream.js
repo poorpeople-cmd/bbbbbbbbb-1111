@@ -5942,6 +5942,7 @@ const obs = new OBSWebSocket();
 // ⏱️ BIG VARIABLE: FORCE AUTO-REFRESH TIME (IN MINUTES)
 // Yahan par aap time set kar sakte hain. 
 // Testing ke liye isko 1 ya 2 rakhein. Asal live stream ke liye isko 30 kar dein.
+// Agar 30 minute tak video nahi atki, toh system automatically SAME link ko refresh karega.
 // =========================================================================================
 const FORCE_REFRESH_MINUTES = 1; // <--- CHANGE THIS VALUE FOR TESTING (e.g., 30)
 const FORCE_REFRESH_MS = FORCE_REFRESH_MINUTES * 60 * 1000;
@@ -5965,7 +5966,7 @@ const STREAM_KEYS = {
     '4.1' : '15255038074475_15283122080363_ai5qqp2we4', 
     '4.2' : '15255045480043_15283135842923_tldl4bhmii',
     '4.3' : '15255208599147_15283449629291_abltofuc7m', 
-    '4.4' : '15255217708651_15283449629291_abltofuc7m', 
+    '4.4' : '15255217708651_15283466603115_bojrrqtlmu', 
     '4.5' : '15255227670123_15283486263915_jpntt54mve',
 
     '5'   : '15273689226859_15317451606635_d7zzy3c7qi', 
@@ -5974,6 +5975,28 @@ const STREAM_KEYS = {
     '5.3' : '15273739624043_15317541653099_ii4bxpvabe',
     '5.4' : '15273750175339_15317561707115_csel26ku5a', 
     '5.5' : '15273760071275_15317579467371_cnewcj54me',
+    '5.6' : '15273767935595_15317595851371_3q43tk7tvm', 
+    
+    's1.1'  : '14204232736303_14846150314543_37jq4ryehq',
+    's1.2'  : '14204288179759_14846247373359_tnsknmapva',
+    's1.3'  : '14204319768111_14846302489135_sr4ht4ccwq',
+    's1.4'  : '14204331957807_14846326147631_dji2acqcze',
+    's1.5'  : '14204346572335_14846351641135_7gvns4o5ue',
+    's1.6'  : '14204361252399_14846376479279_cjajhf4d3y',
+    's1.7'  : '14204370492975_14846393649711_6fduhdqite',
+    's1.8'  : '14204395527727_14846438017583_s2jlti7lsm',
+    's1.9'  : '14204411387439_14846464887343_f5lxgcqj5y',
+    's1.10' : '14204424691247_14846487562799_xmbvntt6wa',
+
+    's2.1'  : '14204490948143_14846603495983_kzevn36tii',
+    's2.2'  : '14204506742319_14846634494511_ta2rxyg2oy',
+    's2.3'  : '14204523322927_14846661233199_foqb3q7zb4',
+    's2.4'  : '14204540034607_14846689085999_gjejdie4uy',
+    's2.5'  : '14204555304495_14846715497007_zdanghuxzu',
+    's2.6'  : '14204565200431_14846734371375_ap3bqpabpu',
+    's2.7'  : '14204577259055_14846756194863_3ecad2535u',
+    's2.8'  : '14204592528943_14846785227311_4hjl46y62e',
+    's2.9'  : '14204602621487_14846802594351_ilnp6lxekq',
     's2.10' : '14206184136239_14849618610735_ihnbx7hkoi'
 };
 
@@ -6003,10 +6026,12 @@ const PROXY_ENGINE = process.env.PROXY_ENGINE || 'Cloudflare WARP (Recommended)'
 
 const ACTIVE_STREAM_KEY = STREAM_KEYS[SELECTED_CHANNEL] || STREAM_KEYS['1'];
 
+// 🛡️ Dedicated Architecture with 'loadingPage' injected
 let browser = null;
 let obsProcess = null;
 let activePage = null;
 let backupPage = null;
+let loadingPage = null; 
 
 const FROZEN_THRESHOLD_MS = 8000; 
 
@@ -6019,7 +6044,7 @@ async function applyPreloadFirewall(page) {
     await page.evaluateOnNewDocument(() => {
         const style = document.createElement('style');
         style.textContent = `
-            html, body { background-color: #000000 !important; overflow: hidden !important; }
+            html, body { background-color: #000000 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }
             .chat, #chat, header, footer, .sidebar, .banner, .ads, .ad-container, [id*="pop"], [class*="pop"], [class*="ad-"], iframe:not([allowfullscreen]) {
                 display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important;
             }
@@ -6115,15 +6140,6 @@ async function showLoadingUI(page, title, sub) {
     } catch (e) {}
 }
 
-async function hideLoadingUI(page) {
-    try {
-        await page.evaluate(() => {
-            const overlay = document.getElementById('smart-stream-overlay');
-            if (overlay) overlay.remove();
-        });
-    } catch (e) {}
-}
-
 function setupOBSConfig() {
     const obsDir = path.join(os.homedir(), '.config', 'obs-studio');
     const profilesDir = path.join(obsDir, 'basic', 'profiles', 'Untitled');
@@ -6207,7 +6223,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         console.log(`[+] Server Button clicked successfully!`);
                         await takeAndBatchScreenshot(page, `server-clicked`);
                         await new Promise(r => setTimeout(r, 2000)); 
-                        if (isActivePage) await page.bringToFront(); 
                     } else await new Promise(r => setTimeout(r, 2000));
                 } catch (err) { await new Promise(r => setTimeout(r, 2000)); }
             }
@@ -6471,7 +6486,6 @@ async function startWatchdog() {
         }
 
         if (activeStatus.status === 'HEALTHY') {
-            await hideLoadingUI(activePage); 
             isWarmupPhase = false; 
 
             if (activeStatus.currentTime === lastActiveTime) {
@@ -6546,15 +6560,15 @@ async function startWatchdog() {
             let backupStatus = await checkPageStatus(backupPage);
 
             // =========================================================================================
-            // 🔄 SOFT RECOVERY ENGINE: If both active and backup tabs are dead (e.g., Internet drop)
-            // Instead of crashing the whole process, keep browser alive and aggressively loop till data returns!
+            // 🔄 SOFT RECOVERY ENGINE: If both active and backup tabs are dead
+            // Using DEDICATED LOADING PAGE so animation is guaranteed!
             // =========================================================================================
             if (backupStatus.status === 'DEAD' && !isProactiveRefresh) {
                 console.log(`\n[⚠️] BOTH TABS FAILED (Data Down). Activating Infinite Soft Recovery Mode...`);
                 
-                // Keep the active view alive and force display the reconnecting progress bar overlay instantly
-                await showLoadingUI(activePage, "NETWORK DROP DETECTED", "Re-establishing live video data feed smoothly <span class='stream-blink'>...</span>");
-                await activePage.bringToFront();
+                // Show Animation ON DEDICATED TAB and bring to front instantly!
+                await showLoadingUI(loadingPage, "NETWORK DROP DETECTED", "Re-establishing live video data feed smoothly <span class='stream-blink'>...</span>");
+                await loadingPage.bringToFront();
                 
                 let dataRecovered = false;
                 let attemptCount = 0;
@@ -6564,10 +6578,12 @@ async function startWatchdog() {
                     console.log(`[🔄 Recovery Attempt ${attemptCount}]: Reloading main server link...`);
                     try {
                         await activePage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 30000 });
-                        await new Promise(r => setTimeout(r, 4000)); // wait for player DOM parsing
+                        await new Promise(r => setTimeout(r, 4000));
                         let checkAgain = await checkPageStatus(activePage);
                         if (checkAgain.status === 'HEALTHY') {
                             console.log(`[+] SUCCESS! Data returned after soft recovery. Resuming stream...`);
+                            await initializeVideo(activePage, false, false);
+                            await activePage.bringToFront(); // Show active page, hides animation tab
                             dataRecovered = true;
                             break;
                         }
@@ -6581,23 +6597,23 @@ async function startWatchdog() {
                         let checkBackupAgain = await checkPageStatus(backupPage);
                         if (checkBackupAgain.status === 'HEALTHY') {
                             console.log(`[+] SUCCESS! Backup channel is up. Swapping cleanly...`);
-                            // Swap internal configurations smoothly
                             let tempPage = activePage; activePage = backupPage; backupPage = tempPage;
                             currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex];
                             backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex];
+                            
+                            await initializeVideo(activePage, false, false);
+                            await activePage.bringToFront(); // Show active page, hides animation tab
                             dataRecovered = true;
                             break;
                         }
                     } catch (err) {}
                     
-                    await new Promise(r => setTimeout(r, 5000)); // Wait 5 seconds before pulling data again
+                    await new Promise(r => setTimeout(r, 5000));
                 }
                 
-                // Re-initialize player video elements beautifully
-                await initializeVideo(activePage, false, true);
                 lastActiveTime = -1; frozenCheckTimestamp = Date.now();
                 streamSetupTime = Date.now(); isWarmupPhase = true; currentStreamStartTime = Date.now();
-                continue; // Skip standard crash procedure completely
+                continue; 
             }
             // =========================================================================================
 
@@ -6609,14 +6625,13 @@ async function startWatchdog() {
                     }
                 }
                 
-                await showLoadingUI(backupPage, isProactiveRefresh ? "REFRESHING CONNECTION" : "RECONNECTING", isProactiveRefresh ? "Optimizing current server stream <span class='stream-blink'>...</span>" : "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
-                await backupPage.bringToFront();
+                // Show Animation ON DEDICATED TAB and bring to front safely
+                await showLoadingUI(loadingPage, isProactiveRefresh ? "REFRESHING CONNECTION" : "RECONNECTING", isProactiveRefresh ? "Optimizing current server stream <span class='stream-blink'>...</span>" : "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
+                await loadingPage.bringToFront();
                 await new Promise(r => setTimeout(r, 1000)); 
-                
-                try { await backupPage.mouse.click(10, 10); } catch(e){} 
 
-                console.log(`[*] Initializing Video on the newly active tab...`);
-                await initializeVideo(backupPage, false, true); 
+                console.log(`[*] Initializing Video on the newly active tab in background...`);
+                await initializeVideo(backupPage, false, false); 
 
                 let brokenPage = activePage; activePage = backupPage; backupPage = brokenPage;
                 lastActiveTime = -1; frozenCheckTimestamp = Date.now();
@@ -6625,6 +6640,8 @@ async function startWatchdog() {
                     currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex]; 
                     backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex]; 
                 } 
+
+                await activePage.bringToFront(); // Hide animation, show live stream!
 
                 console.log(`\n==================================================`);
                 console.log(isProactiveRefresh ? `[🔄] SAME-SERVER FRESH SWAP EXECUTED SUCCESSFULLY` : `[🔄] SMART HOT-SWAP TO NEXT SERVER EXECUTED SUCCESSFULLY`);
@@ -6728,7 +6745,7 @@ async function startDirectStreaming() {
         if (target.type() === 'page') {
             const newPage = await target.page();
             setTimeout(async () => {
-                if (newPage && newPage !== activePage && newPage !== backupPage) {
+                if (newPage && newPage !== activePage && newPage !== backupPage && newPage !== loadingPage) {
                     console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
                     try { await newPage.close(); } catch(e) {}
                 }
@@ -6739,21 +6756,23 @@ async function startDirectStreaming() {
     const pages = await browser.pages();
     activePage = pages[0]; 
     backupPage = await browser.newPage();
+    loadingPage = await browser.newPage(); // The Dedicated Animation Tab!
     
     attachAntiAdListeners(activePage);
     attachAntiAdListeners(backupPage);
 
     await applyPreloadFirewall(activePage);
     await applyPreloadFirewall(backupPage);
+    await applyPreloadFirewall(loadingPage);
 
-    await activePage.bringToFront(); 
+    // Initial Loading Animation Guarantee
+    await showLoadingUI(loadingPage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
+    await loadingPage.bringToFront(); 
 
     console.log(`[*] STEP 1: Loading Server [${currentUrlIndex}] on Active Page: ${urlList[currentUrlIndex]}`);
     await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
     
-    await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
-    
-    await initializeVideo(activePage, false, true); 
+    await initializeVideo(activePage, false, false); 
 
     if (isObsConnected) {
         console.log('\n[*] Active Video is Ready! Shifting OBS from Animated Buffer to LIVE Video (MainScene)...');
@@ -6763,9 +6782,8 @@ async function startDirectStreaming() {
     console.log(`[*] STEP 2: Silently preparing Server [${backupUrlIndex}] on Backup Page: ${urlList[backupUrlIndex]}`);
     backupPage.goto(urlList[backupUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
     
-    await activePage.bringToFront();
+    await activePage.bringToFront(); // Show actual video
     try { await activePage.mouse.click(10, 10); } catch(e){} 
-    await hideLoadingUI(activePage);
 
     console.log(`\n==================================================`);
     console.log(`[🎥] INITIAL CAPTURE STATUS: Ready to Broadcast`);
@@ -6843,7 +6861,6 @@ if (exactDurationMs) {
 }
 
 mainLoop();
-
 
 
 
