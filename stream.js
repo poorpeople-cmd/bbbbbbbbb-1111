@@ -5728,7 +5728,7 @@ const obs = new OBSWebSocket();
 // Testing ke liye isko 1 ya 2 rakhein. Asal live stream ke liye isko 30 kar dein.
 // Agar 30 minute tak video nahi atki, toh system automatically naye link par swap kar dega.
 // =========================================================================================
-const FORCE_REFRESH_MINUTES = 30; // <--- CHANGE THIS VALUE FOR TESTING
+const FORCE_REFRESH_MINUTES = 1; // <--- CHANGE THIS VALUE FOR TESTING
 const FORCE_REFRESH_MS = FORCE_REFRESH_MINUTES * 60 * 1000;
 // =========================================================================================
 
