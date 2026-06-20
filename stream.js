@@ -4516,22 +4516,6 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -4625,17 +4609,8 @@ let ghostPage = null;
 let isSystemSwapping = false; 
 let lastRefreshTime = Date.now();
 
-// =========================================================================
-// 🟢 🟢 🟢 REFRESH TIMER CONFIGURATION (TESTING VS PRODUCTION) 🟢 🟢 🟢
-// =========================================================================
-
-// YEH ABHI 1 MINUTE (60 SECONDS) PAR SET HAI TESTING KE LIYE!
-let nextRefreshInterval = 1 * 60 * 1000; 
-
-// JAB TESTING MUKAMMAL HO JAYE, UPAR WALI LINE DELETE KAREIN AUR NEECHAY WALI LINE KO UNCOMMENT (Enable) KAR DEIN:
-// let nextRefreshInterval = (9 + Math.random() * 2) * 60 * 1000; // ~10 Minutes for Real Use
-
-// =========================================================================
+// REFRESH TIMER CONFIGURATION
+let nextRefreshInterval = 1 * 60 * 1000; // Testing
 
 const FROZEN_THRESHOLD_MS = 8000; 
 
@@ -4653,6 +4628,7 @@ async function applyPreloadFirewall(page) {
             }
         `;
         document.documentElement.appendChild(style);
+        window.__targetMuted = false; // Initialize the dynamic flag
     });
 }
 
@@ -4746,7 +4722,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
                 try {
                     const autoPlayed = await frame.evaluate(() => {
                         let playing = false;
-                        document.querySelectorAll('video').forEach(v => { if (v.clientWidth > 50 && !v.paused && v.currentTime > 0) { v.muted = false; v.volume = 1.0; playing = true; } });
+                        document.querySelectorAll('video').forEach(v => { if (v.clientWidth > 50 && !v.paused && v.currentTime > 0) { playing = true; } });
                         return playing;
                     });
                     if (autoPlayed) { isVideoPlaying = true; break; }
@@ -4759,7 +4735,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
                     if (!isVideoPlaying && attempts > 5) {
                         const forced = await frame.evaluate(async () => {
-                            let played = false; document.querySelectorAll('video').forEach(v => { if (v.clientWidth > 50 || v.currentTime > 0) { v.muted = false; v.volume = 1.0; try { v.click(); } catch(e){} try { let p = v.play(); if (p !== undefined) p.catch(()=>{}); played = true; } catch(e) {} } }); return played;
+                            let played = false; document.querySelectorAll('video').forEach(v => { if (v.clientWidth > 50 || v.currentTime > 0) { try { v.click(); } catch(e){} try { let p = v.play(); if (p !== undefined) p.catch(()=>{}); played = true; } catch(e) {} } }); return played;
                         });
                         if (forced) { isVideoPlaying = true; break; }
                     }
@@ -4808,12 +4784,24 @@ async function initializeVideo(page, startMuted, isActivePage) {
             }, 500); 
         }).catch(() => {});
 
-        await targetFrame.evaluate((muteVideo) => {
+        // 🔥 THE AUDIO FIX: Use dynamic window.__targetMuted instead of hardcoding
+        await targetFrame.evaluate((initialMuteFlag) => {
+            window.__targetMuted = initialMuteFlag; // Set the initial state dynamically
             setInterval(() => {
                 try {
                     const style = document.createElement('style'); style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`; document.head.appendChild(style);
-                    document.querySelectorAll('video, audio').forEach(media => { media.muted = muteVideo; media.volume = muteVideo ? 0.0 : 1.0; });
-                    if (!muteVideo) { document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} }); }
+                    
+                    // Read the dynamic flag instead of static argument
+                    let currentMuteState = window.__targetMuted; 
+                    
+                    document.querySelectorAll('video, audio').forEach(media => { 
+                        if (media.muted !== currentMuteState) media.muted = currentMuteState; 
+                        if (currentMuteState && media.volume !== 0.0) media.volume = 0.0;
+                        if (!currentMuteState && media.volume !== 1.0) media.volume = 1.0;
+                    });
+                    
+                    if (!currentMuteState) { document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} }); }
+                    
                     const videos = Array.from(document.querySelectorAll('video'));
                     let realVideo = null; 
                     for (const v of videos) { if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; } }
@@ -4885,19 +4873,15 @@ async function startProactiveRefreshEngine() {
                     isSystemSwapping = true; 
                     console.log(`[+] Ghost Tab is HEALTHY. Starting precise swap with brief black shield...`);
 
-                    // 🛡️ STEP 1: DROP THE BLACK CURTAINS
                     await showLoadingUI(activePage, "OPTIMIZING STREAM", "Switching to a fresher connection <span class='stream-blink'>...</span>");
                     await showLoadingUI(ghostPage, "OPTIMIZING STREAM", "Finalizing layout <span class='stream-blink'>...</span>");
 
-                    // 🛡️ STEP 2: BRING GHOST TAB TO FRONT
                     await ghostPage.bringToFront();
 
-                    // 🛡️ STEP 3: FORCE CLICKS TO EXTRACT & KILL POPUPS
                     try { await ghostPage.mouse.click(10, 10); } catch(e){}
                     try { await ghostPage.mouse.click(500, 500); } catch(e){}
-                    await new Promise(r => setTimeout(r, 1500)); // Ad-Blocker takes out popups here
+                    await new Promise(r => setTimeout(r, 1500)); 
 
-                    // 🛡️ STEP 4: ENFORCE PERFECT FULLSCREEN ON GHOST
                     await ghostPage.evaluate(() => { 
                         let ifrs = Array.from(document.querySelectorAll('iframe'));
                         let vIfrs = ifrs.filter(i => { let s = i.src.toLowerCase(); return !s.includes('ad') && !s.includes('bet') && !s.includes('pop'); });
@@ -4905,43 +4889,46 @@ async function startProactiveRefreshEngine() {
                         if(target) { target.style.setProperty('position', 'fixed', 'important'); target.style.setProperty('width', '100vw', 'important'); target.style.setProperty('height', '100vh', 'important'); target.style.setProperty('z-index', '2147483645', 'important'); }
                     }).catch(()=>{});
 
-                    // 🛡️ STEP 5: AUDIO SWAP (THE "AUDIO HANG" FIX 🔥)
-                    // Unmute New Tab
-                    await ghostPage.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); }).catch(()=>{});
+                    // 🔥 🛡️ STEP 5: AUDIO SWAP (THE "AUDIO HANG" FIX 🔥)
+                    // Update dynamic flag so interval doesn't fight back!
+                    for (const frame of ghostPage.frames()) {
+                        if (!frame.isDetached()) {
+                            await frame.evaluate(() => { 
+                                window.__targetMuted = false; // Tell the interval to keep it unmuted
+                                document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
+                            }).catch(()=>{});
+                        }
+                    }
                     
-                    // HARD KILL Old Tab's Audio Pipeline
+                    // HARD KILL Old Tab's Audio Pipeline safely
                     if (activePage && !activePage.isClosed()) {
-                        await activePage.evaluate(() => { 
-                            document.querySelectorAll('video, audio').forEach(m => { 
-                                try {
-                                    m.muted = true; m.volume = 0.0; 
-                                    m.pause(); // Force stop playback
-                                    m.removeAttribute('src'); // Destroy media source
-                                    m.load(); // Flush the player pipeline
-                                } catch(e){}
-                            }); 
-                        }).catch(()=>{});
-                        // Navigate away to completely free up PulseAudio mixer instantly
-                        activePage.goto('about:blank').catch(()=>{}); 
+                        for (const frame of activePage.frames()) {
+                            if (!frame.isDetached()) {
+                                await frame.evaluate(() => { 
+                                    window.__targetMuted = true; // Tell interval to stop trying to play it
+                                    document.querySelectorAll('video, audio').forEach(m => { 
+                                        try {
+                                            m.muted = true; m.volume = 0.0; 
+                                            m.pause(); 
+                                            m.removeAttribute('src'); 
+                                            m.load(); 
+                                        } catch(e){}
+                                    }); 
+                                }).catch(()=>{});
+                            }
+                        }
+                        // Added 500ms delay before goto blank to prevent Linux Audio Thread crashes
+                        setTimeout(() => { try { if(activePage && !activePage.isClosed()) activePage.goto('about:blank').catch(()=>{}); } catch(e){} }, 500);
                     }
 
-                    // 🛡️ STEP 6: LIFT THE CURTAIN
                     await hideLoadingUI(ghostPage);
 
-                    // 🛡️ STEP 7: CLEANUP OLD TAB
                     let oldActive = activePage; activePage = ghostPage; ghostPage = null;
-                    setTimeout(async () => { try { if (oldActive && !oldActive.isClosed()) await oldActive.close(); } catch(e){} }, 2000); 
+                    setTimeout(async () => { try { if (oldActive && !oldActive.isClosed()) await oldActive.close(); } catch(e){} }, 2500); 
 
                     console.log(`[✔] SEAMLESS SWAP SUCCESSFUL! Ads completely destroyed, Audio crystal clear.`);
-                    
                     lastRefreshTime = Date.now(); 
-                    
-                    // =======================================================================================
-                    // TIMER RESET LOGIC. 1 min testing, uncomment 2nd line for 10 mins!
                     nextRefreshInterval = 1 * 60 * 1000; 
-                    // nextRefreshInterval = (9 + Math.random() * 2) * 60 * 1000; 
-                    // =======================================================================================
-
                     isSystemSwapping = false; 
                 } else {
                     console.log(`[-] Ghost Tab failed to load or Watchdog intervened. Aborting refresh...`);
@@ -4975,7 +4962,8 @@ async function startWatchdog() {
                 if (activePage && !activePage.isClosed()) {
                     for (const frame of activePage.frames()) { 
                         if (frame.isDetached()) continue;
-                        try { frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} }); }).catch(()=>{}); } catch(e) {} 
+                        // 🔥 AUDIO FIX: Update dynamic flag here too
+                        try { frame.evaluate(() => { window.__targetMuted = false; document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} }); }).catch(()=>{}); } catch(e) {} 
                     }
                 }
             }
@@ -4984,7 +4972,8 @@ async function startWatchdog() {
         if (backupPage && !backupPage.isClosed()) { 
             for (const frame of backupPage.frames()) { 
                 if (frame.isDetached()) continue;
-                try { frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }).catch(()=>{}); } catch(e) {} 
+                // 🔥 AUDIO FIX: Lock backup to mute dynamically
+                try { frame.evaluate(() => { window.__targetMuted = true; document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }).catch(()=>{}); } catch(e) {} 
             } 
         }
 
@@ -5006,14 +4995,18 @@ async function startWatchdog() {
                 if (activePage && !activePage.isClosed()) {
                     for (const frame of activePage.frames()) { 
                         if (frame.isDetached()) continue;
-                        try { await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { try{m.muted=true;m.volume=0.0;m.pause();m.removeAttribute('src');m.load();}catch(e){} }); }); } catch(e) {} 
+                        // 🔥 AUDIO FIX: Safely kill old tab audio thread
+                        try { await frame.evaluate(() => { window.__targetMuted = true; document.querySelectorAll('video, audio').forEach(m => { try{m.muted=true;m.volume=0.0;m.pause();m.removeAttribute('src');m.load();}catch(e){} }); }); } catch(e) {} 
                     }
-                    activePage.goto('about:blank').catch(()=>{}); // AUDIO FIX for emergency swap too
+                    setTimeout(() => { try { if(activePage && !activePage.isClosed()) activePage.goto('about:blank').catch(()=>{}); } catch(e){} }, 500);
                 }
                 
                 await showLoadingUI(backupPage, "RECONNECTING", "Establishing secure connection to backup server...");
                 await backupPage.bringToFront(); await new Promise(r => setTimeout(r, 1000)); try { await backupPage.mouse.click(10, 10); } catch(e){} 
 
+                // Reset dynamic flag for the backup page now becoming active
+                for (const frame of backupPage.frames()) { if(!frame.isDetached()) await frame.evaluate(() => { window.__targetMuted = false; }).catch(()=>{}); }
+                
                 await initializeVideo(backupPage, false, true); 
 
                 let brokenPage = activePage; activePage = backupPage; backupPage = brokenPage;
@@ -5122,8 +5115,12 @@ mainLoop();
 
 
 
-// 1
 
+
+
+
+
+// 1
 
 // const puppeteer = require('puppeteer-extra');
 // const StealthPlugin = require('puppeteer-extra-plugin-stealth');
@@ -5213,7 +5210,7 @@ mainLoop();
 // let browser = null; let obsProcess = null; 
 // let activePage = null; 
 // let backupPage = null;
-// let ghostPage = null; // Our new proactive background tab
+// let ghostPage = null; 
 
 // let isSystemSwapping = false; 
 // let lastRefreshTime = Date.now();
@@ -5450,7 +5447,7 @@ mainLoop();
 //     return { status: 'DEAD' };
 // }
 
-// // 🚀 PROACTIVE ENGINE WITH THE "BLACK SHIELD SWAP"
+// // 🚀 PROACTIVE ENGINE WITH "AUDIO-HANG FIX" AND "BLACK SHIELD SWAP"
 // async function startProactiveRefreshEngine() {
 //     while (true) {
 //         await new Promise(r => setTimeout(r, 10000));
@@ -5478,21 +5475,19 @@ mainLoop();
 //                     isSystemSwapping = true; 
 //                     console.log(`[+] Ghost Tab is HEALTHY. Starting precise swap with brief black shield...`);
 
-//                     // 🛡️ STEP 1: DROP THE BLACK CURTAINS ON BOTH TABS
+//                     // 🛡️ STEP 1: DROP THE BLACK CURTAINS
 //                     await showLoadingUI(activePage, "OPTIMIZING STREAM", "Switching to a fresher connection <span class='stream-blink'>...</span>");
 //                     await showLoadingUI(ghostPage, "OPTIMIZING STREAM", "Finalizing layout <span class='stream-blink'>...</span>");
 
-//                     // 🛡️ STEP 2: BRING GHOST TAB TO FRONT (Hidden behind black curtain)
+//                     // 🛡️ STEP 2: BRING GHOST TAB TO FRONT
 //                     await ghostPage.bringToFront();
 
-//                     // 🛡️ STEP 3: FORCE CLICKS TO EXTRACT & KILL POPUP ADS INSTANTLY
+//                     // 🛡️ STEP 3: FORCE CLICKS TO EXTRACT & KILL POPUPS
 //                     try { await ghostPage.mouse.click(10, 10); } catch(e){}
 //                     try { await ghostPage.mouse.click(500, 500); } catch(e){}
+//                     await new Promise(r => setTimeout(r, 1500)); // Ad-Blocker takes out popups here
 
-//                     // Wait 1.5 seconds to let the Ad-Blocker engine kill any popups that tried to spawn
-//                     await new Promise(r => setTimeout(r, 1500));
-
-//                     // 🛡️ STEP 4: ENFORCE PERFECT FULLSCREEN
+//                     // 🛡️ STEP 4: ENFORCE PERFECT FULLSCREEN ON GHOST
 //                     await ghostPage.evaluate(() => { 
 //                         let ifrs = Array.from(document.querySelectorAll('iframe'));
 //                         let vIfrs = ifrs.filter(i => { let s = i.src.toLowerCase(); return !s.includes('ad') && !s.includes('bet') && !s.includes('pop'); });
@@ -5500,10 +5495,24 @@ mainLoop();
 //                         if(target) { target.style.setProperty('position', 'fixed', 'important'); target.style.setProperty('width', '100vw', 'important'); target.style.setProperty('height', '100vh', 'important'); target.style.setProperty('z-index', '2147483645', 'important'); }
 //                     }).catch(()=>{});
 
-//                     // 🛡️ STEP 5: AUDIO SWAP
+//                     // 🛡️ STEP 5: AUDIO SWAP (THE "AUDIO HANG" FIX 🔥)
+//                     // Unmute New Tab
 //                     await ghostPage.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); }).catch(()=>{});
+                    
+//                     // HARD KILL Old Tab's Audio Pipeline
 //                     if (activePage && !activePage.isClosed()) {
-//                         await activePage.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }).catch(()=>{});
+//                         await activePage.evaluate(() => { 
+//                             document.querySelectorAll('video, audio').forEach(m => { 
+//                                 try {
+//                                     m.muted = true; m.volume = 0.0; 
+//                                     m.pause(); // Force stop playback
+//                                     m.removeAttribute('src'); // Destroy media source
+//                                     m.load(); // Flush the player pipeline
+//                                 } catch(e){}
+//                             }); 
+//                         }).catch(()=>{});
+//                         // Navigate away to completely free up PulseAudio mixer instantly
+//                         activePage.goto('about:blank').catch(()=>{}); 
 //                     }
 
 //                     // 🛡️ STEP 6: LIFT THE CURTAIN
@@ -5513,7 +5522,7 @@ mainLoop();
 //                     let oldActive = activePage; activePage = ghostPage; ghostPage = null;
 //                     setTimeout(async () => { try { if (oldActive && !oldActive.isClosed()) await oldActive.close(); } catch(e){} }, 2000); 
 
-//                     console.log(`[✔] SEAMLESS SWAP SUCCESSFUL! Ads completely destroyed.`);
+//                     console.log(`[✔] SEAMLESS SWAP SUCCESSFUL! Ads completely destroyed, Audio crystal clear.`);
                     
 //                     lastRefreshTime = Date.now(); 
                     
@@ -5587,8 +5596,9 @@ mainLoop();
 //                 if (activePage && !activePage.isClosed()) {
 //                     for (const frame of activePage.frames()) { 
 //                         if (frame.isDetached()) continue;
-//                         try { await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {} 
+//                         try { await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { try{m.muted=true;m.volume=0.0;m.pause();m.removeAttribute('src');m.load();}catch(e){} }); }); } catch(e) {} 
 //                     }
+//                     activePage.goto('about:blank').catch(()=>{}); // AUDIO FIX for emergency swap too
 //                 }
                 
 //                 await showLoadingUI(backupPage, "RECONNECTING", "Establishing secure connection to backup server...");
@@ -5604,7 +5614,6 @@ mainLoop();
 //                 lastRefreshTime = Date.now(); nextRefreshInterval = 1 * 60 * 1000;
 
 //                 if (backupPage && !backupPage.isClosed()) {
-//                     await backupPage.goto('about:blank').catch(()=>{}); 
 //                     await applyPreloadFirewall(backupPage);
 //                     backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
 //                 }
@@ -5647,13 +5656,12 @@ mainLoop();
 //                 setTimeout(async () => {
 //                     try {
 //                         if (newPage.isClosed()) return;
-//                         // Agar tab hamari 3 main tabs mein se nahi hai, usay FARIQ kar do
 //                         if (newPage !== activePage && newPage !== backupPage && newPage !== ghostPage) { 
 //                             console.log(`[🛡️] AD-BLOCKER: Caught and killed a sneaky popup ad!`);
 //                             await newPage.close(); 
 //                         }
 //                     } catch(e) {}
-//                 }, 1000); // Trigger in 1 second
+//                 }, 1000); 
 //             } catch (err) {}
 //         }
 //     });
@@ -5696,6 +5704,7 @@ mainLoop();
 
 // process.on('SIGINT', async () => { await cleanup(); process.exit(0); });
 // mainLoop();
+
 
 
 
