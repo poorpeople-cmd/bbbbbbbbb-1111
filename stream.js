@@ -4493,7 +4493,6 @@
 
 
 
-
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -4578,7 +4577,6 @@ const PROXY_ENGINE = process.env.PROXY_ENGINE || 'Cloudflare WARP (Recommended)'
 
 const ACTIVE_STREAM_KEY = STREAM_KEYS[SELECTED_CHANNEL] || STREAM_KEYS['1'];
 
-// 🌟 THE 3 MAIN TABS GLOBALLY TRACKED
 let browser = null; let obsProcess = null; 
 let activePage = null; 
 let backupPage = null;
@@ -4587,15 +4585,15 @@ let ghostPage = null;
 let isSystemSwapping = false; 
 let lastRefreshTime = Date.now();
 
-// REFRESH TIMER CONFIGURATION
-let nextRefreshInterval = 1 * 60 * 1000; // Testing
+// REFRESH TIMER
+let nextRefreshInterval = 1 * 60 * 1000; // Testing time
 
 const FROZEN_THRESHOLD_MS = 8000; 
 
 if (!fs.existsSync('./screenshots')) fs.mkdirSync('./screenshots');
 let pendingScreenshots = []; let uploadCycleCount = 0;
 
-// 🔥 UPGRADED: The CSS Curtain Strategy (Zero-Delay FOUC Fix)
+// Reverted to clean Div Firewall (Safe for Video Players)
 async function applyPreloadFirewall(page) {
     if (!page) return;
     await page.evaluateOnNewDocument(() => {
@@ -4605,29 +4603,9 @@ async function applyPreloadFirewall(page) {
             .chat, #chat, header, footer, .sidebar, .banner, .ads, .ad-container, [id*="pop"], [class*="pop"], [class*="ad-"] {
                 display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important;
             }
-            /* 🛡️ THE BULLETPROOF BLACKOUT CURTAIN */
-            html:not(.stream-ready)::before {
-                content: "" !important;
-                position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
-                width: 100vw !important; height: 100vh !important;
-                background-color: #000000 !important; z-index: 2147483646 !important;
-                display: block !important;
-            }
-            html:not(.stream-ready):not([data-overlay-text])::after {
-                content: "INITIALIZING STREAM\\nPlease wait..." !important;
-            }
-            html:not(.stream-ready)::after {
-                content: attr(data-overlay-text) !important;
-                position: fixed !important; top: 50% !important; left: 50% !important;
-                transform: translate(-50%, -50%) !important;
-                color: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-                font-size: 28px !important; font-weight: 800 !important; letter-spacing: 2px !important;
-                text-align: center !important; white-space: pre-wrap !important; line-height: 1.6 !important;
-                z-index: 2147483647 !important; display: block !important; text-transform: uppercase !important;
-            }
         `;
         document.documentElement.appendChild(style);
-        window.__targetMuted = false; // Initialize the dynamic audio flag
+        window.__targetMuted = false; // Audio fix flag
     });
 }
 
@@ -4649,26 +4627,33 @@ async function takeAndBatchScreenshot(page, stepName) {
     } catch (e) { }
 }
 
-// 🔥 UPGRADED: Updates CSS attribute instantly (No DOM creation delay)
 async function showLoadingUI(page, title, sub) {
     if (!page || page.isClosed()) return;
     try {
         await page.evaluate((t, s) => {
-            const cleanSub = s.replace(/<[^>]*>?/gm, ''); // Remove old html spans if any
-            document.documentElement.setAttribute('data-overlay-text', t + '\\n\\n' + cleanSub);
-            document.documentElement.classList.remove('stream-ready'); // Drop the curtain
+            if (window.self !== window.top) return; 
+            let overlay = document.getElementById('smart-stream-overlay'); if (overlay) overlay.remove();
+            overlay = document.createElement('div'); overlay.id = 'smart-stream-overlay';
+            overlay.innerHTML = `
+                <style>
+                    #smart-stream-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: #000000 !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; color: #ffffff !important; font-family: -apple-system, sans-serif !important; pointer-events: all !important; }
+                    .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 30px; }
+                    @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                    .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; }
+                    .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; max-width: 600px !important; }
+                    .stream-blink { animation: blinker 1.5s linear infinite; color: #e50914; font-weight: bold; }
+                    @keyframes blinker { 50% { opacity: 0.3; } }
+                </style>
+                <div class="stream-spinner"></div><div class="stream-title">${t}</div><div class="stream-sub">${s}</div>
+            `;
+            document.body.appendChild(overlay);
         }, title, sub);
     } catch (e) {}
 }
 
-// 🔥 UPGRADED: Lifts CSS curtain instantly
 async function hideLoadingUI(page) {
     if (!page || page.isClosed()) return;
-    try { 
-        await page.evaluate(() => { 
-            document.documentElement.classList.add('stream-ready'); // Lift the curtain
-        }); 
-    } catch (e) {}
+    try { await page.evaluate(() => { const overlay = document.getElementById('smart-stream-overlay'); if (overlay) overlay.remove(); }); } catch (e) {}
 }
 
 function setupOBSConfig() {
@@ -4776,7 +4761,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
             }, 500); 
         }).catch(() => {});
 
-        // THE AUDIO FIX from previous step remains intact
+        // Safest Audio Fix
         await targetFrame.evaluate((initialMuteFlag) => {
             window.__targetMuted = initialMuteFlag; 
             setInterval(() => {
@@ -4835,7 +4820,7 @@ async function checkPageStatus(page) {
     return { status: 'DEAD' };
 }
 
-// 🚀 PROACTIVE ENGINE WITH CURTAIN SWAP
+// 🚀 THE MASTERPIECE: Background Verification Logic
 async function startProactiveRefreshEngine() {
     while (true) {
         await new Promise(r => setTimeout(r, 10000));
@@ -4861,26 +4846,60 @@ async function startProactiveRefreshEngine() {
 
                 if (isReady && !isSystemSwapping) {
                     isSystemSwapping = true; 
-                    console.log(`[+] Ghost Tab is HEALTHY. Starting precise swap with brief black shield...`);
+                    console.log(`[+] Ghost Tab is HEALTHY. Verifying layout in background before swapping...`);
 
-                    // Ensure curtains are DOWN before swapping
-                    await showLoadingUI(activePage, "OPTIMIZING STREAM", "Switching to a fresher connection...");
-                    await showLoadingUI(ghostPage, "OPTIMIZING STREAM", "Finalizing layout...");
-
-                    await ghostPage.bringToFront();
-
-                    try { await ghostPage.mouse.click(10, 10); } catch(e){}
-                    try { await ghostPage.mouse.click(500, 500); } catch(e){}
-                    await new Promise(r => setTimeout(r, 1500)); 
-
+                    // 🔥 STEP 1: FORCE LAYOUT IN BACKGROUND
                     await ghostPage.evaluate(() => { 
                         let ifrs = Array.from(document.querySelectorAll('iframe'));
                         let vIfrs = ifrs.filter(i => { let s = i.src.toLowerCase(); return !s.includes('ad') && !s.includes('bet') && !s.includes('pop'); });
                         let target = vIfrs.find(i => i.hasAttribute('allowfullscreen') || i.src.includes('player')) || vIfrs[0];
-                        if(target) { target.style.setProperty('position', 'fixed', 'important'); target.style.setProperty('width', '100vw', 'important'); target.style.setProperty('height', '100vh', 'important'); target.style.setProperty('z-index', '2147483645', 'important'); }
+                        if(target) { 
+                            target.style.setProperty('position', 'fixed', 'important'); 
+                            target.style.setProperty('width', '100vw', 'important'); 
+                            target.style.setProperty('height', '100vh', 'important'); 
+                            target.style.setProperty('z-index', '2147483645', 'important'); 
+                        }
                     }).catch(()=>{});
 
-                    // Audio Unmute (Dynamic Fix)
+                    // 🔥 STEP 2: GLOBALLY CHECK IF IT IS ACTUALLY FULLSCREEN (Your Idea!)
+                    let isLayoutConfirmed = false;
+                    for (let w = 0; w < 10; w++) {
+                        isLayoutConfirmed = await ghostPage.evaluate(() => {
+                            let video = document.querySelector('video');
+                            if (video && video.clientWidth >= window.innerWidth * 0.7) return true;
+                            let iframes = document.querySelectorAll('iframe');
+                            for (let i of iframes) {
+                                if (i.clientWidth >= window.innerWidth * 0.7) return true;
+                            }
+                            return false;
+                        }).catch(() => false);
+                        
+                        if (isLayoutConfirmed) break;
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+
+                    if (!isLayoutConfirmed) {
+                        console.log(`[-] FAILED TO ACHIEVE FULLSCREEN IN BACKGROUND. Aborting Swap.`);
+                        try { if (ghostPage && !ghostPage.isClosed()) await ghostPage.close(); ghostPage = null; } catch(e){}
+                        isSystemSwapping = false;
+                        continue;
+                    }
+
+                    console.log(`[✔] Layout Verified (100vw achieved). Proceeding with swap...`);
+
+                    // 🔥 STEP 3: MASK THE ACTIVE PAGE FIRST (OBS sees this)
+                    await showLoadingUI(activePage, "OPTIMIZING STREAM", "Switching to a fresher connection...");
+                    await showLoadingUI(ghostPage, "OPTIMIZING STREAM", "Finalizing layout...");
+                    await new Promise(r => setTimeout(r, 400)); // Let the UI render properly in OBS
+
+                    // 🔥 STEP 4: BRING TO FRONT (It's already full screen and masked!)
+                    await ghostPage.bringToFront();
+
+                    try { await ghostPage.mouse.click(10, 10); } catch(e){}
+                    try { await ghostPage.mouse.click(500, 500); } catch(e){}
+                    await new Promise(r => setTimeout(r, 1000)); 
+
+                    // Audio Unmute New (Dynamic Fix)
                     for (const frame of ghostPage.frames()) {
                         if (!frame.isDetached()) {
                             await frame.evaluate(() => { 
@@ -4903,7 +4922,7 @@ async function startProactiveRefreshEngine() {
                         setTimeout(() => { try { if(activePage && !activePage.isClosed()) activePage.goto('about:blank').catch(()=>{}); } catch(e){} }, 500);
                     }
 
-                    // 🛡️ LIFT THE CURTAIN ON NEW TAB
+                    // 🔥 STEP 5: UNMASK THE NEW PAGE
                     await hideLoadingUI(ghostPage);
 
                     let oldActive = activePage; activePage = ghostPage; ghostPage = null;
@@ -4981,9 +5000,9 @@ async function startWatchdog() {
                     setTimeout(() => { try { if(activePage && !activePage.isClosed()) activePage.goto('about:blank').catch(()=>{}); } catch(e){} }, 500);
                 }
                 
-                // Drop curtain BEFORE bringing to front to hide raw structure
+                // Mask Backup Page before bringing to front
                 await showLoadingUI(backupPage, "EMERGENCY SWAP", "Reconnecting to Backup Server...");
-                await new Promise(r => setTimeout(r, 300)); // Allow CSS to paint
+                await new Promise(r => setTimeout(r, 300)); 
                 
                 await backupPage.bringToFront(); await new Promise(r => setTimeout(r, 1000)); try { await backupPage.mouse.click(10, 10); } catch(e){} 
 
@@ -5053,7 +5072,6 @@ async function startDirectStreaming() {
     const pages = await browser.pages(); activePage = pages[0]; backupPage = await browser.newPage();
     attachAntiAdListeners(activePage); attachAntiAdListeners(backupPage);
     
-    // Applying the Preload Firewall before ANY navigation
     await applyPreloadFirewall(activePage); await applyPreloadFirewall(backupPage);
     await activePage.bringToFront(); 
 
@@ -5091,7 +5109,6 @@ async function cleanup() {
 
 process.on('SIGINT', async () => { await cleanup(); process.exit(0); });
 mainLoop();
-
 
 
 
