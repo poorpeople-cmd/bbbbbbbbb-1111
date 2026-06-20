@@ -5812,7 +5812,6 @@ if (!fs.existsSync('./screenshots')) fs.mkdirSync('./screenshots');
 let pendingScreenshots = [];
 let uploadCycleCount = 0;
 
-// 🛡️ Pre-load Firewall to block ads and keep screen black until ready
 async function applyPreloadFirewall(page) {
     if (!page) return;
     await page.evaluateOnNewDocument(() => {
@@ -5881,7 +5880,6 @@ async function showLoadingUI(page, title, sub) {
                         animation: spin-overlay 1s linear infinite; margin-bottom: 25px;
                         box-shadow: 0 0 25px rgba(229, 9, 20, 0.4);
                     }
-                    /* Custom Animated Progress Loading Bar */
                     .progress-container {
                         width: 300px; height: 6px; background: rgba(255,255,255,0.1);
                         border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative;
@@ -6101,7 +6099,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
         if (!targetFrame) targetFrame = page.mainFrame();
 
-        // 🛡️ Aggressive Cleanup Interval to wipe out ads permanently
         await page.evaluate(() => {
             setInterval(() => {
                 try {
@@ -6117,7 +6114,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         if (area > maxArea && area > 5000) { maxArea = area; mainIframe = ifr; }
                     });
 
-                    // Force hide everything that isn't the primary iframe
                     iframes.forEach(ifr => {
                         if (ifr !== mainIframe) {
                             ifr.style.setProperty('display', 'none', 'important');
@@ -6255,11 +6251,10 @@ async function startWatchdog() {
     let backupUrlStr = urlList[backupUrlIndex];
 
     // =========================================================================================
-    // 🧪 STEP 1: BIG TESTING ENGINE BLOCK
-    // TO ACTIVATE 1-MINUTE TESTING FORCE SWAP: UNCOMMENT THE TWO VARIABLES BELOW.
+    // 🧪 STEP 1: CONTINUOUS 1-MINUTE TESTING LOOP (PART A)
+    // TESTING ON KARNE KE LIYE NEECHE WALI LINE KO UNCOMMENT KAREIN
     // =========================================================================================
-    // let testStartTime = Date.now();
-    // let hasForceSwappedForTesting = false;
+    // let testLoopStartTime = Date.now();
     // =========================================================================================
 
     while (true) {
@@ -6268,14 +6263,13 @@ async function startWatchdog() {
         let activeStatus = await checkPageStatus(activePage);
 
         // =========================================================================================
-        // 🧪 STEP 1: FORCE FROZEN/SWAP CASE AFTER 1 MINUTE (TESTING MODE ONLY)
-        // TO ACTIVATE TESTING: UNCOMMENT THIS BLOCK SO IT TRIGGERS SWAP AFTER 60 SECONDS.
+        // 🧪 STEP 1: CONTINUOUS 1-MINUTE TESTING LOOP (PART B - THE TRIGGER)
+        // HAR 60 SECONDS BAAD SWAP TRIGGER KARNE KE LIYE NEECHE WALA BLOCK UNCOMMENT KAREIN
         // =========================================================================================
         /*
-        if (!hasForceSwappedForTesting && (Date.now() - testStartTime > 60000)) {
-            console.log("\n[🧪 TESTING ENGINE]: 1 Minute Elapsed! Forcing 'FROZEN' State To Trigger Swap...");
+        if (Date.now() - testLoopStartTime > 60000) {
+            console.log("\n[🧪 TESTING ENGINE]: 60 Seconds Complete! Forcing 'FROZEN' State To Trigger Next Swap...");
             activeStatus.status = 'FROZEN';
-            hasForceSwappedForTesting = true; // Prevents loop lock
         }
         */
         // =========================================================================================
@@ -6347,7 +6341,6 @@ async function startWatchdog() {
                     } catch(e) {}
                 }
                 
-                // Show Custom Loading Progress Bar Screen inside the Backup Page before bringing to view
                 await showLoadingUI(backupPage, "RECONNECTING", "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
                 await backupPage.bringToFront();
                 await new Promise(r => setTimeout(r, 1000)); 
@@ -6373,7 +6366,6 @@ async function startWatchdog() {
                 console.log(`[🔇] BACKUP AUDIO      : MUTED (Background Loading)`);
                 console.log(`==================================================\n`);
 
-                // Reset Backup Page with firewall injected
                 await backupPage.goto('about:blank');
                 await applyPreloadFirewall(backupPage);
                 backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
@@ -6381,8 +6373,12 @@ async function startWatchdog() {
                 streamSetupTime = Date.now(); 
                 isWarmupPhase = true;
 
-                // Reset test clock if testing force swap is active
-                // testStartTime = Date.now(); hasForceSwappedForTesting = false;
+                // =========================================================================================
+                // 🧪 STEP 1: CONTINUOUS 1-MINUTE TESTING LOOP (PART C - THE RESET)
+                // TIMER KO RESET KARNE KE LIYE NEECHE WALI LINE KO UNCOMMENT KAREIN
+                // =========================================================================================
+                // testLoopStartTime = Date.now();
+                // =========================================================================================
 
             } else {
                 console.error(`[!] ❌ Backup Tab is ALSO DEAD/FROZEN. Hard Restarting System...`);
@@ -6495,7 +6491,6 @@ async function startDirectStreaming() {
     console.log(`[*] STEP 1: Loading Server [${currentUrlIndex}] on Active Page: ${urlList[currentUrlIndex]}`);
     await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
     
-    // Injected full progress bar custom screen instantly onto active page view (Captured by OBS WaitingScene)
     await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
     
     await initializeVideo(activePage, false, true); 
