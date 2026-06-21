@@ -8,6 +8,28 @@ const os = require('os');
 const { spawn, execSync, exec } = require('child_process');
 const { OBSWebSocket } = require('obs-websocket-js'); 
 
+// =========================================================================================
+// 🛡️ GLOBAL CRASH PREVENTION SHIELD (2026 LATEST FIX)
+// Yeh handlers stealth plugin ke kisi bhi achanak background crash ko Node.js kill karne se rokenge.
+// =========================================================================================
+process.on('uncaughtException', (err) => {
+    if (err.message && err.message.includes('Requesting main frame too early')) {
+        console.log(`[🛡️] SYSTEM SHIELD: Ignored stealth plugin background frame error.`);
+    } else {
+        console.log(`[⚠️] IGNORED UNCAUGHT EXCEPTION: ${err.message}`);
+    }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    let msg = reason && reason.message ? reason.message : reason;
+    if (msg && msg.includes('Protocol error')) {
+        console.log(`[🛡️] SYSTEM SHIELD: Ignored detached frame protocol error.`);
+    } else {
+        console.log(`[⚠️] IGNORED UNHANDLED REJECTION: ${msg}`);
+    }
+});
+// =========================================================================================
+
 const obs = new OBSWebSocket(); 
 
 // =========================================================================================
@@ -106,7 +128,7 @@ if (!fs.existsSync('./screenshots')) fs.mkdirSync('./screenshots');
 let pendingScreenshots = [];
 let uploadCycleCount = 0;
 
-// 🛡️ SAFED PRELOAD FIREWALL (CRASH PREVENTION ADDED)
+// 🛡️ SAFED PRELOAD FIREWALL
 async function applyPreloadFirewall(page) {
     if (!page) return;
     try {
@@ -212,7 +234,6 @@ async function showLoadingUI(page, title, sub) {
     } catch (e) {}
 }
 
-// 🛠️ NEW: Aggressive UI Removal Fix
 async function hideLoadingUI(page) {
     try {
         await page.evaluate(() => {
@@ -562,9 +583,6 @@ async function startWatchdog() {
 
         let activeStatus = await checkPageStatus(activePage);
 
-        // =========================================================================================
-        // ⏱️ AUTO-REFRESH CHECKER
-        // =========================================================================================
         if (activeStatus.status === 'HEALTHY' && !isWarmupPhase) {
             let elapsedMs = Date.now() - currentStreamStartTime;
             if (elapsedMs > FORCE_REFRESH_MS) {
@@ -630,12 +648,10 @@ async function startWatchdog() {
                 console.log(`[*] Preparing a FRESH copy of SAME Server [${currentUrlIndex}] in background...`);
                 console.log(`==================================================`);
                 
-                // Mute current active page instantly
                 for (const frame of activePage.frames()) {
                     try { if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {}
                 }
 
-                // 🛡️ SAFED PROACTIVE REFRESH BUFFER (CRASH PREVENTION ADDED)
                 try {
                     await backupPage.goto('about:blank').catch(()=>{});
                     await applyPreloadFirewall(backupPage);
@@ -670,16 +686,12 @@ async function startWatchdog() {
 
                 console.log(`[*] Initializing Video on the newly active tab...`);
                 await initializeVideo(backupPage, false, true); 
-
-                // 🛠️ NEW: Failsafe double-check to guarantee overlay is destroyed immediately after init!
                 await hideLoadingUI(backupPage);
 
                 let brokenPage = activePage; activePage = backupPage; backupPage = brokenPage;
                 lastActiveTime = -1; frozenCheckTimestamp = Date.now();
 
-                // DYNAMIC INDEX HANDLING:
                 if (!isProactiveRefresh) {
-                    // REAL CRASH: Move to the next server in list
                     currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex]; 
                     backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex]; 
                 } 
@@ -694,7 +706,6 @@ async function startWatchdog() {
                 console.log(`[🔇] BACKUP AUDIO      : MUTED (Background Loading)`);
                 console.log(`==================================================\n`);
 
-                // 🛡️ SAFED BACKGROUND BUFFER PREP (CRASH PREVENTION ADDED)
                 try {
                     await backupPage.goto('about:blank').catch(()=>{});
                     await applyPreloadFirewall(backupPage);
@@ -821,7 +832,7 @@ async function startDirectStreaming() {
     await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
     
     await initializeVideo(activePage, false, true); 
-    await hideLoadingUI(activePage); // Initial failsafe
+    await hideLoadingUI(activePage); 
 
     if (isObsConnected) {
         console.log('\n[*] Active Video is Ready! Shifting OBS from Animated Buffer to LIVE Video (MainScene)...');
