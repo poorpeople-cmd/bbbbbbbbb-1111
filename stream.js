@@ -622,14 +622,28 @@ async function startWatchdog() {
             }
         }
 
+        // watchdogTicks++;
+        // if (watchdogTicks % 6 === 0) {
+        //     console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
+        //     console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
+        //     console.log(`[⏭️] NEXT IN QUEUE    : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
+        //     if (watchdogTicks % 120 === 0) {
+        //         await takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
+        //     }
+        // }
+
         watchdogTicks++;
-        if (watchdogTicks % 6 === 0) {
+        
+        // ⏱️ PRINT HEARTBEAT EVERY 3 MINUTES (90 Ticks * 2 seconds = 180 sec)
+        if (watchdogTicks % 90 === 0) {
             console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
             console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
             console.log(`[⏭️] NEXT IN QUEUE    : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
-            if (watchdogTicks % 120 === 0) {
-                await takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
-            }
+        }
+
+        // 📸 SCREENSHOT SYSTEM ALAG RAKHA HAI TAAKE WOH APNE TIME PAR CHALTA RAHE (Every 4 mins)
+        if (watchdogTicks % 120 === 0) {
+            await takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
         }
 
         if (activeStatus.status === 'FROZEN' || activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'FORCE_REFRESH') {
