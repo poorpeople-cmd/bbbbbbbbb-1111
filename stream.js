@@ -137,60 +137,54 @@ if (!fs.existsSync('./screenshots')) fs.mkdirSync('./screenshots');
 let pendingScreenshots = [];
 let uploadCycleCount = 0;
 
-// 🛡️ SAFED PRELOAD FIREWALL
 async function applyPreloadFirewall(page) {
     if (!page) return;
     try {
         await page.evaluateOnNewDocument(() => {
-            // 1. Instant Blackout Style Inject karo
+            // 1. Page navigtion ke start mein hi base background ko black set karo (taake white flash na aye)
             const style = document.createElement('style');
-            style.textContent = `
-                html, body { background-color: #000000 !important; overflow: hidden !important; }
-                .chat, #chat, header, footer, .sidebar, .banner, .ads, .ad-container, [id*="pop"], [class*="pop"], [class*="ad-"], iframe:not([allowfullscreen]) {
-                    display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important;
-                }
-            `;
+            style.textContent = `html, body { background-color: #000000 !important; overflow: hidden !important; }`;
             document.documentElement.appendChild(style);
 
-            // 2. Millisecond Zero par hi solid Black Mask Overlay bana do (User ko website bilkul nahi dikhegi)
-            const overlay = document.createElement('div');
-            overlay.id = 'smart-stream-overlay';
-            overlay.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:#000000 !important; z-index:2147483647 !important; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#ffffff; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif; pointer-events:all;';
-            
-            overlay.innerHTML = `
-                <style>
-                    .stream-spinner {
-                        width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1);
-                        border-top: 6px solid #e50914; border-radius: 50%;
-                        animation: spin-overlay 1s linear infinite; margin-bottom: 25px;
-                        box-shadow: 0 0 25px rgba(229, 9, 20, 0.4);
-                    }
-                    .progress-container {
-                        width: 300px; height: 6px; background: rgba(255,255,255,0.1);
-                        border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative;
-                    }
-                    .progress-bar-fill {
-                        width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d);
-                        position: absolute; left: -100%;
-                        animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-                    }
-                    @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                    @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
-                    .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
-                    .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; max-width: 600px !important; line-height: 1.6 !important; font-weight: 400 !important; }
-                    .stream-blink { animation: blinker 1.5s linear infinite; color: #e50914; font-weight: bold; }
-                    @keyframes blinker { 50% { opacity: 0.3; } }
-                </style>
-                <div class="stream-spinner"></div>
-                <div class="progress-container"><div class="progress-bar-fill"></div></div>
-                <div class="stream-title" id="overlay-title">STREAM LOADING</div>
-                <div class="stream-sub" id="overlay-sub">Connecting to secure stream engine <span class="stream-blink">...</span></div>
-            `;
-            // Append directly to documentElement taake body banne se pehle hi screen black ho jaye
-            document.documentElement.appendChild(overlay);
+            // 2. Millisecond zero par Loading Overlay lagao (Website ka DOM load hone se bhi pehle)
+            const attachOverlay = () => {
+                let target = document.body || document.documentElement;
+                if (target && !document.getElementById('smart-stream-overlay')) {
+                    const overlay = document.createElement('div');
+                    overlay.id = 'smart-stream-overlay';
+                    overlay.innerHTML = `
+                        <style>
+                            #smart-stream-overlay {
+                                position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+                                width: 100vw !important; height: 100vh !important; background: #000000 !important;
+                                z-index: 2147483647 !important; display: flex !important; flex-direction: column !important;
+                                justify-content: center !important; align-items: center !important; color: #ffffff !important;
+                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+                                pointer-events: all !important;
+                            }
+                            .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
+                            .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
+                            .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+                            @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                            @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
+                            .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
+                            .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
+                        </style>
+                        <div class="stream-spinner"></div>
+                        <div class="progress-container"><div class="progress-bar-fill"></div></div>
+                        <div class="stream-title">STREAM LOADING</div>
+                        <div class="stream-sub">Connecting to secure stream engine...</div>
+                    `;
+                    target.appendChild(overlay);
+                } else if (!target) {
+                    // Agar browser ne abhi tak body nahi banayi, toh microsecond wait karke dobara check karo
+                    requestAnimationFrame(attachOverlay);
+                }
+            };
+            attachOverlay();
         });
     } catch (e) {
-        console.log(`[🛡️] AD-BLOCKER WARNING: Caught safe protocol bypass during target change.`);
+        console.log(`[🛡️] SYSTEM SHIELD: Preload firewall safe injection caught an error.`);
     }
 }
 
@@ -227,25 +221,50 @@ async function showLoadingUI(page, title, sub) {
         await page.evaluate((t, s) => {
             if (window.self !== window.top) return; 
             let overlay = document.getElementById('smart-stream-overlay');
-            
-            // Agar preload firewall se overlay nahi bana, toh yahan bana lo (Safety backup)
-            if (!overlay) {
+
+            // 1. Agar preload firewall ne overlay pehle se laga diya hai (jo ke normal hai)
+            if (overlay) {
+                const titleEl = overlay.querySelector('.stream-title');
+                const subEl = overlay.querySelector('.stream-sub');
+                if (titleEl) titleEl.innerHTML = t;
+                if (subEl) subEl.innerHTML = s;
+                
+                // Ensure it is fully visible
+                overlay.style.setProperty('display', 'flex', 'important');
+                overlay.style.setProperty('opacity', '1', 'important');
+                overlay.style.setProperty('z-index', '2147483647', 'important');
+            } 
+            // 2. 🛡️ FALLBACK: Agar kisi wajah se firewall miss kar gaya, toh abhi bana do
+            else {
                 overlay = document.createElement('div');
                 overlay.id = 'smart-stream-overlay';
-                overlay.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:#000000 !important; z-index:2147483647 !important; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#ffffff; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif; pointer-events:all;';
-                overlay.innerHTML = `<div class="stream-spinner"></div><div class="progress-container"><div class="progress-bar-fill"></div></div><div class="stream-title" id="overlay-title"></div><div class="stream-sub" id="overlay-sub"></div>`;
+                overlay.innerHTML = `
+                    <style>
+                        #smart-stream-overlay {
+                            position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+                            width: 100vw !important; height: 100vh !important; background: #000000 !important;
+                            z-index: 2147483647 !important; display: flex !important; flex-direction: column !important;
+                            justify-content: center !important; align-items: center !important; color: #ffffff !important;
+                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+                            pointer-events: all !important;
+                        }
+                        .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
+                        .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
+                        .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+                        @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                        @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
+                        .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
+                        .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
+                        .stream-blink { animation: blinker 1.5s linear infinite; color: #e50914; font-weight: bold; }
+                        @keyframes blinker { 50% { opacity: 0.3; } }
+                    </style>
+                    <div class="stream-spinner"></div>
+                    <div class="progress-container"><div class="progress-bar-fill"></div></div>
+                    <div class="stream-title">${t}</div>
+                    <div class="stream-sub">${s}</div>
+                `;
                 document.documentElement.appendChild(overlay);
             }
-
-            // Text ko smooth tarikey se update karo bina layout flash kiye
-            const titleEl = document.getElementById('overlay-title');
-            const subEl = document.getElementById('overlay-sub');
-            if (titleEl) titleEl.innerHTML = t;
-            if (subEl) subEl.innerHTML = s;
-
-            overlay.style.setProperty('display', 'flex', 'important');
-            overlay.style.setProperty('opacity', '1', 'important');
-            overlay.style.setProperty('z-index', '2147483647', 'important');
         }, title, sub);
     } catch (e) {}
 }
