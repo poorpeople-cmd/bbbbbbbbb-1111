@@ -280,7 +280,8 @@ jobs:
               console.log('\n==================================================');
               console.log(\`[*] 5h 50m Completed at \${getPktTime()}! Triggering next Stream Manager...\`);
               try {
-                const nextManagerCmd = \`gh workflow run stream-manager.yml -f stop_time="\${stopTimeInput}"\`;
+                # const nextManagerCmd = \`gh workflow run stream-manager.yml -f stop_time="\${stopTimeInput}"\`;
+                const nextManagerCmd = `gh workflow run stream-manager.yml -f stop_time='${stopTimeInput}'`;
                 execSync(nextManagerCmd, { stdio: 'inherit' });
                 console.log('[+] Next manager triggered successfully with configuration target: ' + stopTimeInput);
                 console.log('[+] Waiting 5 minutes for handover...');
