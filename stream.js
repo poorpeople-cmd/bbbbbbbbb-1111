@@ -1,5 +1,3 @@
-
-
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -286,18 +284,28 @@ async function waitForPerfectFullscreenAndPlay(page) {
     
     while (!isReady && attempts < 40) { // 20 seconds max wait buffer
         try {
-            isReady = await page.evaluate(() => {
-                const vid = document.querySelector('video');
-                if (!vid) return false;
+            // 🚀 BUG FIX: Ab hum main page ke sath sath saare iframes bhi scan karenge!
+            for (const frame of page.frames()) {
+                if (frame.isDetached()) continue;
                 
-                // 1. Check if playing smoothly (readyState 3 means data is loaded for current and future frames)
-                const isPlaying = vid.currentTime > 0 && !vid.paused && !vid.ended && vid.readyState >= 3;
+                const frameReady = await frame.evaluate(() => {
+                    const vid = document.querySelector('video');
+                    if (!vid) return false;
+                    
+                    // 1. Check if playing smoothly (readyState 3 means data is loaded for current and future frames)
+                    const isPlaying = vid.currentTime > 0 && !vid.paused && !vid.ended && vid.readyState >= 3;
+                    
+                    // 2. Check if video is actually visible (iframe dimensions issues fixed)
+                    const isVisible = vid.clientWidth > 100 && vid.clientHeight > 100;
+                    
+                    return isPlaying && isVisible;
+                }).catch(() => false); // Catch CORS errors gracefully
                 
-                // 2. Check if dimensions match the viewport (allowing a tiny margin for scrollbars/borders)
-                const isFullscreen = (vid.clientWidth >= window.innerWidth * 0.95) && (vid.clientHeight >= window.innerHeight * 0.95);
-                
-                return isPlaying && isFullscreen;
-            });
+                if (frameReady) {
+                    isReady = true;
+                    break;
+                }
+            }
         } catch (e) {}
 
         if (!isReady) await new Promise(r => setTimeout(r, 500));
@@ -305,7 +313,7 @@ async function waitForPerfectFullscreenAndPlay(page) {
     }
     
     if (isReady) console.log('[+] 🔓 GATEKEEPER PASSED: Video is perfectly fullscreen and live!');
-    else console.log('[⚠️] GATEKEEPER TIMEOUT: Video struggled to fullscreen, forcing OBS unlock anyway to prevent hang.');
+    else console.log('[⚠️] GATEKEEPER TIMEOUT: Video struggled to verify, forcing OBS unlock anyway to prevent hang.');
     
     return isReady;
 }
@@ -626,14 +634,9 @@ async function checkPageStatus(page) {
                             targetV = videos.sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
                         }
                         
+                        // 🚀 BUG FIX: Removed frame counting here because dlhd.pk hides frame count, causing false negatives.
                         if (targetV && !targetV.ended && targetV.currentTime > 0) {
-                            let frames = 0;
-                            if (targetV.getVideoPlaybackQuality) {
-                                frames = targetV.getVideoPlaybackQuality().totalVideoFrames;
-                            } else if (targetV.webkitDecodedFrameCount !== undefined) {
-                                frames = targetV.webkitDecodedFrameCount;
-                            }
-                            return { status: 'HEALTHY', currentTime: targetV.currentTime, decodedFrames: frames };
+                            return { status: 'HEALTHY', currentTime: targetV.currentTime };
                         }
                         return { status: 'DEAD' };
                     }),
@@ -648,7 +651,6 @@ async function checkPageStatus(page) {
 
 async function startWatchdog() {
     let lastActiveTime = -1;
-    let lastDecodedFrames = -1; 
     let frozenCheckTimestamp = Date.now();
     let watchdogTicks = 0;
     
@@ -682,19 +684,16 @@ async function startWatchdog() {
             await hideLoadingUI(activePage); 
             isWarmupPhase = false; 
 
+            // 🚀 BUG FIX: Ab sirf Time check hoga. Agar video chal rahi hai (time badh raha hai), tou stream kill nahi hogi.
             let isTimeStuck = (activeStatus.currentTime === lastActiveTime);
-            let isFrameStuck = (activeStatus.decodedFrames === lastDecodedFrames && activeStatus.decodedFrames > 0);
 
-            if (isTimeStuck || isFrameStuck) {
+            if (isTimeStuck) {
                 if (Date.now() - frozenCheckTimestamp > FROZEN_THRESHOLD_MS) {
                     activeStatus.status = 'FROZEN';
-                    if (isFrameStuck && !isTimeStuck) {
-                        console.log(`[!] ⚠️ SYSTEM SHIELD: Detected Black Screen (Audio playing, but video frames stuck). Triggering HOT-SWAP.`);
-                    }
+                    console.log(`[!] ⚠️ SYSTEM SHIELD: Video time is completely stuck. Triggering HOT-SWAP.`);
                 }
             } else {
                 lastActiveTime = activeStatus.currentTime; 
-                lastDecodedFrames = activeStatus.decodedFrames; 
                 frozenCheckTimestamp = Date.now();
                 
                 for (const frame of activePage.frames()) {
@@ -772,7 +771,6 @@ async function startWatchdog() {
 
             if (backupStatus.status === 'HEALTHY' || backupStatus.status === 'DEAD') { 
                 
-                // 🛑 HIDE OBS IMMEDIATELY BEFORE DOING ANYTHING ELSE (2026 LATEST FIX)
                 console.log('[*] 🔒 SHIELDING OBS: Switching back to WaitingScene during transition...');
                 try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch(e){}
 
@@ -791,11 +789,9 @@ async function startWatchdog() {
                 console.log(`[*] Initializing Video on the newly active tab...`);
                 await initializeVideo(backupPage, false, true); 
                 
-                // 🛑 WAIT FOR PERFECT FULLSCREEN ON THE NEW TAB (2026 LATEST FIX)
                 await waitForPerfectFullscreenAndPlay(backupPage);
                 await hideLoadingUI(backupPage);
 
-                // 🟢 UNLOCK OBS NOW THAT NEW TAB IS PERFECT (2026 LATEST FIX)
                 console.log('[*] 🔓 TRANSITION COMPLETE: Sending MainScene to OBS...');
                 try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch(e){}
 
@@ -942,10 +938,8 @@ async function startDirectStreaming() {
     
     await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
     
-    // Initialize video but DO NOT switch OBS yet
     await initializeVideo(activePage, false, true); 
     
-    // 🛑 NEW OBS CONTROL: Wait until perfect fullscreen is achieved (2026 LATEST FIX)
     await waitForPerfectFullscreenAndPlay(activePage);
     await hideLoadingUI(activePage); 
 
@@ -1036,7 +1030,6 @@ if (exactDurationMs) {
 }
 
 mainLoop();
-
 
 
 
