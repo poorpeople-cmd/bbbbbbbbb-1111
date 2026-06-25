@@ -155,7 +155,6 @@ async function showLoadingUI(page, title, sub) {
                     #smart-stream-overlay {
                         position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
                         width: 100vw !important; height: 100vh !important;
-                        /* Solid black background to prevent ANY bleed-through from website */
                         background: #000000 !important;
                         z-index: 2147483647 !important; display: flex !important; flex-direction: column !important;
                         justify-content: center !important; align-items: center !important; color: #ffffff !important;
@@ -723,20 +722,48 @@ async function startDirectStreaming() {
         args: browserArgs
     });
 
+    // 🛡️ Global safeguard to prevent closed-target crashes
+    browser.on('disconnected', () => {
+        console.log('[!] Browser disconnected unexpectedly.');
+    });
+
     const pages = await browser.pages();
     activePage = pages[0]; 
-    backupPage = await browser.newPage();
+    
+    // 🛡️ Create the backup page, but catch any immediate closure errors
+    try {
+        backupPage = await browser.newPage();
+    } catch (e) {
+        console.log(`[!] Error creating backup page: ${e.message}`);
+        // Attempt one retry
+        await new Promise(r => setTimeout(r, 1000));
+        backupPage = await browser.newPage();
+    }
     
     // 🛡️ Attach the aggressive ad-blocker AFTER our explicit pages are safely stored in variables
     browser.on('targetcreated', async (target) => {
         if (target.type() === 'page') {
             try {
                 const newPage = await target.page();
+                
+                // Add a specific error handler to the new page to swallow TargetCloseErrors gracefully
+                newPage.on('error', err => {
+                    if (err.message.includes('TargetCloseError') || err.message.includes('Session closed')) {
+                        // Ignore these, they are expected if a popup closes itself instantly
+                    } else {
+                        console.error(`[Page Error]:`, err.message);
+                    }
+                });
+
                 // Increased timeout to 1500ms to ensure the page object is fully constructed before checking
                 setTimeout(async () => {
-                    if (newPage && !newPage.isClosed() && newPage !== activePage && newPage !== backupPage) {
-                        console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
-                        try { await newPage.close(); } catch(e) {}
+                    try {
+                        if (newPage && !newPage.isClosed() && newPage !== activePage && newPage !== backupPage) {
+                            console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
+                            await newPage.close(); 
+                        }
+                    } catch (closeError) {
+                        // Ignore errors if the page is already closed
                     }
                 }, 1500);
             } catch (e) {
@@ -846,8 +873,6 @@ if (exactDurationMs) {
 }
 
 mainLoop();
-
-
 
 
 
