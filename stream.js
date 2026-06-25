@@ -565,7 +565,10 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
     } catch (e) { }
 
-    await new Promise(r => setTimeout(r,async function checkPageStatus(page) {
+    await new Promise(r => setTimeout(r, 1000));
+}
+
+async function checkPageStatus(page) {
     if (!page) return { status: 'DEAD' };
     try {
         for (const frame of page.frames()) {
@@ -620,9 +623,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
         }
     } catch (e) { return { status: 'DEAD' }; }
     return { status: 'DEAD' };
-} 1000));
 }
-
 
 
 async function startWatchdog() {
@@ -692,8 +693,6 @@ async function startWatchdog() {
             }
         }
 
-        // ... BAAQI POORA WATCHDOG FUNCTION WAISE HI CONTINUE HOGA JAISE THA ...
-
         if (backupPage) {
             for (const frame of backupPage.frames()) {
                 try {
@@ -703,16 +702,6 @@ async function startWatchdog() {
                 } catch(e) {}
             }
         }
-
-        // watchdogTicks++;
-        // if (watchdogTicks % 6 === 0) {
-        //     console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
-        //     console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
-        //     console.log(`[⏭️] NEXT IN QUEUE    : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
-        //     if (watchdogTicks % 120 === 0) {
-        //         await takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
-        //     }
-        // }
 
         watchdogTicks++;
         
@@ -727,9 +716,6 @@ async function startWatchdog() {
         if (watchdogTicks % 120 === 0) {
             await takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
         }
-
-
-        
 
         if (activeStatus.status === 'FROZEN' || activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'FORCE_REFRESH') {
             
@@ -1021,7 +1007,6 @@ if (exactDurationMs) {
 }
 
 mainLoop();
-
 
 
 
