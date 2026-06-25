@@ -464,7 +464,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
         // 🛡️ LEVEL 1: MAIN PAGE CONTINUOUS BLACKOUT & IFRAME ISOLATION
         // ==============================================================================
         await page.evaluate(() => {
-            // Ultimate Blackout Shield - Ye sab se pehle DOM mein ghuse ga
             if (!document.getElementById('ultimate-blackout-shield')) {
                 const shield = document.createElement('div');
                 shield.id = 'ultimate-blackout-shield';
@@ -474,7 +473,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
             setInterval(() => {
                 try {
-                    // Base ko black karo
                     document.documentElement.style.setProperty('background-color', '#000000', 'important');
                     document.body.style.setProperty('background-color', '#000000', 'important');
                     document.body.style.setProperty('overflow', 'hidden', 'important');
@@ -483,30 +481,27 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     let mainIframe = null; 
                     let maxArea = 0;
 
-                    // Sab se bara aur meaningful iframe dhoondo
                     iframes.forEach(ifr => {
                         let area = ifr.clientWidth * ifr.clientHeight;
                         if (area > maxArea && area > 5000) { maxArea = area; mainIframe = ifr; }
                     });
 
-                    // Agar dimension 0 hain toh attributes se guess karo
                     if (!mainIframe && iframes.length > 0) {
                         mainIframe = iframes.find(ifr => 
                             ifr.getAttribute('allowfullscreen') !== null || 
-                            (ifr.src && (ifr.src.includes('player') || ifr.src.includes('embed') || ifr.src.includes('stream')))
+                            (ifr.src && (ifr.src.includes('player') || ifr.src.includes('embed') || ifr.src.includes('stream') || ifr.src.includes('watch')))
                         );
                     }
 
                     if (mainIframe) {
-                        // Baki sab iframes ughaar do
                         iframes.forEach(ifr => {
                             if (ifr !== mainIframe) {
                                 ifr.style.setProperty('display', 'none', 'important');
                                 ifr.style.setProperty('opacity', '0', 'important');
+                                ifr.style.setProperty('z-index', '-9999', 'important');
                             }
                         });
 
-                        // Main iframe ko jabardasti 100% screen par lagao
                         mainIframe.style.setProperty('position', 'fixed', 'important');
                         mainIframe.style.setProperty('top', '0px', 'important');
                         mainIframe.style.setProperty('left', '0px', 'important');
@@ -520,21 +515,18 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         mainIframe.style.setProperty('visibility', 'visible', 'important');
                     }
 
-                    // Faltu elements ko remove karo continuously
                     const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"]';
                     document.querySelectorAll(junkClasses).forEach(el => { 
                         try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
                     });
-
                 } catch (err) {}
-            }, 300); // Bohat fast check karega (300ms)
+            }, 300); 
         }).catch(() => {});
 
         // ==============================================================================
         // 🛡️ LEVEL 2: TARGET FRAME (REAL VIDEO) AGGRESSIVE FULLSCREEN & LEAK PREVENTION
         // ==============================================================================
         await targetFrame.evaluate((muteVideo) => {
-            // Iframe ke andar ka blackout shield (Double protection)
             if (!document.getElementById('inner-blackout-shield')) {
                 const innerShield = document.createElement('div');
                 innerShield.id = 'inner-blackout-shield';
@@ -544,7 +536,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
             setInterval(() => {
                 try {
-                    // Controls hide karne ka code
                     if (!document.getElementById('hide-controls-style')) {
                         const style = document.createElement('style');
                         style.id = 'hide-controls-style';
@@ -564,7 +555,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
                     }
 
-                    // Asal video find karo
                     for (const v of videos) {
                         if (v.clientWidth > 100 || v.clientHeight > 100 || (v.src && !v.src.includes('ad'))) { 
                             realVideo = v; break; 
@@ -574,7 +564,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     const innerShield = document.getElementById('inner-blackout-shield');
                     
                     if (realVideo) { 
-                        // 🔥 CSS TRANSFORM TRAP FIX: Video ke parent containers ki position theek karo
                         let parent = realVideo.parentElement;
                         while (parent && parent !== document.body && parent !== document.documentElement) {
                             const pStyle = window.getComputedStyle(parent);
@@ -589,35 +578,30 @@ async function initializeVideo(page, startMuted, isActivePage) {
                             parent = parent.parentElement;
                         }
 
-                        // 🔥 FORCED FULLSCREEN
                         realVideo.style.setProperty('position', 'fixed', 'important');
                         realVideo.style.setProperty('top', '0px', 'important');
                         realVideo.style.setProperty('left', '0px', 'important');
                         realVideo.style.setProperty('width', '100vw', 'important');
                         realVideo.style.setProperty('height', '100vh', 'important');
-                        realVideo.style.setProperty('z-index', '2147483648', 'important'); // Highest possible
+                        realVideo.style.setProperty('z-index', '2147483648', 'important'); 
                         realVideo.style.setProperty('background-color', '#000000', 'important');
                         realVideo.style.setProperty('object-fit', 'contain', 'important');
                         realVideo.style.setProperty('opacity', '1', 'important');
                         realVideo.style.setProperty('visibility', 'visible', 'important');
                         realVideo.style.setProperty('display', 'block', 'important');
 
-                        // 🛡️ THE SECRET KEEPER (Anti-Leak Logic)
-                        // Agar video puri screen cover kar rahi hai (at least 90%), tab hi black cover hatao
+                        // 🛡️ THE SECRET KEEPER
                         if (realVideo.clientWidth >= (window.innerWidth * 0.9) && realVideo.clientHeight >= (window.innerHeight * 0.9)) {
                             if (innerShield) innerShield.style.setProperty('opacity', '0', 'important');
-                            // Main page wale shield ko bhi hide karo cross-frame message se ya just background color se
                             document.documentElement.style.setProperty('background-color', 'transparent', 'important');
                         } else {
-                            // Agar video kisi bhi waja se shrink ho gayi, foran black screen le aao
                             if (innerShield) innerShield.style.setProperty('opacity', '1', 'important');
                         }
                     } else {
-                        // Agar video mili hi nahi, toh screen FULL BLACK rakho
                         if (innerShield) innerShield.style.setProperty('opacity', '1', 'important');
                     }
                 } catch(err) {}
-            }, 300); // Fast interval
+            }, 300); 
         }, startMuted).catch(() => {});
 
     } catch (e) { }
@@ -625,57 +609,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
     await new Promise(r => setTimeout(r, 1000));
 }
 
-        await targetFrame.evaluate((muteVideo) => {
-            setInterval(() => {
-                try {
-                    const style = document.createElement('style');
-                    style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
-                    document.head.appendChild(style);
-
-                    const mediaElements = document.querySelectorAll('video, audio');
-                    const videos = Array.from(document.querySelectorAll('video'));
-                    let realVideo = null;
-
-                    mediaElements.forEach(media => { 
-                        media.muted = muteVideo; 
-                        media.volume = muteVideo ? 0.0 : 1.0; 
-                    });
-
-                    if (!muteVideo) {
-                        document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
-                    }
-
-                    // 1. Dimensions se real video dhoondo
-                    for (const v of videos) {
-                        if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; }
-                    }
-
-                    // 2. 🛡️ BACKGROUND FALLBACK: Agar tab background mein tha aur width 0 hai
-                    if (!realVideo && videos.length > 0) {
-                        realVideo = videos[0];
-                    }
-
-                    if (realVideo) { 
-                        realVideo.style.setProperty('position', 'fixed', 'important');
-                        realVideo.style.setProperty('top', '0px', 'important');
-                        realVideo.style.setProperty('left', '0px', 'important');
-                        realVideo.style.setProperty('width', '100vw', 'important');
-                        realVideo.style.setProperty('height', '100vh', 'important');
-                        realVideo.style.setProperty('z-index', '2147483646', 'important'); 
-                        realVideo.style.setProperty('background-color', 'black', 'important');
-                        realVideo.style.setProperty('object-fit', 'contain', 'important');
-                        realVideo.style.setProperty('opacity', '1', 'important');
-                        realVideo.style.setProperty('visibility', 'visible', 'important');
-                        realVideo.style.setProperty('display', 'block', 'important');
-                    }
-                } catch(err) {}
-            }, 500); 
-        }, startMuted).catch(() => {});
-
-    } catch (e) { }
-
-    await new Promise(r => setTimeout(r, 1000));
-}
 
 async function checkPageStatus(page) {
     if (!page) return { status: 'DEAD' };
