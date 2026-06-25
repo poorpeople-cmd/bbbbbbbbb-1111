@@ -1,4 +1,3 @@
-
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -6,54 +5,72 @@ puppeteer.use(StealthPlugin());
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawn, execSync, exec } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const { OBSWebSocket } = require('obs-websocket-js'); 
-const readline = require('readline'); // 🛡️ Added for PTS tracking
 
 // =========================================================================================
-// 🛡️ GLOBAL CRASH PREVENTION SHIELD (2026 LATEST FIX)
+// 🛡️ GLOBAL CRASH PREVENTION SHIELD
 // =========================================================================================
 process.on('uncaughtException', (err) => {
-    if (err.message && err.message.includes('Requesting main frame too early')) {
-        console.log(`[🛡️] SYSTEM SHIELD: Ignored stealth plugin background frame error.`);
-    } else {
-        console.log(`[⚠️] IGNORED UNCAUGHT EXCEPTION: ${err.message}`);
-    }
+    console.log(`[⚠️] SYSTEM SHIELD - IGNORING EXCEPTION: ${err.message}`);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason) => {
     let msg = reason && reason.message ? reason.message : reason;
-    if (msg && msg.includes('Protocol error')) {
-        console.log(`[🛡️] SYSTEM SHIELD: Ignored detached frame protocol error.`);
-    } else {
-        console.log(`[⚠️] IGNORED UNHANDLED REJECTION: ${msg}`);
-    }
+    console.log(`[⚠️] SYSTEM SHIELD - IGNORING REJECTION: ${msg}`);
 });
-// =========================================================================================
 
 const obs = new OBSWebSocket(); 
-
-// =========================================================================================
-// ⏱️ BIG VARIABLE: FORCE AUTO-REFRESH TIME (IN MINUTES)
-// =========================================================================================
-const FORCE_REFRESH_MINUTES = 9; 
-const FORCE_REFRESH_MS = FORCE_REFRESH_MINUTES * 60 * 1000;
-
-// =========================================================================================
-// 🛡️ NO-REFRESH WHITELIST (CONTINUOUS PLAY DOMAINS)
-// =========================================================================================
-const NO_REFRESH_DOMAINS = [
-    'youtube.com',
-    'facebook.com',
-    'streamed.pk'
-];
 
 // 🚀 Multi-Stream Key Manager
 const STREAM_KEYS = {
     '1'   : '15254238731883_15281627925099_najspfkgne', 
     '1.1' : '15254260751979_15281671637611_2plrcfqzze', 
     '1.2' : '15254285524587_15281717840491_7e6qdknzsu',
-    // ... [Truncated for brevity, assuming you have your keys here] ...
+    
+    '2'   : '15254299352683_15281743071851_7dvz3h5d7q',
+    '2.1' : '15254308986475_15281761618539_3xca7oij3u',
+    '2.2' : '15254328122987_15281795566187_zjqa6bqzoq', 
+
+    '3'   : '15254341885547_15281821059691_hhlpb5vicy', 
+    '3.1' : '15254357089899_15281848322667_sxeexgvzl4', 
+    '3.2' : '15254367510123_15281868180075_pc4jrytfgm',
+
+    '4'   : '15255022345835_15283095800427_vwrupxzstm', 
+    '4.1' : '15255038074475_15283122080363_ai5qqp2we4', 
+    '4.2' : '15255045480043_15283135842923_tldl4bhmii',
+    '4.3' : '15255208599147_15283449629291_abltofuc7m', 
+    '4.4' : '15255217708651_15283466603115_bojrrqtlmu', 
+    '4.5' : '15255227670123_15283486263915_jpntt54mve',
+
+    '5'   : '15273689226859_15317451606635_d7zzy3c7qi', 
+    '5.1' : '15273713933931_15317494860395_avj47smmim', 
+    '5.2' : '15273722257003_15317510195819_6edjluvdqi',
+    '5.3' : '15273739624043_15317541653099_ii4bxpvabe',
+    '5.4' : '15273750175339_15317561707115_csel26ku5a', 
+    '5.5' : '15273760071275_15317579467371_cnewcj54me',
+    '5.6' : '15273767935595_15317595851371_3q43tk7tvm', 
+    
+    's1.1'  : '14204232736303_14846150314543_37jq4ryehq',
+    's1.2'  : '14204288179759_14846247373359_tnsknmapva',
+    's1.3'  : '14204319768111_14846302489135_sr4ht4ccwq',
+    's1.4'  : '14204331957807_14846326147631_dji2acqcze',
+    's1.5'  : '14204346572335_14846351641135_7gvns4o5ue',
+    's1.6'  : '14204361252399_14846376479279_cjajhf4d3y',
+    's1.7'  : '14204370492975_14846393649711_6fduhdqite',
+    's1.8'  : '14204395527727_14846438017583_s2jlti7lsm',
+    's1.9'  : '14204411387439_14846464887343_f5lxgcqj5y',
+    's1.10' : '14204424691247_14846487562799_xmbvntt6wa',
+
+    's2.1'  : '14204490948143_14846603495983_kzevn36tii',
+    's2.2'  : '14204506742319_14846634494511_ta2rxyg2oy',
+    's2.3'  : '14204523322927_14846661233199_foqb3q7zb4',
+    's2.4'  : '14204540034607_14846689085999_gjejdie4uy',
+    's2.5'  : '14204555304495_14846715497007_zdanghuxzu',
+    's2.6'  : '14204565200431_14846734371375_ap3bqpabpu',
+    's2.7'  : '14204577259055_14846756194863_3ecad2535u',
+    's2.8'  : '14204592528943_14846785227311_4hjl46y62e',
+    's2.9'  : '14204602621487_14846802594351_ilnp6lxekq',
     's2.10' : '14206184136239_14849618610735_ihnbx7hkoi'
 };
 
@@ -67,7 +84,6 @@ else if (selectedQuality === '1080p') { RES_W = 1920; RES_H = 1080; BITRATE = 45
 else { RES_W = 1920; RES_H = 1080; BITRATE = 6000; }
 
 console.log(`[🚀] Smart Engine Locked to: ${RES_W}x${RES_H} @ ${BITRATE}kbps`);
-console.log(`[⏱️] Auto-Refresh Time Set To: ${FORCE_REFRESH_MINUTES} Minutes`);
 
 let rawUrls = (process.env.TARGET_URLS || '').trim();
 let urlList = rawUrls !== '' 
@@ -75,97 +91,14 @@ let urlList = rawUrls !== ''
     : ['https://dadocric.st/player.php?id=starsp3&v=m'];
 
 let currentUrlIndex = 0;
-let backupUrlIndex = urlList.length > 1 ? 1 : 0; 
 
 const SELECTED_CHANNEL = process.env.OKRU_STREAM_ID || '1';
-const SERVER_SELECTION = process.env.SERVER_SELECTION || 'None'; 
 const PROXY_ENGINE = process.env.PROXY_ENGINE || 'Cloudflare WARP (Recommended)';
-
 const ACTIVE_STREAM_KEY = STREAM_KEYS[SELECTED_CHANNEL] || STREAM_KEYS['1'];
 
 let browser = null;
 let obsProcess = null;
 let activePage = null;
-let backupPage = null;
-
-const FROZEN_THRESHOLD_MS = 8000; 
-
-if (!fs.existsSync('./screenshots')) fs.mkdirSync('./screenshots');
-let pendingScreenshots = [];
-let uploadCycleCount = 0;
-
-// =========================================================================================
-// 🎯 PTS TRACKING ENGINE (100% ACCURATE STREAM HEALTH)
-// =========================================================================================
-let activeM3u8Link = null;
-let ffprobeProcess = null;
-let currentPtsTime = -1.0;
-let ptsFreezeCount = 0;
-const PTS_FREEZE_LIMIT = 4; // 4 lagatar same PTS aaye toh stream hang hai
-
-function startFFprobeWatchdog(m3u8Url) {
-    if (ffprobeProcess) {
-        try { ffprobeProcess.kill('SIGKILL'); } catch(e){}
-    }
-
-    currentPtsTime = -1.0;
-    ptsFreezeCount = 0;
-
-    console.log(`[📡] Starting FFprobe PTS Tracker on: ${m3u8Url.substring(0, 50)}...`);
-
-    const args = [
-        '-v', 'error',
-        '-rw_timeout', '5000000', // 5 Second Network Timeout
-        '-show_entries', 'frame=pkt_pts_time',
-        '-select_streams', 'v:0',
-        '-of', 'csv=p=0',
-        m3u8Url
-    ];
-
-    ffprobeProcess = spawn('ffprobe', args);
-
-    const rl = readline.createInterface({
-        input: ffprobeProcess.stdout,
-        terminal: false
-    });
-
-    rl.on('line', (line) => {
-        const pts = parseFloat(line.trim());
-        if (!isNaN(pts)) {
-            if (pts === currentPtsTime) {
-                ptsFreezeCount++;
-            } else {
-                ptsFreezeCount = 0; // Reset agar stream aage barh rahi hai
-            }
-            currentPtsTime = pts;
-        }
-    });
-
-    ffprobeProcess.on('exit', (code) => {
-        if (code !== 0 && code !== null) {
-            console.log(`[⚠️] FFprobe PTS Tracker exited. Network timeout ya link dead ho sakta hai.`);
-        }
-    });
-}
-
-function attachNetworkInterceptor(page) {
-    page.on('response', response => {
-        try {
-            const url = response.url();
-            if (url.includes('.m3u8')) {
-                // Har page ke paas apna latest m3u8 link save hoga
-                page._currentM3u8 = url;
-
-                // Agar active page ka naya link mila hai, toh tracker start karein
-                if (page === activePage && activeM3u8Link !== url) {
-                    activeM3u8Link = url;
-                    startFFprobeWatchdog(url);
-                }
-            }
-        } catch(e) {}
-    });
-}
-// =========================================================================================
 
 async function applyPreloadFirewall(page) {
     if (!page) return;
@@ -174,96 +107,6 @@ async function applyPreloadFirewall(page) {
             const style = document.createElement('style');
             style.textContent = `html, body { background-color: #000000 !important; overflow: hidden !important; }`;
             document.documentElement.appendChild(style);
-
-            const attachOverlay = () => {
-                let target = document.body || document.documentElement;
-                if (target && !document.getElementById('smart-stream-overlay')) {
-                    const overlay = document.createElement('div');
-                    overlay.id = 'smart-stream-overlay';
-                    overlay.innerHTML = `
-                        <style>
-                            #smart-stream-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: #000000 !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; color: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important; pointer-events: all !important; }
-                            .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
-                            .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
-                            .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-                            @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                            @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
-                            .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
-                            .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
-                        </style>
-                        <div class="stream-spinner"></div>
-                        <div class="progress-container"><div class="progress-bar-fill"></div></div>
-                        <div class="stream-title">STREAM LOADING</div>
-                        <div class="stream-sub">Connecting to secure stream engine...</div>
-                    `;
-                    target.appendChild(overlay);
-                } else if (!target) {
-                    requestAnimationFrame(attachOverlay);
-                }
-            };
-            attachOverlay();
-        });
-    } catch (e) {
-        console.log(`[🛡️] SYSTEM SHIELD: Preload firewall safe injection caught an error.`);
-    }
-}
-
-async function takeAndBatchScreenshot(page, stepName) {
-    if (!page) return;
-    try {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const filePath = `./screenshots/snap_${timestamp}_${stepName}.png`;
-        await page.screenshot({ path: filePath });
-        console.log(`[📸] Screenshot saved: ${filePath}`);
-        pendingScreenshots.push(filePath);
-
-        if (pendingScreenshots.length >= 3) {
-            try {
-                const tag = 'live-stream-logs';
-                try { execSync(`gh release view ${tag} || gh release create ${tag} -t "Live Logs"`, { stdio: 'ignore' }); } catch(e) {}
-                try {
-                    const oldAssets = execSync(`gh release view ${tag} --json assets -q ".assets[].name"`, { encoding: 'utf-8' }).trim().split('\n');
-                    for (const asset of oldAssets) if (asset) execSync(`gh release delete-asset ${tag} "${asset}" -y`, { stdio: 'ignore' });
-                } catch(e) {}
-
-                const fileList = pendingScreenshots.join(' ');
-                exec(`gh release upload ${tag} ${fileList} --clobber`, (err) => {
-                    if (!err) uploadCycleCount++;
-                });
-                pendingScreenshots = []; 
-            } catch (err) { }
-        }
-    } catch (e) { }
-}
-
-async function showLoadingUI(page, title, sub) {
-    try {
-        await page.evaluate((t, s) => {
-            if (window.self !== window.top) return; 
-            let overlay = document.getElementById('smart-stream-overlay');
-            if (overlay) {
-                const titleEl = overlay.querySelector('.stream-title');
-                const subEl = overlay.querySelector('.stream-sub');
-                if (titleEl) titleEl.innerHTML = t;
-                if (subEl) subEl.innerHTML = s;
-                overlay.style.setProperty('display', 'flex', 'important');
-                overlay.style.setProperty('opacity', '1', 'important');
-                overlay.style.setProperty('z-index', '2147483647', 'important');
-            } 
-        }, title, sub);
-    } catch (e) {}
-}
-
-async function hideLoadingUI(page) {
-    try {
-        await page.evaluate(() => {
-            const overlay = document.getElementById('smart-stream-overlay');
-            if (overlay) {
-                overlay.style.setProperty('display', 'none', 'important');
-                overlay.style.setProperty('opacity', '0', 'important');
-                overlay.style.setProperty('z-index', '-9999', 'important');
-                overlay.remove();
-            }
         });
     } catch (e) {}
 }
@@ -289,525 +132,112 @@ function setupOBSConfig() {
     fs.writeFileSync(path.join(profilesDir, 'service.json'), JSON.stringify(serviceJson, null, 2));
 
     const sceneJson = {
-        "current_scene": "WaitingScene", 
-        "current_program_scene": "WaitingScene", 
+        "current_scene": "MainScene", 
+        "current_program_scene": "MainScene", 
         "name": "Untitled",
-        "scene_order": [{"name": "WaitingScene"}, {"name": "MainScene"}],
+        "scene_order": [{"name": "MainScene"}],
         "sources": [
             { "id": "xshm_input", "name": "Screen", "settings": { "show_cursor": false } },
             { "id": "pulse_output_capture", "name": "Audio", "settings": {} },
-            { "id": "scene", "name": "MainScene", "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true}, {"name": "Audio", "id": 2, "visible": true} ] } },
-            { "id": "scene", "name": "WaitingScene", "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true} ] } }
+            {
+                "id": "scene", "name": "MainScene",
+                "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true}, {"name": "Audio", "id": 2, "visible": true} ] }
+            }
         ]
     };
     fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify(sceneJson, null, 2));
 }
 
-function attachAntiAdListeners(page) {
-    page.on('dialog', async dialog => {
-        console.log(`[🛡️] AD-BLOCKER: Dismissed a Javascript alert/dialog!`);
-        await dialog.dismiss();
-    });
-}
-
-async function initializeVideo(page, startMuted, isActivePage) {
+async function initializeVideo(page) {
     try {
-        if (SERVER_SELECTION !== 'None') {
-            console.log(`[*] Clicking specific Server: ${SERVER_SELECTION}`);
-            let serverClicked = false; let serverAttempts = 0;
-            while (!serverClicked && serverAttempts < 10) { 
-                serverAttempts++;
-                try {
-                    const clickSuccess = await page.evaluate((serverName) => {
-                        const buttons = Array.from(document.querySelectorAll('button'));
-                        const targetBtn = buttons.find(b => b.innerText && b.innerText.trim().includes(serverName));
-                        if (targetBtn) { targetBtn.click(); return true; }
-                        return false;
-                    }, SERVER_SELECTION);
-
-                    if (clickSuccess) {
-                        serverClicked = true; 
-                        console.log(`[+] Server Button clicked successfully!`);
-                        await takeAndBatchScreenshot(page, `server-clicked`);
-                        await new Promise(r => setTimeout(r, 2000)); 
-                        if (isActivePage) await page.bringToFront(); 
-                    } else await new Promise(r => setTimeout(r, 2000));
-                } catch (err) { await new Promise(r => setTimeout(r, 2000)); }
-            }
-        }
-
-        console.log('[*] Checking if Video is Autoplaying or Needs a Play Button...');
-        let isVideoPlaying = false; 
-        let attempts = 0;
-        
-        while (!isVideoPlaying && attempts < 15) {
-            for (const frame of page.frames()) {
-                try {
-                    const autoPlayed = await frame.evaluate(() => {
-                        let playing = false;
-                        document.querySelectorAll('video').forEach(v => {
-                            if (v.clientWidth > 50 && !v.paused && v.currentTime > 0) {
-                                v.muted = false; 
-                                v.volume = 1.0;
-                                playing = true;
-                            }
-                        });
-                        return playing;
-                    });
-
-                    if (autoPlayed) { isVideoPlaying = true; break; }
-
-                    const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, [class*="unmute"], .fp-play');
-                    if (playBtn) {
-                        const isVisible = await frame.evaluate(el => {
-                            const style = window.getComputedStyle(el);
-                            return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-                        }, playBtn);
-
-                        if (isVisible) {
-                            await frame.evaluate(el => el.click(), playBtn); 
-                            await takeAndBatchScreenshot(page, `play-btn-clicked`);
-                            await new Promise(r => setTimeout(r, 3000)); 
-                            isVideoPlaying = true;
-                            break; 
-                        }
-                    }
-
-                    if (!isVideoPlaying && attempts > 5) {
-                        const forced = await frame.evaluate(async () => {
-                            let played = false;
-                            let vids = document.querySelectorAll('video');
-                            for(let v of vids) {
-                                if (v.clientWidth > 50) { 
-                                    v.muted = false; v.volume = 1.0; 
-                                    try { v.click(); } catch(e){}
-                                    try {
-                                        let p = v.play();
-                                        if (p !== undefined) p.catch(()=>{});
-                                        played = true;
-                                    } catch(e) {}
-                                }
-                            }
-                            return played;
-                        });
-
-                        if (forced) {
-                            await takeAndBatchScreenshot(page, `force-play-applied`);
-                            isVideoPlaying = true;
-                            break;
-                        }
-                    }
-                } catch (err) {}
-            }
-            if (!isVideoPlaying) await new Promise(r => setTimeout(r, 2000));
-            attempts++;
-        }
-
-        console.log('[*] Scanning for Exact Real Video Player...');
-        let targetFrame = null;
-        for (const frame of page.frames()) {
-            try {
-                const isRealLiveStream = await frame.evaluate(() => {
-                    const vid = document.querySelector('video');
-                    return vid && vid.clientWidth > 50 && vid.clientHeight > 50;
-                });
-                if (isRealLiveStream) { 
-                    targetFrame = frame; 
-                    console.log(`[+] Smart Scanner locked onto video frame!`);
-                    break; 
-                }
-            } catch (e) { }
-        }
-
-        if (!targetFrame) targetFrame = page.mainFrame();
-
+        console.log('[*] Looking for video element and dealing with ad overlays...');
         await page.evaluate(() => {
-            setInterval(() => {
-                try {
-                    document.documentElement.style.setProperty('background-color', 'black', 'important');
-                    document.body.style.setProperty('background-color', 'black', 'important');
-                    document.body.style.setProperty('overflow', 'hidden', 'important');
-                    document.documentElement.style.setProperty('overflow', 'hidden', 'important');
+            // Unmute and force play all media elements instantly
+            document.querySelectorAll('video, audio').forEach(v => {
+                v.muted = false;
+                v.volume = 1.0;
+                v.play().catch(() => {});
+            });
 
-                    let iframes = Array.from(document.querySelectorAll('iframe'));
-                    let mainIframe = null; let maxArea = 0;
+            // Automatically clean common overlay junk / fake play buttons
+            const junkSelectors = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="pop"], [id*="pop"]';
+            document.querySelectorAll(junkSelectors).forEach(el => el.remove());
 
-                    iframes.forEach(ifr => {
-                        let area = ifr.clientWidth * ifr.clientHeight;
-                        if (area > maxArea && area > 5000) { maxArea = area; mainIframe = ifr; }
-                    });
-
-                    if (!mainIframe && iframes.length > 0) {
-                        mainIframe = iframes.find(ifr => 
-                            ifr.getAttribute('allowfullscreen') !== null || 
-                            (ifr.src && (ifr.src.includes('player') || ifr.src.includes('embed') || ifr.src.includes('stream') || ifr.src.includes('watch')))
-                        );
-                    }
-
-                    if (mainIframe) {
-                        iframes.forEach(ifr => {
-                            if (ifr !== mainIframe) {
-                                ifr.style.setProperty('display', 'none', 'important');
-                                ifr.style.setProperty('opacity', '0', 'important');
-                                ifr.style.setProperty('z-index', '-9999', 'important');
-                            }
-                        });
-
-                        mainIframe.style.setProperty('position', 'fixed', 'important');
-                        mainIframe.style.setProperty('top', '0px', 'important');
-                        mainIframe.style.setProperty('left', '0px', 'important');
-                        mainIframe.style.setProperty('width', '100vw', 'important');
-                        mainIframe.style.setProperty('height', '100vh', 'important');
-                        mainIframe.style.setProperty('z-index', '2147483645', 'important'); 
-                        mainIframe.style.setProperty('background-color', 'black', 'important');
-                        mainIframe.style.setProperty('border', 'none', 'important');
-                        mainIframe.style.setProperty('opacity', '1', 'important');
-                        mainIframe.style.setProperty('display', 'block', 'important');
-                        mainIframe.style.setProperty('visibility', 'visible', 'important');
-                    }
-
-                    const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"]';
-                    document.querySelectorAll(junkClasses).forEach(el => { 
-                        try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
-                    });
-                } catch (err) {}
-            }, 500); 
-        }).catch(() => {});
-
-        await targetFrame.evaluate((muteVideo) => {
-            setInterval(() => {
-                try {
-                    const style = document.createElement('style');
-                    style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
-                    document.head.appendChild(style);
-
-                    const mediaElements = document.querySelectorAll('video, audio');
-                    const videos = Array.from(document.querySelectorAll('video'));
-                    let realVideo = null;
-
-                    mediaElements.forEach(media => { 
-                        media.muted = muteVideo; 
-                        media.volume = muteVideo ? 0.0 : 1.0; 
-                    });
-
-                    if (!muteVideo) {
-                        document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
-                    }
-
-                    for (const v of videos) {
-                        if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; }
-                    }
-
-                    if (!realVideo && videos.length > 0) realVideo = videos[0];
-
-                    if (realVideo) { 
-                        realVideo.style.setProperty('position', 'fixed', 'important');
-                        realVideo.style.setProperty('top', '0px', 'important');
-                        realVideo.style.setProperty('left', '0px', 'important');
-                        realVideo.style.setProperty('width', '100vw', 'important');
-                        realVideo.style.setProperty('height', '100vh', 'important');
-                        realVideo.style.setProperty('z-index', '2147483646', 'important'); 
-                        realVideo.style.setProperty('background-color', 'black', 'important');
-                        realVideo.style.setProperty('object-fit', 'contain', 'important');
-                        realVideo.style.setProperty('opacity', '1', 'important');
-                        realVideo.style.setProperty('visibility', 'visible', 'important');
-                        realVideo.style.setProperty('display', 'block', 'important');
-                    }
-                } catch(err) {}
-            }, 500); 
-        }, startMuted).catch(() => {});
-
-    } catch (e) { }
-    await new Promise(r => setTimeout(r, 1000));
+            // Make the core video element full screen inside browser
+            let mainVideo = document.querySelector('video');
+            if (mainVideo) {
+                mainVideo.style.setProperty('position', 'fixed', 'important');
+                mainVideo.style.setProperty('top', '0px', 'important');
+                mainVideo.style.setProperty('left', '0px', 'important');
+                mainVideo.style.setProperty('width', '100vw', 'important');
+                mainVideo.style.setProperty('height', '100vh', 'important');
+                mainVideo.style.setProperty('z-index', '2147483646', 'important');
+                mainVideo.style.setProperty('background-color', 'black', 'important');
+                mainVideo.style.setProperty('object-fit', 'contain', 'important');
+            }
+        });
+    } catch (e) {}
 }
 
-async function checkPageStatus(page) {
-    if (!page) return { status: 'DEAD' };
+// =========================================================================================
+// 🚀 2026 SIMPLE & POWERFUL STREAM HEALTH CHECK (NO COMPLEX WATCHDOG)
+// =========================================================================================
+async function monitorStream(page) {
+    let lastTime = -1;
+    let lastChangedTimestamp = Date.now();
+    const STREAM_DEAD_THRESHOLD_MS = 8000; // 8 seconds check
 
-    // ========================================================================
-    // 🛡️ LEVEL 1: NATIVE PTS TRACKING (100% Accurate Encoder Validation)
-    // ========================================================================
-    if (page === activePage && activeM3u8Link && ffprobeProcess) {
-        if (ptsFreezeCount >= PTS_FREEZE_LIMIT) {
-            console.log(`[🚨] PTS FREEZE DETECTED! Encoder is stuck at exact PTS: ${currentPtsTime}`);
-            return { status: 'FROZEN', currentTime: currentPtsTime };
-        }
-        
-        // Agar process dead ho jaye (timeout flag ki wajah se) toh network drop hai
-        if (ffprobeProcess.exitCode !== null && ffprobeProcess.exitCode !== 0) {
-            console.log(`[🚨] NETWORK DROP DETECTED! FFprobe connection timed out.`);
-            return { status: 'DEAD' };
-        }
-    }
-    // ========================================================================
-
-    // 🛡️ LEVEL 2: FALLBACK DOM CHECK (For non-M3U8 streams / generic HTML5)
-    try {
-        for (const frame of page.frames()) {
-            try {
-                if (frame.isDetached()) continue;
-                const result = await Promise.race([
-                    frame.evaluate(() => {
-                        const bodyText = document.body ? document.body.innerText.toLowerCase() : "";
-                        
-                        if (
-                            bodyText.includes("stream error") || 
-                            bodyText.includes("not found") || 
-                            bodyText.includes("domain is blocked") ||
-                            bodyText.includes("error: forbidden") ||
-                            bodyText.includes("does not have permission") ||
-                            bodyText.includes("access denied") ||
-                            (bodyText.includes("cloudflare") && bodyText.includes("blocked"))
-                        ) {
-                            return { status: 'CRITICAL_ERROR' };
-                        }
-                        
-                        const videos = Array.from(document.querySelectorAll('video'));
-                        let targetV = null;
-
-                        for (const v of videos) {
-                            if (v.clientWidth > 0 && v.clientWidth < 100) continue;
-                            if ((v.src && v.src.startsWith('blob:')) || v.matches('.jw-video, .plyr__video, .vjs-tech')) {
-                                targetV = v; break;
-                            }
-                        }
-                        
-                        if (!targetV && videos.length > 0) {
-                            targetV = videos.sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
-                        }
-                        
-                        if (targetV && !targetV.ended && targetV.currentTime > 0) return { status: 'HEALTHY', currentTime: targetV.currentTime };
-                        return { status: 'DEAD' };
-                    }),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
-                ]);
-                if (result && result.status !== 'DEAD') return result;
-            } catch (err) {}
-        }
-    } catch (e) { return { status: 'DEAD' }; }
-    return { status: 'DEAD' };
-}
-
-async function startWatchdog() {
-    let lastActiveTime = -1;
-    let frozenCheckTimestamp = Date.now();
-    let watchdogTicks = 0;
-    
-    let streamSetupTime = Date.now(); 
-    let isWarmupPhase = true; 
-    const WARMUP_MAX_TIME = 15000; 
-
-    let activeUrlStr = urlList[currentUrlIndex];
-    let backupUrlStr = urlList[backupUrlIndex];
-
-    let currentStreamStartTime = Date.now();
+    console.log(`[📡] Monitoring active for link: ${urlList[currentUrlIndex]}`);
 
     while (true) {
-        if (!browser || !browser.isConnected()) throw new Error("Browser closed.");
+        if (!browser || !browser.isConnected()) throw new Error("Browser unexpectedly exited.");
 
-        let activeStatus = await checkPageStatus(activePage);
+        // Clean, quick evaluation common in 2026 automation loops
+        const status = await page.evaluate(() => {
+            const vid = document.querySelector('video');
+            if (!vid) return { healthy: false, reason: 'NO_VIDEO' };
+            if (vid.paused || vid.ended) return { healthy: false, reason: 'PAUSED_OR_ENDED' };
+            return { healthy: true, currentTime: vid.currentTime };
+        }).catch(() => { return { healthy: false, reason: 'CONTEXT_DESTROYED' }; });
 
-        if (activeStatus.status === 'HEALTHY' && !isWarmupPhase) {
-            let elapsedMs = Date.now() - currentStreamStartTime;
-            let isExempted = NO_REFRESH_DOMAINS.some(domain => activeUrlStr.includes(domain));
-
-            if (elapsedMs > FORCE_REFRESH_MS) {
-                if (!isExempted) {
-                    console.log(`\n[⏱️ PROACTIVE REFRESH]: Stream ran smoothly for ${FORCE_REFRESH_MINUTES} minutes! Forcing SAME LINK swap to keep connection fresh...`);
-                    activeStatus.status = 'FORCE_REFRESH'; 
-                } 
+        if (status.healthy) {
+            if (status.currentTime !== lastTime) {
+                lastTime = status.currentTime;
+                lastChangedTimestamp = Date.now(); // Stream is moving properly
+            } else if (Date.now() - lastChangedTimestamp > STREAM_DEAD_THRESHOLD_MS) {
+                console.log(`[⚠️] ALERT: Stream frozen at second ${lastTime}. Moving to next link.`);
+                break; // Break the inner loop to switch URL
+            }
+        } else {
+            if (Date.now() - lastChangedTimestamp > STREAM_DEAD_THRESHOLD_MS) {
+                console.log(`[⚠️] ALERT: Stream is unresponsive (${status.reason}). Moving to next link.`);
+                break; // Break the inner loop to switch URL
             }
         }
 
-        if (activeStatus.status === 'HEALTHY') {
-            await hideLoadingUI(activePage); 
-            isWarmupPhase = false; 
+        // Keep unmuting in case scripts try to mute back
+        await page.evaluate(() => {
+            document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; });
+        }).catch(() => {});
 
-            // Agar PTS tracking lag chuki hai, toh fallback time tracker skip kar sakte hain
-            // Lekin fallback ke taur par dono run kar rahe hain
-            if (activeStatus.currentTime === lastActiveTime && lastActiveTime !== undefined) {
-                if (Date.now() - frozenCheckTimestamp > FROZEN_THRESHOLD_MS) activeStatus.status = 'FROZEN';
-            } else {
-                lastActiveTime = activeStatus.currentTime; frozenCheckTimestamp = Date.now();
-                for (const frame of activePage.frames()) {
-                    try {
-                        if (!frame.isDetached()) {
-                            frame.evaluate(() => { 
-                                document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
-                                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
-                            }).catch(()=>{});
-                        }
-                    } catch(e) {}
-                }
-            }
-        }
-
-        if (backupPage) {
-            for (const frame of backupPage.frames()) {
-                try {
-                    if (!frame.isDetached()) {
-                        frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }).catch(()=>{});
-                    }
-                } catch(e) {}
-            }
-        }
-
-        watchdogTicks++;
-        
-        if (watchdogTicks === 1 || watchdogTicks % 90 === 0) {
-            console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Video Time/PTS: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
-            console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
-            console.log(`[⏭️] NEXT IN QUEUE    : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
-        }
-
-        if (watchdogTicks % 120 === 0) {
-            await takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
-        }
-
-        if (activeStatus.status === 'FROZEN' || activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'FORCE_REFRESH') {
-            
-            if (isWarmupPhase && (Date.now() - streamSetupTime < WARMUP_MAX_TIME)) { 
-                console.log(`[⏳] Watchdog detected '${activeStatus.status}', but stream is in WARM-UP phase. Waiting...`);
-                await new Promise(r => setTimeout(r, 2000));
-                continue; 
-            }
-
-            let isProactiveRefresh = (activeStatus.status === 'FORCE_REFRESH');
-
-            if (isProactiveRefresh) {
-                console.log(`\n==================================================`);
-                console.log(`[!] 🔄 PROACTIVE REFRESH TRIGGERED`);
-                console.log(`[*] Preparing a FRESH copy of SAME Server [${currentUrlIndex}] in background...`);
-                console.log(`==================================================`);
-                
-                for (const frame of activePage.frames()) {
-                    try { if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {}
-                }
-
-                try {
-                    await backupPage.goto('about:blank').catch(()=>{});
-                    await applyPreloadFirewall(backupPage);
-                    await backupPage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
-                } catch(e) {
-                    console.log(`[⏳] Proactive refresh buffer navigation handled safely.`);
-                }
-            } else {
-                console.log(`\n==================================================`);
-                console.log(`[!] ❌ WATCHDOG DETECTED ISSUE: ${activeStatus.status}`);
-                console.log(`[💀] FAILED STREAM: Server [${currentUrlIndex}] -> ${activeUrlStr}`);
-                console.log(`==================================================`);
-                await takeAndBatchScreenshot(activePage, `error-${activeStatus.status.toLowerCase()}`);
-            }
-            
-            console.log(`[*] Checking Backup Tab status before switching...`);
-            let backupStatus = await checkPageStatus(backupPage);
-
-            if (backupStatus.status === 'HEALTHY' || backupStatus.status === 'DEAD') { 
-                
-                if (!isProactiveRefresh) {
-                    for (const frame of activePage.frames()) {
-                        try { if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {}
-                    }
-                }
-                
-                await showLoadingUI(backupPage, isProactiveRefresh ? "REFRESHING CONNECTION" : "RECONNECTING", isProactiveRefresh ? "Optimizing current server stream <span class='stream-blink'>...</span>" : "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
-                await backupPage.bringToFront();
-                await new Promise(r => setTimeout(r, 1000)); 
-                
-                try { await backupPage.mouse.click(10, 10); } catch(e){} 
-
-                console.log(`[*] Initializing Video on the newly active tab...`);
-                await initializeVideo(backupPage, false, true); 
-                await hideLoadingUI(backupPage);
-
-                // 🔄 HOT-SWAP TABS
-                let brokenPage = activePage; activePage = backupPage; backupPage = brokenPage;
-                lastActiveTime = -1; frozenCheckTimestamp = Date.now();
-
-                // =========================================================
-                // 🔄 RESTART PTS TRACKER FOR THE NEWLY ACTIVE PAGE
-                // =========================================================
-                activeM3u8Link = activePage._currentM3u8 || null;
-                if (activeM3u8Link) {
-                    startFFprobeWatchdog(activeM3u8Link);
-                } else {
-                    if (ffprobeProcess) { try { ffprobeProcess.kill('SIGKILL'); } catch(e){} }
-                }
-                // =========================================================
-
-                if (!isProactiveRefresh) {
-                    currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex]; 
-                    backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex]; 
-                } 
-
-                console.log(`\n==================================================`);
-                console.log(isProactiveRefresh ? `[🔄] SAME-SERVER FRESH SWAP EXECUTED SUCCESSFULLY` : `[🔄] SMART HOT-SWAP TO NEXT SERVER EXECUTED SUCCESSFULLY`);
-                console.log(`==================================================`);
-                console.log(`[📺] NEW ACTIVE STREAM : Server [${currentUrlIndex}] -> ${activeUrlStr}`);
-                console.log(`[🔊] LIVE AUDIO STATUS : ON (Unmuted & Forced)`);
-                console.log(`--------------------------------------------------`);
-                console.log(`[🛡️] NEXT BACKUP QUEUE : Server [${backupUrlIndex}] -> ${backupUrlStr}`);
-                console.log(`[🔇] BACKUP AUDIO      : MUTED (Background Loading)`);
-                console.log(`==================================================\n`);
-
-                try {
-                    await backupPage.goto('about:blank').catch(()=>{});
-                    await applyPreloadFirewall(backupPage);
-                    backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-                } catch (e) {
-                    console.log(`[⏳] Background buffer navigation handled safely.`);
-                }
-                
-                streamSetupTime = Date.now(); 
-                isWarmupPhase = true;
-                currentStreamStartTime = Date.now();
-
-            } else {
-                console.error(`[!] ❌ Backup Tab is ALSO DEAD/FROZEN. Hard Restarting System...`);
-                throw new Error("Both Active and Backup tabs failed.");
-            }
-        }
-
-        await new Promise(r => setTimeout(r, 2000)); 
+        await new Promise(r => setTimeout(r, 2000)); // Scan interval
     }
 }
 
 async function startDirectStreaming() {
-    console.log(`[*] Starting OBS Studio FIRST...`);
+    console.log(`[*] Starting OBS Studio...`);
     setupOBSConfig();
 
     obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray']);
-    obsProcess.stdout.on('data', (data) => console.log(`[OBS]: ${data.toString().trim()}`));
-    obsProcess.stderr.on('data', (data) => {
-        const msg = data.toString().trim();
-        if (msg.includes('error') || msg.includes('fail')) console.log(`[OBS Error]: ${msg}`);
-    });
-
-    console.log('[*] Waiting for OBS to initialize before launching browser...');
+    
+    console.log('[*] Waiting for OBS to boot up...');
     await new Promise(r => setTimeout(r, 6000));
 
-    let isObsConnected = false;
-    console.log('[*] Attempting to connect to OBS WebSocket (Polling Engine Active)...');
-    for (let attempt = 1; attempt <= 15; attempt++) {
-        try {
-            await Promise.race([
-                obs.connect('ws://127.0.0.1:4455', 'secret'),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
-            ]);
-            isObsConnected = true;
-            console.log('[+] OBS WebSocket Connected Successfully!');
-            break;
-        } catch (e) {
-            console.log(`[⏳] OBS Port 4455 not ready yet. Retrying (${attempt}/15)...`);
-            await new Promise(r => setTimeout(r, 2000));
-        }
-    }
-
-    if (isObsConnected) {
-        try {
-            await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' });
-            console.log('[+] Enforced WaitingScene (Loading Bar Buffer Active)');
-        } catch(e){}
+    try {
+        await obs.connect('ws://127.0.0.1:4455', 'secret');
+        console.log('[+] OBS Connected via WebSocket.');
+    } catch (e) {
+        console.log('[⚠️] OBS WebSocket port not ready, proceeding anyway...');
     }
 
     let browserArgs = [
@@ -821,12 +251,6 @@ async function startDirectStreaming() {
         '--disable-dev-shm-usage', 
         '--ignore-certificate-errors',
         '--disable-web-security',
-        '--ignore-gpu-blocklist', 
-        '--use-gl=egl',
-        '--disable-accelerated-video-decode', 
-        '--disable-accelerated-video-encode',
-        '--disable-smooth-scrolling',
-        '--disable-features=Translate,BlinkGenPropertyTrees,CalculateNativeWinOcclusion',
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding'
@@ -834,9 +258,6 @@ async function startDirectStreaming() {
 
     if (PROXY_ENGINE.includes('Cloudflare')) {
         browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
-        console.log(`[*] Starting browser with EXACT viewport dimensions: ${RES_W}x${RES_H} and [CLOUDFLARE WARP] Proxy...`);
-    } else {
-        console.log(`[*] Starting browser with EXACT viewport dimensions: ${RES_W}x${RES_H} using [DIRECT GITHUB IP]...`);
     }
 
     browser = await puppeteer.launch({
@@ -846,74 +267,45 @@ async function startDirectStreaming() {
         args: browserArgs
     });
 
-    browser.on('targetcreated', async (target) => {
-        if (target.type() === 'page') {
-            const newPage = await target.page();
-            setTimeout(async () => {
-                if (newPage && newPage !== activePage && newPage !== backupPage) {
-                    console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
-                    try { await newPage.close(); } catch(e) {}
-                }
-            }, 500);
-        }
-    });
-
     const pages = await browser.pages();
     activePage = pages[0]; 
-    backupPage = await browser.newPage();
-    
-    // 🛡️ NETWORK INTERCEPTORS LAGAYE GAYE (For PTS Tracking)
-    attachNetworkInterceptor(activePage);
-    attachNetworkInterceptor(backupPage);
-
-    attachAntiAdListeners(activePage);
-    attachAntiAdListeners(backupPage);
-
     await applyPreloadFirewall(activePage);
-    await applyPreloadFirewall(backupPage);
 
-    await activePage.bringToFront(); 
+    // =========================================================================================
+    // INFINITE URL CHECK LOOP
+    // =========================================================================================
+    while (true) {
+        let currentUrl = urlList[currentUrlIndex];
+        console.log(`\n==================================================`);
+        console.log(`[📺] LAUNCHING LIVE TARGET: [Index ${currentUrlIndex}] -> ${currentUrl}`);
+        console.log(`==================================================\n`);
 
-    console.log(`[*] STEP 1: Loading Server [${currentUrlIndex}] on Active Page: ${urlList[currentUrlIndex]}`);
-    await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
-    
-    await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
-    
-    await initializeVideo(activePage, false, true); 
-    await hideLoadingUI(activePage); 
+        try {
+            await activePage.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+            await new Promise(r => setTimeout(r, 3000)); // Buffering cushion
+            
+            await initializeVideo(activePage);
+            try { await activePage.mouse.click(10, 10); } catch(e){}
 
-    if (isObsConnected) {
-        console.log('\n[*] Active Video is Ready! Shifting OBS from Animated Buffer to LIVE Video (MainScene)...');
-        try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
+            // Run the simple watchdog check block
+            await monitorStream(activePage);
+
+        } catch (err) {
+            console.log(`[⚠️] Navigation or playing issue on current URL: ${err.message}`);
+        }
+
+        // Target unhealthy, auto-increment index to next link seamlessly
+        currentUrlIndex = (currentUrlIndex + 1) % urlList.length;
+        await activePage.goto('about:blank').catch(() => {});
     }
-
-    console.log(`[*] STEP 2: Silently preparing Server [${backupUrlIndex}] on Backup Page: ${urlList[backupUrlIndex]}`);
-    backupPage.goto(urlList[backupUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-    
-    await activePage.bringToFront();
-    try { await activePage.mouse.click(10, 10); } catch(e){} 
-    await hideLoadingUI(activePage);
-
-    console.log(`\n==================================================`);
-    console.log(`[🎥] INITIAL CAPTURE STATUS: Ready to Broadcast`);
-    console.log(`==================================================`);
-    console.log(`[📺] CURRENT ACTIVE LIVE : Server [${currentUrlIndex}] -> ${urlList[currentUrlIndex]}`);
-    console.log(`[🔊] LIVE AUDIO STATUS   : ON (Unmuted)`);
-    console.log(`--------------------------------------------------`);
-    console.log(`[🛡️] NEXT BACKUP QUEUE   : Server [${backupUrlIndex}] -> ${urlList[backupUrlIndex]}`);
-    console.log(`[🔇] BACKUP AUDIO STATUS : MUTED (Background)`);
-    console.log(`==================================================\n`);
-
-    console.log('[*] Everything Setup! Dual-Tab Monitoring is Active.');
-    await startWatchdog();
 }
 
 async function mainLoop() {
     while (true) {
-        try { await startDirectStreaming(); } 
-        catch (error) {
-            console.error(`\n[!] ALERT: ${error.message}`);
-            console.log('[*] 🔄 Hard Restarting everything in 3 seconds...');
+        try { 
+            await startDirectStreaming(); 
+        } catch (error) {
+            console.error(`\n[!] CORE ENGINE RESTART: ${error.message}`);
             await cleanup();
             await new Promise(resolve => setTimeout(resolve, 3000));
         }
@@ -921,8 +313,7 @@ async function mainLoop() {
 }
 
 async function cleanup() {
-    console.log('[*] Cleaning up resources...');
-    if (ffprobeProcess) { try { ffprobeProcess.kill('SIGKILL'); } catch(e) { } ffprobeProcess = null; }
+    console.log('[*] Clearing process trees...');
     try { await obs.disconnect(); } catch (e) { } 
     if (browser) { try { await browser.close(); } catch(e) { } browser = null; }
     if (obsProcess) { try { obsProcess.kill('SIGKILL'); } catch(e) { } obsProcess = null; }
@@ -930,49 +321,12 @@ async function cleanup() {
         execSync('pkill -9 obs || true', { stdio: 'ignore' });
         execSync('pkill -9 chrome || true', { stdio: 'ignore' });
         execSync('pkill -9 puppeteer || true', { stdio: 'ignore' });
-        execSync('pkill -9 ffprobe || true', { stdio: 'ignore' }); // 🛡️ Cleans hanging PTS trackers
     } catch (e) { }
 }
 
 process.on('SIGINT', async () => { await cleanup(); process.exit(0); });
 
-const customDurationStr = process.env.CUSTOM_DURATION || 'None';
-function parseDurationToMs(str) {
-    if (!str || str.toLowerCase() === 'none') return null;
-    let ms = 0;
-    const hMatch = str.match(/(\d+)\s*h/i);
-    const mMatch = str.match(/(\d+)\s*m/i);
-    if (hMatch) ms += parseInt(hMatch[1]) * 60 * 60 * 1000;
-    if (mMatch) ms += parseInt(mMatch[1]) * 60 * 1000;
-    return ms > 0 ? ms : null;
-}
-
-const exactDurationMs = parseDurationToMs(customDurationStr);
-if (exactDurationMs) {
-    setTimeout(async () => {
-        console.log(`\n[*] 🛑 Time's up! The assigned duration (${customDurationStr}) is complete. Shutting down cleanly...`);
-        await cleanup();
-        process.exit(0);
-    }, exactDurationMs);
-} else {
-    setTimeout(() => {
-        try {
-            const targetUrls = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
-            const channel = process.env.OKRU_STREAM_ID || '1';
-            const quality = process.env.STREAM_QUALITY || '110KBps (Balanced 480p)';
-            const server = process.env.SERVER_SELECTION || 'None';
-            const cmd = `gh workflow run main.yml -f target_urls="${targetUrls}" -f okru_stream_channel="${channel}" -f stream_quality="${quality}" -f server_selection="${server}" -f proxy_engine="${PROXY_ENGINE}" -f custom_duration="None"`;
-            execSync(cmd, { stdio: 'inherit' });
-            setTimeout(async () => {
-                await cleanup(); 
-                process.exit(0); 
-            }, 300000); 
-        } catch (err) { }
-    }, 21000000);
-}
-
 mainLoop();
-
 
 
 
