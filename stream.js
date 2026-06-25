@@ -1,4 +1,3 @@
-
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -724,22 +723,28 @@ async function startDirectStreaming() {
         args: browserArgs
     });
 
-    browser.on('targetcreated', async (target) => {
-        if (target.type() === 'page') {
-            const newPage = await target.page();
-            setTimeout(async () => {
-                if (newPage && newPage !== activePage && newPage !== backupPage) {
-                    console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
-                    try { await newPage.close(); } catch(e) {}
-                }
-            }, 500);
-        }
-    });
-
     const pages = await browser.pages();
     activePage = pages[0]; 
     backupPage = await browser.newPage();
     
+    // 🛡️ Attach the aggressive ad-blocker AFTER our explicit pages are safely stored in variables
+    browser.on('targetcreated', async (target) => {
+        if (target.type() === 'page') {
+            try {
+                const newPage = await target.page();
+                // Increased timeout to 1500ms to ensure the page object is fully constructed before checking
+                setTimeout(async () => {
+                    if (newPage && !newPage.isClosed() && newPage !== activePage && newPage !== backupPage) {
+                        console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
+                        try { await newPage.close(); } catch(e) {}
+                    }
+                }, 1500);
+            } catch (e) {
+                // Ignore target retrieval errors for instantly closed popups
+            }
+        }
+    });
+
     attachAntiAdListeners(activePage);
     attachAntiAdListeners(backupPage);
 
@@ -841,6 +846,126 @@ if (exactDurationMs) {
 }
 
 mainLoop();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
