@@ -574,8 +574,10 @@ async function checkPageStatus(page) {
         for (const frame of page.frames()) {
             try {
                 if (frame.isDetached()) continue;
+                
+                // 🚀 RES_W ko evaluate function ke andar pass kar rahe hain
                 const result = await Promise.race([
-                    frame.evaluate(() => {
+                    frame.evaluate((expectedWidth) => {
                         const bodyText = document.body ? document.body.innerText.toLowerCase() : "";
                         
                         if (
@@ -605,7 +607,6 @@ async function checkPageStatus(page) {
                         }
                         
                         if (targetV && !targetV.ended && targetV.currentTime > 0) {
-                            // Video Frames Check
                             let frames = 0;
                             if (typeof targetV.getVideoPlaybackQuality === 'function') {
                                 frames = targetV.getVideoPlaybackQuality().totalVideoFrames;
@@ -613,13 +614,14 @@ async function checkPageStatus(page) {
                                 frames = targetV.webkitDecodedFrameCount;
                             }
                             
-                            // 🚀 NEW LOGIC: Kya CSS apply ho chuka hai aur video screen ka 85%+ hissa cover kar rahi hai?
-                            let isFS = (targetV.clientWidth >= window.innerWidth * 0.85);
+                            // 🚀 FIX: Ab iframe ki width nahi, absolute screen width (RES_W) se check hoga!
+                            let vWidth = targetV.getBoundingClientRect().width || targetV.clientWidth;
+                            let isFS = (vWidth >= expectedWidth * 0.75); 
 
                             return { status: 'HEALTHY', currentTime: targetV.currentTime, decodedFrames: frames, isFullscreen: isFS };
                         }
                         return { status: 'DEAD' };
-                    }),
+                    }, RES_W), // <--- Main screen ki absolute width pass ki hai
                     new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
                 ]);
                 if (result && result.status !== 'DEAD') return result;
@@ -628,7 +630,6 @@ async function checkPageStatus(page) {
     } catch (e) { return { status: 'DEAD' }; }
     return { status: 'DEAD' };
 }
-
 
 
 
