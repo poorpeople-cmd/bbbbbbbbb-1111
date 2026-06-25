@@ -575,12 +575,12 @@ async function startWatchdog() {
 }
 
 // 🚀 =======================================================================
-// 🚀 PARALLEL EXECUTION: BROWSER & OBS START AT THE EXACT SAME TIME
+// 🚀 FIXED EXECUTION: OBS LOADS FIRST, CHROME OVERLAPS IT
 // 🚀 =======================================================================
 async function startDirectStreaming() {
-    console.log(`[*] 🚀 Launching OBS Studio & Background Browser SIMULTANEOUSLY...`);
+    console.log(`[*] 🚀 Launching OBS Studio FIRST to let its UI load...`);
     
-    // 1. Start OBS Process non-blocking
+    // 1. Start OBS Process
     setupOBSConfig();
     obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray']);
     obsProcess.stdout.on('data', (data) => console.log(`[OBS]: ${data.toString().trim()}`));
@@ -589,7 +589,12 @@ async function startDirectStreaming() {
         if (msg.includes('error') || msg.includes('fail')) console.log(`[OBS Error]: ${msg}`);
     });
 
-    // 2. IMMEDIATELY Start Browser Setup (No more 6 second delay here!)
+    // 🔥 MAIN FIX: Wait 5 seconds so OBS popups (like Auto-Config Wizard) open FIRST
+    console.log(`[*] ⏳ Waiting 5 seconds for OBS Wizard/UI to settle in the background...`);
+    await new Promise(r => setTimeout(r, 5000));
+
+    // 2. NOW Start Browser Setup (This forces Chrome to stay ON TOP of OBS)
+    console.log(`[*] 🌐 Launching Browser (Will overlap and hide OBS completely)`);
     let browserArgs = [
         '--no-sandbox', '--disable-setuid-sandbox', `--window-size=${RES_W},${RES_H}`, '--window-position=0,0', 
         '--kiosk', '--start-fullscreen', '--autoplay-policy=no-user-gesture-required', '--disable-dev-shm-usage', 
@@ -620,18 +625,20 @@ async function startDirectStreaming() {
     activePage = pages[0]; 
     backupPage = await browser.newPage();
     
-    // 🔥 Apply Network level adblockers
+    // Apply Network level adblockers & Firewalls
     await enableNetworkAdBlocker(activePage);
     await enableNetworkAdBlocker(backupPage);
     await applyPreloadFirewall(activePage);
     await applyPreloadFirewall(backupPage);
+    
+    // Force Chrome strictly to the absolute front
     await activePage.bringToFront(); 
 
-    // 3. START LOADING THE URL IN THE BACKGROUND WHILE OBS CONNECTS!
-    console.log(`[*] STEP 1: Hitting URL in background: ${urlList[currentUrlIndex]}`);
+    // 3. START LOADING THE URL
+    console.log(`[*] STEP 1: Hitting URL in active tab: ${urlList[currentUrlIndex]}`);
     let urlLoadPromise = activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
 
-    // 4. NOW wait for OBS Websocket (Url is loading parallel to this)
+    // 4. Connect to OBS WebSocket
     console.log('[*] Attempting to connect to OBS WebSocket...');
     let isObsConnected = false;
     for (let attempt = 1; attempt <= 10; attempt++) {
@@ -652,7 +659,7 @@ async function startDirectStreaming() {
         try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch(e){}
     }
 
-    // 5. Wait for the URL we started in Step 3 to finish loading
+    // 5. Wait for URL to finish loading
     await urlLoadPromise;
 
     console.log(`[*] URL Loaded! Injecting video logic...`);
@@ -667,6 +674,7 @@ async function startDirectStreaming() {
     console.log(`[*] STEP 2: Silently preparing Backup Page...`);
     backupPage.goto(urlList[backupUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
     
+    // Last security check to ensure Chrome remains the top window
     await activePage.bringToFront();
     try { await activePage.mouse.click(10, 10); } catch(e){} 
 
