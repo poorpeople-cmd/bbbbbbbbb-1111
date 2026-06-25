@@ -605,14 +605,18 @@ async function checkPageStatus(page) {
                         }
                         
                         if (targetV && !targetV.ended && targetV.currentTime > 0) {
-                            // 🚀 NEW LOGIC: Video frames count nikalo
+                            // Video Frames Check
                             let frames = 0;
                             if (typeof targetV.getVideoPlaybackQuality === 'function') {
                                 frames = targetV.getVideoPlaybackQuality().totalVideoFrames;
                             } else if (targetV.webkitDecodedFrameCount !== undefined) {
                                 frames = targetV.webkitDecodedFrameCount;
                             }
-                            return { status: 'HEALTHY', currentTime: targetV.currentTime, decodedFrames: frames };
+                            
+                            // 🚀 NEW LOGIC: Kya CSS apply ho chuka hai aur video screen ka 85%+ hissa cover kar rahi hai?
+                            let isFS = (targetV.clientWidth >= window.innerWidth * 0.85);
+
+                            return { status: 'HEALTHY', currentTime: targetV.currentTime, decodedFrames: frames, isFullscreen: isFS };
                         }
                         return { status: 'DEAD' };
                     }),
@@ -626,9 +630,11 @@ async function checkPageStatus(page) {
 }
 
 
+
+
 async function startWatchdog() {
     let lastActiveTime = -1;
-    let lastDecodedFrames = -1; // 🚀 NEW VARIABLE: Pichle frames track karne ke liye
+    let highestDecodedFrames = -1; // Sirf tab freeze manenge jab frames barhna band hon
     let frozenCheckTimestamp = Date.now();
     let watchdogTicks = 0;
     
@@ -646,7 +652,6 @@ async function startWatchdog() {
 
         let activeStatus = await checkPageStatus(activePage);
 
-        // ... (Proactive refresh logic waise hi rahegi) ...
         if (activeStatus.status === 'HEALTHY' && !isWarmupPhase) {
             let elapsedMs = Date.now() - currentStreamStartTime;
             let isExempted = NO_REFRESH_DOMAINS.some(domain => activeUrlStr.includes(domain));
@@ -659,16 +664,38 @@ async function startWatchdog() {
         }
 
         if (activeStatus.status === 'HEALTHY') {
-            await hideLoadingUI(activePage); 
-            isWarmupPhase = false; 
+            
+            // 🚀 SMART OVERLAY LOGIC (JAB TAK FULLSCREEN NA HO, BLACK SCREEN RAHEGI)
+            if (activeStatus.isFullscreen) {
+                if (isWarmupPhase) {
+                    await hideLoadingUI(activePage); 
+                    isWarmupPhase = false; 
+                    console.log(`[+] Video has been successfully Fullscreened. Removing Black Overlay!`);
+                }
+            } else {
+                if (isWarmupPhase) {
+                    // Jab tak fullscreen CSS set nahi hota, overlay dikhate raho
+                    await showLoadingUI(activePage, "ADJUSTING PLAYER", "Snapping video to true full screen <span class='stream-blink'>...</span>");
+                }
+            }
 
-            // 🚀 NEW LOGIC: Ab Time aur Frames dono ko monitor karenge
+            // 🚀 IMPROVED FALSE-POSITIVE TRACKING
             let isTimeStuck = (activeStatus.currentTime === lastActiveTime);
-            // Sirf tab frame rukne ko issue manenge jab stream ne zero se zyada frames decode kiye hon
-            let areFramesStuck = (activeStatus.decodedFrames !== undefined && activeStatus.decodedFrames === lastDecodedFrames && activeStatus.decodedFrames > 0);
+            let areFramesStuck = false;
+
+            if (activeStatus.decodedFrames !== undefined) {
+                if (activeStatus.decodedFrames > highestDecodedFrames) {
+                    highestDecodedFrames = activeStatus.decodedFrames; // Tracker ko update karo
+                    if (!isTimeStuck) frozenCheckTimestamp = Date.now(); // Reset timer kyunke stream sahi chal rahi hai
+                } else if (activeStatus.decodedFrames === highestDecodedFrames && highestDecodedFrames > 10) {
+                    // Agar kam se kam 10 frames chalne ke baad ruk jaye, toh hi isko stuck maano
+                    areFramesStuck = true;
+                }
+            }
 
             if (isTimeStuck || areFramesStuck) {
-                if (Date.now() - frozenCheckTimestamp > FROZEN_THRESHOLD_MS) {
+                // Ad-block lag/popups ke liye timer +4000ms badha diya hai
+                if (Date.now() - frozenCheckTimestamp > (FROZEN_THRESHOLD_MS + 4000)) { 
                     if (areFramesStuck && !isTimeStuck) {
                          console.log(`\n[⚠️] BLACK SCREEN DETECTED: Audio chal rahi hai lekin Video feed dead hai!`);
                     }
@@ -676,7 +703,6 @@ async function startWatchdog() {
                 }
             } else {
                 lastActiveTime = activeStatus.currentTime; 
-                if (activeStatus.decodedFrames !== undefined) lastDecodedFrames = activeStatus.decodedFrames;
                 frozenCheckTimestamp = Date.now();
                 
                 // (Unmute logic waise hi rahegi)
@@ -705,14 +731,12 @@ async function startWatchdog() {
 
         watchdogTicks++;
         
-        // ⏱️ PRINT IMMEDIATELY ON START (Tick 1) AND THEN EVERY 3 MINUTES (90 Ticks)
         if (watchdogTicks === 1 || watchdogTicks % 90 === 0) {
             console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
             console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
             console.log(`[⏭️] NEXT IN QUEUE    : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
         }
 
-        // 📸 SCREENSHOT SYSTEM (Every 4 mins)
         if (watchdogTicks % 120 === 0) {
             await takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
         }
@@ -774,7 +798,7 @@ async function startWatchdog() {
                 await hideLoadingUI(backupPage);
 
                 let brokenPage = activePage; activePage = backupPage; backupPage = brokenPage;
-                lastActiveTime = -1; frozenCheckTimestamp = Date.now();
+                lastActiveTime = -1; highestDecodedFrames = -1; frozenCheckTimestamp = Date.now();
 
                 if (!isProactiveRefresh) {
                     currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex]; 
