@@ -461,13 +461,13 @@ async function initializeVideo(page, startMuted, isActivePage) {
         if (!targetFrame) targetFrame = page.mainFrame();
 
         // ==============================================================================
-        // 🛡️ LEVEL 1: MAIN PAGE CONTINUOUS BLACKOUT & IFRAME ISOLATION
+        // 🛡️ LEVEL 1: MAIN PAGE CONTINUOUS BLACKOUT & AGGRESSIVE IFRAME EXTRACTOR
         // ==============================================================================
         await page.evaluate(() => {
-            if (!document.getElementById('ultimate-blackout-shield')) {
+            if (!document.getElementById('iron-shield')) {
                 const shield = document.createElement('div');
-                shield.id = 'ultimate-blackout-shield';
-                shield.style.cssText = 'position:fixed !important; top:0 !important; left:0 !important; width:100vw !important; height:100vh !important; background-color:#000000 !important; z-index:2147483640 !important; pointer-events:none !important; transition: opacity 0.3s ease !important;';
+                shield.id = 'iron-shield';
+                shield.style.cssText = 'position:fixed !important; top:0 !important; left:0 !important; width:100vw !important; height:100vh !important; background-color:#000000 !important; z-index:2147483647 !important; pointer-events:none !important; transition: opacity 0.5s ease !important;';
                 document.documentElement.appendChild(shield);
             }
 
@@ -479,28 +479,32 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
                     let iframes = Array.from(document.querySelectorAll('iframe'));
                     let mainIframe = null; 
-                    let maxArea = 0;
 
-                    iframes.forEach(ifr => {
-                        let area = ifr.clientWidth * ifr.clientHeight;
-                        if (area > maxArea && area > 5000) { maxArea = area; mainIframe = ifr; }
-                    });
+                    mainIframe = iframes.find(ifr => 
+                        ifr.src && (ifr.src.includes('player') || ifr.src.includes('embed') || ifr.src.includes('stream') || ifr.src.includes('watch') || ifr.src.includes('pk'))
+                    );
 
                     if (!mainIframe && iframes.length > 0) {
-                        mainIframe = iframes.find(ifr => 
-                            ifr.getAttribute('allowfullscreen') !== null || 
-                            (ifr.src && (ifr.src.includes('player') || ifr.src.includes('embed') || ifr.src.includes('stream') || ifr.src.includes('watch')))
-                        );
+                        mainIframe = iframes.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
                     }
 
                     if (mainIframe) {
                         iframes.forEach(ifr => {
                             if (ifr !== mainIframe) {
                                 ifr.style.setProperty('display', 'none', 'important');
-                                ifr.style.setProperty('opacity', '0', 'important');
-                                ifr.style.setProperty('z-index', '-9999', 'important');
+                                ifr.removeAttribute('src'); 
                             }
                         });
+
+                        let parent = mainIframe.parentElement;
+                        while (parent && parent !== document.body && parent !== document.documentElement) {
+                            parent.style.setProperty('transform', 'none', 'important');
+                            parent.style.setProperty('contain', 'none', 'important');
+                            parent.style.setProperty('position', 'static', 'important');
+                            parent.style.setProperty('margin', '0', 'important');
+                            parent.style.setProperty('padding', '0', 'important');
+                            parent = parent.parentElement;
+                        }
 
                         mainIframe.style.setProperty('position', 'fixed', 'important');
                         mainIframe.style.setProperty('top', '0px', 'important');
@@ -515,10 +519,20 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         mainIframe.style.setProperty('visibility', 'visible', 'important');
                     }
 
-                    const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"]';
+                    const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], #chatango';
                     document.querySelectorAll(junkClasses).forEach(el => { 
                         try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
                     });
+
+                    const ironShield = document.getElementById('iron-shield');
+                    if (ironShield) {
+                        if (mainIframe && mainIframe.clientWidth >= (window.innerWidth * 0.9)) {
+                            ironShield.style.setProperty('opacity', '0', 'important');
+                        } else {
+                            ironShield.style.setProperty('opacity', '1', 'important');
+                        }
+                    }
+
                 } catch (err) {}
             }, 300); 
         }).catch(() => {});
@@ -564,6 +578,9 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     const innerShield = document.getElementById('inner-blackout-shield');
                     
                     if (realVideo) { 
+                        // 🚀 STEP 3 CRUCIAL UPDATE IS HERE: Canvas ko allow karne ke liye CORS policy update
+                        try { realVideo.setAttribute('crossOrigin', 'anonymous'); } catch(e) {}
+
                         let parent = realVideo.parentElement;
                         while (parent && parent !== document.body && parent !== document.documentElement) {
                             const pStyle = window.getComputedStyle(parent);
@@ -647,14 +664,38 @@ async function checkPageStatus(page) {
                         }
                         
                         if (targetV && !targetV.ended && targetV.currentTime > 0) {
-                            // 🚀 NEW FIX: Yahan hum sirf time nahi, balki frames check kar rahe hain
-                            let frames = 0;
-                            if (targetV.getVideoPlaybackQuality) {
-                                frames = targetV.getVideoPlaybackQuality().totalVideoFrames;
-                            } else if (targetV.webkitDecodedFrameCount !== undefined) {
-                                frames = targetV.webkitDecodedFrameCount;
+                            // 🚀 2026 CANVAS PIXEL SAMPLING ENGINE
+                            // Video ka live color test karne ke liye temporary canvas banayein
+                            let isBlackOrStatic = false;
+                            try {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = 10; canvas.height = 10; // Chota size taake performance par asar na pare
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(targetV, 0, 0, 10, 10);
+                                const imgData = ctx.getImageData(0, 0, 10, 10).data;
+                                
+                                // Check if all sampled pixels are black (0,0,0)
+                                let totalLuminance = 0;
+                                for (let i = 0; i < imgData.length; i += 4) {
+                                    let r = imgData[i];
+                                    let g = imgData[i+1];
+                                    let b = imgData[i+2];
+                                    totalLuminance += (0.299*r + 0.587*g + 0.114*b); // Standard luminance formula
+                                }
+                                
+                                // Agar poori screen ka luminance zero ke barabar hai, matlab video black hai
+                                if (totalLuminance < 5) {
+                                    isBlackOrStatic = true;
+                                }
+                            } catch (e) {
+                                // Safe fallback if cross-origin canvas is blocked
                             }
-                            return { status: 'HEALTHY', currentTime: targetV.currentTime, decodedFrames: frames };
+
+                            return { 
+                                status: 'HEALTHY', 
+                                currentTime: targetV.currentTime, 
+                                isVideoBlack: isBlackOrStatic 
+                            };
                         }
                         return { status: 'DEAD' };
                     }),
@@ -669,7 +710,6 @@ async function checkPageStatus(page) {
 
 async function startWatchdog() {
     let lastActiveTime = -1;
-    let lastDecodedFrames = -1; // 🚀 NEW FIX: Picchle check ke frames store karne ke liye
     let frozenCheckTimestamp = Date.now();
     let watchdogTicks = 0;
     
@@ -703,21 +743,19 @@ async function startWatchdog() {
             await hideLoadingUI(activePage); 
             isWarmupPhase = false; 
 
-            // 🚀 NEW FIX: Dono cheezein check karein (Time aur Video Frames)
             let isTimeStuck = (activeStatus.currentTime === lastActiveTime);
-            let isFrameStuck = (activeStatus.decodedFrames === lastDecodedFrames && activeStatus.decodedFrames > 0);
+            let isBlackScreenDetected = activeStatus.isVideoBlack; // 🚀 Live canvas verdict
 
-            // Agar time ruka hua hai, YA time chal raha hai magar frames nahi ban rahe (Black Screen)
-            if (isTimeStuck || isFrameStuck) {
+            // 🛡️ CRITICAL DETECTOR: Agar time ruk jaye YA audio chal rahi ho par screen kaali ho
+            if (isTimeStuck || isBlackScreenDetected) {
                 if (Date.now() - frozenCheckTimestamp > FROZEN_THRESHOLD_MS) {
                     activeStatus.status = 'FROZEN';
-                    if (isFrameStuck && !isTimeStuck) {
-                        console.log(`[!] ⚠️ SYSTEM SHIELD: Detected Black Screen (Audio playing, but video frames stuck). Triggering HOT-SWAP.`);
+                    if (isBlackScreenDetected && !isTimeStuck) {
+                        console.log(`[!] ⚠️ WATCHDOG DETECTED AUDIO-ONLY LEAK: Audio playing but video frame is pitch black. Triggering HOT-SWAP.`);
                     }
                 }
             } else {
                 lastActiveTime = activeStatus.currentTime; 
-                lastDecodedFrames = activeStatus.decodedFrames; // 🚀 Update latest frames
                 frozenCheckTimestamp = Date.now();
                 
                 for (const frame of activePage.frames()) {
@@ -733,8 +771,6 @@ async function startWatchdog() {
             }
         }
 
-        // ... (Iske baad wala baqi sara Watchdog ka code waisa hi rahega jaisa pehle tha)
-
         if (backupPage) {
             for (const frame of backupPage.frames()) {
                 try {
@@ -745,32 +781,17 @@ async function startWatchdog() {
             }
         }
 
-        // watchdogTicks++;
-        // if (watchdogTicks % 6 === 0) {
-        //     console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
-        //     console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
-        //     console.log(`[⏭️] NEXT IN QUEUE    : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
-        //     if (watchdogTicks % 120 === 0) {
-        //         await takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
-        //     }
-        // }
-
         watchdogTicks++;
         
-        // ⏱️ PRINT IMMEDIATELY ON START (Tick 1) AND THEN EVERY 3 MINUTES (90 Ticks)
         if (watchdogTicks === 1 || watchdogTicks % 90 === 0) {
             console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
             console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
             console.log(`[⏭️] NEXT IN QUEUE    : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
         }
 
-        // 📸 SCREENSHOT SYSTEM (Every 4 mins)
         if (watchdogTicks % 120 === 0) {
             await takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
         }
-
-
-        
 
         if (activeStatus.status === 'FROZEN' || activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'FORCE_REFRESH') {
             
@@ -818,7 +839,7 @@ async function startWatchdog() {
                     }
                 }
                 
-                await showLoadingUI(backupPage, isProactiveRefresh ? "REFRESHING CONNECTION" : "RECONNECTING", isProactiveRefresh ? "Optimizing current server stream <span class='stream-blink'>...</span>" : "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
+                await showLoadingUI(backupPage, isProactiveRefresh ? "REFRESHING CONNECTION" : "RECONNECTING", isProactiveRefresh ? "Optimizing current server stream..." : "Establishing secure connection to backup server...");
                 await backupPage.bringToFront();
                 await new Promise(r => setTimeout(r, 1000)); 
                 
@@ -839,12 +860,6 @@ async function startWatchdog() {
                 console.log(`\n==================================================`);
                 console.log(isProactiveRefresh ? `[🔄] SAME-SERVER FRESH SWAP EXECUTED SUCCESSFULLY` : `[🔄] SMART HOT-SWAP TO NEXT SERVER EXECUTED SUCCESSFULLY`);
                 console.log(`==================================================`);
-                console.log(`[📺] NEW ACTIVE STREAM : Server [${currentUrlIndex}] -> ${activeUrlStr}`);
-                console.log(`[🔊] LIVE AUDIO STATUS : ON (Unmuted & Forced)`);
-                console.log(`--------------------------------------------------`);
-                console.log(`[🛡️] NEXT BACKUP QUEUE : Server [${backupUrlIndex}] -> ${backupUrlStr}`);
-                console.log(`[🔇] BACKUP AUDIO      : MUTED (Background Loading)`);
-                console.log(`==================================================\n`);
 
                 try {
                     await backupPage.goto('about:blank').catch(()=>{});
