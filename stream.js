@@ -737,7 +737,7 @@ async function startWatchdog() {
         }
 
         if (activeStatus.status === 'HEALTHY') {
-            await activePage.setMuted(false).catch(()=>{}); // Enforce true engine sound block mapping
+            // FIXED: Removed invalid page.setMuted()
             await hideLoadingUI(activePage); 
             isWarmupPhase = false; 
 
@@ -771,7 +771,7 @@ async function startWatchdog() {
 
         // 🔊 ENFORCED BROWSER LEVEL MUTING: Keeps background layers completely quiet
         if (backupPage) {
-            await backupPage.setMuted(true).catch(()=>{});
+            // FIXED: Removed invalid backupPage.setMuted()
             for (const frame of backupPage.frames()) {
                 try {
                     if (!frame.isDetached()) {
@@ -833,9 +833,7 @@ async function startWatchdog() {
 
             if (backupStatus.status === 'HEALTHY' || backupStatus.status === 'DEAD') { 
                 
-                // 🔊 CROSS-MUTING: Swap audio mapping at browser framework layout before view shift
-                await activePage.setMuted(true).catch(()=>{});
-                await backupPage.setMuted(false).catch(()=>{});
+                // FIXED: Removed invalid activePage.setMuted() and backupPage.setMuted() cross-muting calls
 
                 if (!isProactiveRefresh) {
                     for (const frame of activePage.frames()) {
@@ -983,9 +981,7 @@ async function startDirectStreaming() {
     activePage = pages[0]; 
     backupPage = await browser.newPage();
     
-    // Initializing hardware browser-level strict muting properties
-    await activePage.setMuted(false);
-    await backupPage.setMuted(true);
+    // FIXED: Removed invalid page.setMuted() calls here
 
     await setupNetworkAdBlocker(activePage);
     await setupNetworkAdBlocker(backupPage);
@@ -1094,7 +1090,6 @@ if (exactDurationMs) {
 }
 
 mainLoop();
-
 
 
 
