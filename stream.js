@@ -3291,7 +3291,7 @@ const obs = new OBSWebSocket();
 // =========================================================================================
 // ⏱️ BIG VARIABLE: FORCE AUTO-REFRESH TIME (IN MINUTES)
 // =========================================================================================
-const FORCE_REFRESH_MINUTES = 1; 
+const FORCE_REFRESH_MINUTES = 9; 
 const FORCE_REFRESH_MS = FORCE_REFRESH_MINUTES * 60 * 1000;
 
 // =========================================================================================
