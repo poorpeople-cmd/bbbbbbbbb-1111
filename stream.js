@@ -43,7 +43,8 @@ const FORCE_REFRESH_MS = FORCE_REFRESH_MINUTES * 60 * 1000;
 const NO_REFRESH_DOMAINS = [
     'youtube.com',
     'facebook.com',
-    'streamed.pk'
+    'streamed.pk',
+    'embedhd.org'
 ];
 
 // 🚀 Multi-Stream Key Manager
