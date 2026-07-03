@@ -44,7 +44,7 @@ const NO_REFRESH_DOMAINS = [
     'youtube.com',
     'facebook.com',
     'streamed.pk',
-    'embedhd.org'
+    'websitestream.netlify.app/?ch=Channel%20HD%2071'
 ];
 
 // 🚀 Multi-Stream Key Manager
