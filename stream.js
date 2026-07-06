@@ -8,12 +8,6 @@ const os = require('os');
 const { spawn, execSync, exec } = require('child_process');
 const { OBSWebSocket } = require('obs-websocket-js'); 
 
-// 👇 YEH 2 NAYI LINES ADD KAREIN 👇
-const { PuppeteerBlocker } = require('@ghostery/adblocker-puppeteer');
-const fetch = require('cross-fetch');
-// 👆 ========================== 👆
-
-
 // =========================================================================================
 // 🛡️ GLOBAL CRASH PREVENTION SHIELD (2026 LATEST FIX)
 // =========================================================================================
@@ -579,24 +573,9 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     }
 
                     // Strict Dynamic DOM Target Block
-                    // Humne 'in-page-message' tag ko junkClasses mein add kar diya hai
-                    const junkClasses = 'in-page-message, .chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"], [id*="notification"]';
+                    const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"], [id*="notification"]';
                     document.querySelectorAll(junkClasses).forEach(el => { 
                         try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
-                    });
-
-                    // 🛡️ LATEST FIX: SHADOW DOM AD KILLER
-                    // Yeh code page ke har element ko check karega aur agar kisi ke andar Shadow DOM chupaa hai (jaise aapki image mein 'missclick' aur 'close-0' tha), toh us pure ad container ko destroy kar dega.
-                    document.querySelectorAll('*').forEach(el => {
-                        if (el.shadowRoot) {
-                            const shadowHTML = el.shadowRoot.innerHTML.toLowerCase();
-                            if (shadowHTML.includes('missclick') || shadowHTML.includes('close-0') || shadowHTML.includes('ad-container')) {
-                                try { 
-                                    el.remove(); 
-                                    console.log('[🛡️] Shadow DOM Ad Destroyed!');
-                                } catch(e) {}
-                            }
-                        }
                     });
 
                     const adKeywords = ['jerk', 'mate', 'free', 'online', 'adult', 'dating', 'close', 'notification', 'justine', 'paying', 'job'];
@@ -971,12 +950,11 @@ async function startDirectStreaming() {
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
-        
+
         // 👇 YEH 2 NAYI LINES EXTENSION KO CHROME MEIN LOAD KARENGI 👇
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`
         // 👆 ======================================================= 👆
-        
     ];
 
     if (PROXY_ENGINE.includes('Cloudflare')) {
@@ -1010,14 +988,6 @@ async function startDirectStreaming() {
     backupPage = await browser.newPage();
     
     // FIXED: Removed invalid page.setMuted() calls here
-
-    // 👇 YEH NAYA ADBLOCKER CODE YAHAN ADD KAREIN 👇
-    console.log('[*] Downloading & Injecting uBlock/Ghostery Engine...');
-    const blocker = await PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch);
-    await blocker.enableBlockingInPage(activePage);
-    await blocker.enableBlockingInPage(backupPage);
-    console.log('[+] Native Ad-Blocker Active on both tabs!');
-    // 👆 ========================================= 👆
 
     await setupNetworkAdBlocker(activePage);
     await setupNetworkAdBlocker(backupPage);
