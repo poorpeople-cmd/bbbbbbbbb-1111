@@ -579,9 +579,24 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     }
 
                     // Strict Dynamic DOM Target Block
-                    const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"], [id*="notification"]';
+                    // Humne 'in-page-message' tag ko junkClasses mein add kar diya hai
+                    const junkClasses = 'in-page-message, .chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"], [id*="notification"]';
                     document.querySelectorAll(junkClasses).forEach(el => { 
                         try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
+                    });
+
+                    // 🛡️ LATEST FIX: SHADOW DOM AD KILLER
+                    // Yeh code page ke har element ko check karega aur agar kisi ke andar Shadow DOM chupaa hai (jaise aapki image mein 'missclick' aur 'close-0' tha), toh us pure ad container ko destroy kar dega.
+                    document.querySelectorAll('*').forEach(el => {
+                        if (el.shadowRoot) {
+                            const shadowHTML = el.shadowRoot.innerHTML.toLowerCase();
+                            if (shadowHTML.includes('missclick') || shadowHTML.includes('close-0') || shadowHTML.includes('ad-container')) {
+                                try { 
+                                    el.remove(); 
+                                    console.log('[🛡️] Shadow DOM Ad Destroyed!');
+                                } catch(e) {}
+                            }
+                        }
                     });
 
                     const adKeywords = ['jerk', 'mate', 'free', 'online', 'adult', 'dating', 'close', 'notification', 'justine', 'paying', 'job'];
