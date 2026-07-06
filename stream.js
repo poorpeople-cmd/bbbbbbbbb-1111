@@ -8,6 +8,12 @@ const os = require('os');
 const { spawn, execSync, exec } = require('child_process');
 const { OBSWebSocket } = require('obs-websocket-js'); 
 
+// 👇 YEH 2 NAYI LINES ADD KAREIN 👇
+const { PuppeteerBlocker } = require('@ghostery/adblocker-puppeteer');
+const fetch = require('cross-fetch');
+// 👆 ========================== 👆
+
+
 // =========================================================================================
 // 🛡️ GLOBAL CRASH PREVENTION SHIELD (2026 LATEST FIX)
 // =========================================================================================
@@ -983,6 +989,14 @@ async function startDirectStreaming() {
     backupPage = await browser.newPage();
     
     // FIXED: Removed invalid page.setMuted() calls here
+
+    // 👇 YEH NAYA ADBLOCKER CODE YAHAN ADD KAREIN 👇
+    console.log('[*] Downloading & Injecting uBlock/Ghostery Engine...');
+    const blocker = await PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch);
+    await blocker.enableBlockingInPage(activePage);
+    await blocker.enableBlockingInPage(backupPage);
+    console.log('[+] Native Ad-Blocker Active on both tabs!');
+    // 👆 ========================================= 👆
 
     await setupNetworkAdBlocker(activePage);
     await setupNetworkAdBlocker(backupPage);
