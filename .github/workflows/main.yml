@@ -220,7 +220,7 @@ jobs:
       # 👇 NAYA AUTOMATED DOWNLOAD & EXTRACT STEP 👇
       - name: Download & Extract uBlock Lite Extension
         run: |
-          wget -O ublock-lite.zip https://github.com/uBlockOrigin/uBOL-home/releases/download/uBOLite_2026.705.2152/uBOLite_2026.705.2152.chromium.zip
+          wget -O ublock-lite.zip https://github.com/uBlockOrigin/uBOL-home/releases/download/2026.705.2152/uBOLite_2026.705.2152.chromium.zip
           unzip ublock-lite.zip -d ublock-lite
           echo "[+] Extension Downloaded & Extracted Successfully in 'ublock-lite' folder!"
       # 👆 ======================================== 👆
