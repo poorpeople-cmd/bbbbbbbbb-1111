@@ -950,11 +950,11 @@ async function startDirectStreaming() {
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
-
-        // 👇 YEH 2 NAYI LINES EXTENSION KO CHROME MEIN LOAD KARENGI 👇
-        `--disable-extensions-except=${extensionPath}`,
-        `--load-extension=${extensionPath}`
-        // 👆 ======================================================= 👆
+        
+        // 👇 FIXED: Direct path injection (Koi variable ka masla nahi hoga) 👇
+        `--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`,
+        `--load-extension=${path.join(process.cwd(), 'ublock-lite')}`
+        // 👆 ========================================================== 👆
     ];
 
     if (PROXY_ENGINE.includes('Cloudflare')) {
