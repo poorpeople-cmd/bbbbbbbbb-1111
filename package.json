@@ -11,6 +11,8 @@
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "puppeteer-screen-recorder": "^2.1.2",
-    "obs-websocket-js": "^5.0.3"
+    "obs-websocket-js": "^5.0.3",
+    "@ghostery/adblocker-puppeteer": "^2.0.0",
+    "cross-fetch": "^4.0.0"
   }
 }
