@@ -970,7 +970,13 @@ async function startDirectStreaming() {
         '--disable-features=Translate,BlinkGenPropertyTrees,CalculateNativeWinOcclusion',
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
+        '--disable-renderer-backgrounding',
+        
+        // 👇 YEH 2 NAYI LINES EXTENSION KO CHROME MEIN LOAD KARENGI 👇
+        `--disable-extensions-except=${extensionPath}`,
+        `--load-extension=${extensionPath}`
+        // 👆 ======================================================= 👆
+        
     ];
 
     if (PROXY_ENGINE.includes('Cloudflare')) {
