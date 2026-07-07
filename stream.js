@@ -44,6 +44,7 @@ const NO_REFRESH_DOMAINS = [
     'youtube.com',
     'facebook.com',
     'streamed.pk',
+    'cricstreams.',
     'website-vercel-helper-d-jaja-3-2.vercel.app',
     'websitestream.netlify.app/?ch=Channel%20HD%2071'
 ];
