@@ -536,22 +536,36 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     document.documentElement.style.setProperty('overflow', 'hidden', 'important');
 
                     let iframes = Array.from(document.querySelectorAll('iframe'));
-                    let mainIframe = null; let maxArea = 0;
+                    let mainIframe = null; 
+                    let maxScore = -1;
 
                     iframes.forEach(ifr => {
-                        let area = ifr.clientWidth * ifr.clientHeight;
-                        if (area > maxArea && area > 5000) { maxArea = area; mainIframe = ifr; }
+                        let width = ifr.clientWidth;
+                        let height = ifr.clientHeight;
+                        let area = width * height;
+
+                        if (area < 5000) return;
+
+                        if (height > width) {
+                            try { ifr.remove(); } catch(e) {} 
+                            return;
+                        }
+
+                        let score = area;
+                        
+                        if (ifr.hasAttribute('allowfullscreen') || 
+                            ifr.hasAttribute('webkitallowfullscreen') || 
+                            ifr.hasAttribute('mozallowfullscreen')) {
+                            score += 10000000; 
+                        }
+
+                        if (score > maxScore) {
+                            maxScore = score;
+                            mainIframe = ifr;
+                        }
                     });
 
-                    if (!mainIframe && iframes.length > 0) {
-                        mainIframe = iframes.find(ifr => 
-                            ifr.getAttribute('allowfullscreen') !== null || 
-                            (ifr.src && (ifr.src.includes('player') || ifr.src.includes('embed') || ifr.src.includes('stream') || ifr.src.includes('watch')))
-                        );
-                    }
-
                     if (mainIframe) {
-                        // ☢️ NUCLEAR WHITELIST TRAVERSAL ☢️
                         let currentElement = mainIframe;
                         
                         while (currentElement && currentElement !== document.body && currentElement !== document.documentElement) {
