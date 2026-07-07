@@ -527,6 +527,80 @@ async function initializeVideo(page, startMuted, isActivePage) {
             } catch (e) { }
         }
 
+        // await page.evaluate(() => {
+        //     setInterval(() => {
+        //         try {
+        //             document.documentElement.style.setProperty('background-color', 'black', 'important');
+        //             document.body.style.setProperty('background-color', 'black', 'important');
+        //             document.body.style.setProperty('overflow', 'hidden', 'important');
+        //             document.documentElement.style.setProperty('overflow', 'hidden', 'important');
+
+        //             let iframes = Array.from(document.querySelectorAll('iframe'));
+        //             let mainIframe = null; 
+        //             let maxScore = -1;
+
+        //             iframes.forEach(ifr => {
+        //                 let width = ifr.clientWidth;
+        //                 let height = ifr.clientHeight;
+        //                 let area = width * height;
+
+        //                 if (area < 5000) return;
+
+        //                 if (height > width) {
+        //                     try { ifr.remove(); } catch(e) {} 
+        //                     return;
+        //                 }
+
+        //                 let score = area;
+                        
+        //                 if (ifr.hasAttribute('allowfullscreen') || 
+        //                     ifr.hasAttribute('webkitallowfullscreen') || 
+        //                     ifr.hasAttribute('mozallowfullscreen')) {
+        //                     score += 10000000; 
+        //                 }
+
+        //                 if (score > maxScore) {
+        //                     maxScore = score;
+        //                     mainIframe = ifr;
+        //                 }
+        //             });
+
+        //             if (mainIframe) {
+        //                 let currentElement = mainIframe;
+                        
+        //                 while (currentElement && currentElement !== document.body && currentElement !== document.documentElement) {
+        //                     let parent = currentElement.parentNode;
+        //                     if (parent) {
+        //                         Array.from(parent.children).forEach(sibling => {
+        //                             if (sibling !== currentElement && 
+        //                                 sibling.tagName !== 'SCRIPT' && 
+        //                                 sibling.tagName !== 'STYLE' && 
+        //                                 sibling.tagName !== 'LINK' && 
+        //                                 sibling.id !== 'smart-stream-overlay') {
+        //                                 try { sibling.remove(); } 
+        //                                 catch(e) { sibling.style.setProperty('display', 'none', 'important'); }
+        //                             }
+        //                         });
+        //                     }
+        //                     currentElement = parent;
+        //                 }
+
+        //                 mainIframe.style.setProperty('position', 'fixed', 'important');
+        //                 mainIframe.style.setProperty('top', '0px', 'important');
+        //                 mainIframe.style.setProperty('left', '0px', 'important');
+        //                 mainIframe.style.setProperty('width', '100vw', 'important');
+        //                 mainIframe.style.setProperty('height', '100vh', 'important');
+        //                 mainIframe.style.setProperty('z-index', '2147483647', 'important'); 
+        //                 mainIframe.style.setProperty('background-color', 'black', 'important');
+        //                 mainIframe.style.setProperty('border', 'none', 'important');
+        //                 mainIframe.style.setProperty('opacity', '1', 'important');
+        //                 mainIframe.style.setProperty('display', 'block', 'important');
+        //                 mainIframe.style.setProperty('visibility', 'visible', 'important');
+        //             }
+        //         } catch (err) {}
+        //     }, 500); 
+        // }).catch(() => {});
+
         await page.evaluate(() => {
             setInterval(() => {
                 try {
@@ -536,9 +610,9 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     document.documentElement.style.setProperty('overflow', 'hidden', 'important');
 
                     let iframes = Array.from(document.querySelectorAll('iframe'));
-                    let mainIframe = null; 
-                    let maxScore = -1;
+                    let mainIframe = null; let maxScore = -1;
 
+                    // 1. ADVANCED GEOMETRIC SCORING (Chatango Bypass)
                     iframes.forEach(ifr => {
                         let width = ifr.clientWidth;
                         let height = ifr.clientHeight;
@@ -546,17 +620,18 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
                         if (area < 5000) return;
 
-                        if (height > width) {
-                            try { ifr.remove(); } catch(e) {} 
-                            return;
-                        }
-
                         let score = area;
                         
+                        // Video Player Proof
                         if (ifr.hasAttribute('allowfullscreen') || 
                             ifr.hasAttribute('webkitallowfullscreen') || 
                             ifr.hasAttribute('mozallowfullscreen')) {
                             score += 10000000; 
+                        }
+                        
+                        // Geometric Chat Widget Proof (Portrait Mode = Immediate Disqualify)
+                        if (height > width) {
+                            score = -1; 
                         }
 
                         if (score > maxScore) {
@@ -565,38 +640,70 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         }
                     });
 
-                    if (mainIframe) {
-                        let currentElement = mainIframe;
-                        
-                        while (currentElement && currentElement !== document.body && currentElement !== document.documentElement) {
-                            let parent = currentElement.parentNode;
-                            if (parent) {
-                                Array.from(parent.children).forEach(sibling => {
-                                    if (sibling !== currentElement && 
-                                        sibling.tagName !== 'SCRIPT' && 
-                                        sibling.tagName !== 'STYLE' && 
-                                        sibling.tagName !== 'LINK' && 
-                                        sibling.id !== 'smart-stream-overlay') {
-                                        try { sibling.remove(); } 
-                                        catch(e) { sibling.style.setProperty('display', 'none', 'important'); }
-                                    }
-                                });
-                            }
-                            currentElement = parent;
-                        }
+                    // Original Fallback
+                    if (!mainIframe && iframes.length > 0) {
+                        mainIframe = iframes.find(ifr => 
+                            ifr.getAttribute('allowfullscreen') !== null || 
+                            (ifr.src && (ifr.src.includes('player') || ifr.src.includes('embed') || ifr.src.includes('stream') || ifr.src.includes('watch')))
+                        );
+                    }
 
+                    if (mainIframe) {
+                        // 2. SAFE HIDING PROTOCOL (Original logic combined with Parent Wrapping Wipe)
+                        iframes.forEach(ifr => {
+                            if (ifr !== mainIframe) {
+                                // Iframe ko chupao
+                                ifr.style.setProperty('display', 'none', 'important');
+                                ifr.style.setProperty('opacity', '0', 'important');
+                                ifr.style.setProperty('z-index', '-9999', 'important');
+                                
+                                // Uske wrapper (jaise Chatango ka div#OMW) ko bhi safe mode mein chupao
+                                if (ifr.parentNode && ifr.parentNode !== document.body) {
+                                    try { 
+                                        ifr.parentNode.style.setProperty('display', 'none', 'important'); 
+                                        ifr.parentNode.style.setProperty('opacity', '0', 'important');
+                                    } catch(e) {}
+                                }
+                            }
+                        });
+
+                        // 3. LOCK MAIN VIDEO
                         mainIframe.style.setProperty('position', 'fixed', 'important');
                         mainIframe.style.setProperty('top', '0px', 'important');
                         mainIframe.style.setProperty('left', '0px', 'important');
                         mainIframe.style.setProperty('width', '100vw', 'important');
                         mainIframe.style.setProperty('height', '100vh', 'important');
-                        mainIframe.style.setProperty('z-index', '2147483647', 'important'); 
+                        mainIframe.style.setProperty('z-index', '2147483645', 'important'); 
                         mainIframe.style.setProperty('background-color', 'black', 'important');
                         mainIframe.style.setProperty('border', 'none', 'important');
                         mainIframe.style.setProperty('opacity', '1', 'important');
                         mainIframe.style.setProperty('display', 'block', 'important');
                         mainIframe.style.setProperty('visibility', 'visible', 'important');
                     }
+
+                    // 4. RESTORE ORIGINAL JUNK CLEANER (For random floating ads)
+                    const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"], [id*="notification"]';
+                    document.querySelectorAll(junkClasses).forEach(el => { 
+                        try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
+                    });
+
+                    const adKeywords = ['jerk', 'mate', 'free', 'online', 'adult', 'dating', 'close', 'notification', 'justine', 'paying', 'job'];
+                    document.querySelectorAll('div, section, span, a').forEach(el => {
+                        if (el.id === 'smart-stream-overlay') return;
+                        
+                        const style = window.getComputedStyle(el);
+                        const isFloating = style.position === 'fixed' || style.position === 'absolute';
+                        
+                        if (isFloating && el.innerText) {
+                            const textLower = el.innerText.toLowerCase();
+                            const hasBadKeyword = adKeywords.some(keyword => textLower.includes(keyword));
+                            
+                            if (hasBadKeyword || (parseInt(style.zIndex) > 100000 && !el.querySelector('video') && !el.querySelector('iframe'))) {
+                                try { el.remove(); } catch(e) { el.style.setProperty('display', 'none', 'important'); }
+                            }
+                        }
+                    });
+
                 } catch (err) {}
             }, 500); 
         }).catch(() => {});
