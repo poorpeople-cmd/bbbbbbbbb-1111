@@ -345,9 +345,7 @@ jobs:
               console.log(\`[*] 5h 50m Completed at \${getPktTime()}! Triggering next Stream Manager...\`);
               try {
               
-                // const nextManagerCmd = \`gh workflow run stream-manager.yml -f stop_time='\${stopTimeInput}' -f delete_kachra='\${deleteKachra ? 'Yes' : 'No'}'\`;
-                // Sahi Line (Jo true/false bheje gi)
-                const nextManagerCmd = `gh workflow run stream-manager.yml -f stop_time='${stopTimeInput}' -f delete_kachra='${deleteKachra ? 'true' : 'false'}'`;
+                const nextManagerCmd = \`gh workflow run stream-manager.yml -f stop_time='\${stopTimeInput}' -f delete_kachra='\${deleteKachra ? 'Yes' : 'No'}'\`;
                 
                 execSync(nextManagerCmd, { stdio: 'inherit' });
                 console.log('[+] Handover complete! Shutting down cleanly.');
