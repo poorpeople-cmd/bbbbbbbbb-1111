@@ -1315,7 +1315,7 @@ mainLoop();
 
 
 
-=========== ALhamdullah ALhamdullah yeh teek hai alhamdullah bas upper eek player hai new player jiska website k naem hai "https://embedsport.live/channel/tsn1/111/" iss me custom measn video k play button nahey bulkey html k play button hai . Jiskoo click karney see stream start huty hai. iska code upper lekty hai srf eek line change karna hai and wo line yeh hai old line is : const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, [class*="unmute"], .fp-play'); =======================
+// =========== ALhamdullah ALhamdullah yeh teek hai alhamdullah bas upper eek player hai new player jiska website k naem hai "https://embedsport.live/channel/tsn1/111/" iss me custom measn video k play button nahey bulkey html k play button hai . Jiskoo click karney see stream start huty hai. iska code upper lekty hai srf eek line change karna hai and wo line yeh hai old line is : const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, [class*="unmute"], .fp-play'); =======================
 
 
 
