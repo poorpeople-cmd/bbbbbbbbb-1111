@@ -798,7 +798,8 @@ async function checkPageStatus(page) {
                         return { status: 'DEAD', exactReason: 'No Valid Video Element Found on Page (Ad/Popup Blocked it)' };
                         // 🚨 NAYA LOGIC YAHAN KHATAM HUA
                     }),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
+                    // new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 7000)) // ⏱️ BUMPED FROM 2500 TO 7000
                 ]);
                 if (result && result.status !== 'DEAD') return result;
             } catch (err) {}
