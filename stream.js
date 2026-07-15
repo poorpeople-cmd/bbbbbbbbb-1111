@@ -508,7 +508,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         break;
                     }
 
-                    // const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, [class*="unmute"], .fp-play');
                     const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, [class*="unmute"], .fp-play, #hero-play-btn');
                     if (playBtn) {
                         const isVisible = await frame.evaluate(el => {
@@ -717,7 +716,15 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
     } catch (e) { }
 
-    // 🔥 Added Smart Unmute Execution Hereasync function checkPageStatus(page) {
+    // 🔥 Added Smart Unmute Execution Here
+    await triggerSmartUnmute(page);
+    await new Promise(r => setTimeout(r, 1000));
+}
+
+// ==========================================
+// 🚨 2026 UPDATED checkPageStatus
+// ==========================================
+async function checkPageStatus(page) {
     if (!page) return { status: 'DEAD' };
     try {
         for (const frame of page.frames()) {
@@ -799,12 +806,10 @@ async function initializeVideo(page, startMuted, isActivePage) {
     } catch (e) { return { status: 'DEAD', exactReason: 'Frame Check Crash' }; }
     return { status: 'DEAD', exactReason: 'No Active Video Frames Detected' };
 }
-    await triggerSmartUnmute(page);
-    await new Promise(r => setTimeout(r, 1000));
-}
 
-
-
+// ==========================================
+// 🚨 UPDATED startWatchdog
+// ==========================================
 async function startWatchdog() {
     let lastActiveTime = -1;
     let lastDecodedFrames = -1; 
@@ -926,7 +931,7 @@ async function startWatchdog() {
                 } catch(e) {
                     console.log(`[⏳] Proactive refresh buffer navigation handled safely.`);
                 }
-            } } else {
+            } else {
                 console.log(`\n==================================================`);
                 console.log(`[!] ❌ WATCHDOG DETECTED ISSUE: ${activeStatus.status}`);
                 console.log(`[🔍] EXACT REASON: ${activeStatus.exactReason || 'Unknown / Bot Blocked'}`);
