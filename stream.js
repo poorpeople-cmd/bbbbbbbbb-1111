@@ -793,11 +793,11 @@ async function initializeVideo(page, startMuted, isActivePage) {
         //     }, 500); 
         // }, startMuted).catch(() => {});
 
-    } catch (e) { }
+//     } catch (e) { }
 
-    await triggerSmartUnmute(page);
-    await new Promise(r => setTimeout(r, 1000));
-}
+//     await triggerSmartUnmute(page);
+//     await new Promise(r => setTimeout(r, 1000));
+// }
 
 async function checkPageStatus(page) {
     if (!page) return { status: 'DEAD' };
