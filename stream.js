@@ -660,89 +660,70 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
         // 🔥 INSIDE IFRAME AD-KILLER (NEW & AGGRESSIVE) 🔥
         // 🔥 INSIDE IFRAME AD-KILLER (NEW & AGGRESSIVE) 🔥
-        await targetFrame.evaluate((muteVideo) => {
-            setInterval(() => {
-                try {
-                    const style = document.createElement('style');
-                    style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls, .ads, [class*="ad-"], [id*="ad-"] { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
-                    document.head.appendChild(style);
+        // 🔥 INSIDE DEEP-NESTED IFRAME AD-KILLER (NEW & AGGRESSIVE) 🔥
+        // Ab hum sirf ek frame nahi, har single nested frame mein loop chala rahe hain
+        for (const nestedFrame of page.frames()) {
+            try {
+                if (nestedFrame.isDetached()) continue;
 
-                    const junkClasses = '.chat, #chat, .ads, [class*="overlay"], [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"]';
-                    document.querySelectorAll(junkClasses).forEach(el => {
-                        try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); }
-                    });
+                await nestedFrame.evaluate((muteVideo) => {
+                    setInterval(() => {
+                        try {
+                            const style = document.createElement('style');
+                            style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls, .ads, [class*="ad-"], [id*="ad-"] { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
+                            document.head.appendChild(style);
 
-                    // 🛑 NAYE KEYWORDS ADD KIYE GAYE HAIN (missed, call, video call, join, etc.)
-                    const adKeywords = ['jerk', 'mate', 'free', 'online', 'adult', 'dating', 'close', 'notification', 'justine', 'paying', 'job', 'casino', 'bet', 'missed', 'call', 'join', 'video call', 'cam', 'chat'];
-                    
-                    document.querySelectorAll('div, span, a, iframe, img').forEach(el => {
-                        const style = window.getComputedStyle(el);
-                        const isFloating = style.position === 'fixed' || style.position === 'absolute';
-                        
-                        // Rule 1: Remove sketchy iframes
-                        if (el.tagName === 'IFRAME' && el.src && (el.src.includes('pop') || el.src.includes('ad'))) {
-                            try { el.remove(); } catch(e){}
-                        }
+                            const junkClasses = '.chat, #chat, .ads, [class*="overlay"], [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"]';
+                            document.querySelectorAll(junkClasses).forEach(el => {
+                                try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); }
+                            });
 
-                        // Rule 2: Text matching (Agar adKeywords mein se koi word match hua toh uda do)
-                        if (isFloating && el.innerText) {
-                            const textLower = el.innerText.toLowerCase();
-                            const hasBadKeyword = adKeywords.some(keyword => textLower.includes(keyword));
-                            if (hasBadKeyword || (parseInt(style.zIndex) > 10000 && !el.querySelector('video'))) {
-                                try { el.remove(); } catch(e) { el.style.setProperty('display', 'none', 'important'); }
-                            }
-                        }
-
-                        // Rule 3: Aggressive Size/Z-Index Nuke (Agar bina text ki sirf image hai overlay mein)
-                        if (isFloating && parseInt(style.zIndex) > 100) {
-                            const rect = el.getBoundingClientRect();
-                            const screenArea = window.innerWidth * window.innerHeight;
-                            const elArea = rect.width * rect.height;
+                            const adKeywords = ['jerk', 'mate', 'free', 'online', 'adult', 'dating', 'close', 'notification', 'justine', 'paying', 'job', 'casino', 'bet', 'missed', 'call', 'join', 'video call', 'cam', 'chat'];
                             
-                            // Agar element screen ka 5% se zyada hissa le raha hai aur video nahi hai
-                            if (elArea > (screenArea * 0.05) && !el.querySelector('video') && el.tagName !== 'VIDEO') {
-                                try { el.remove(); } catch(e) { el.style.setProperty('display', 'none', 'important'); }
+                            document.querySelectorAll('div, span, a, iframe, img').forEach(el => {
+                                const style = window.getComputedStyle(el);
+                                const isFloating = style.position === 'fixed' || style.position === 'absolute';
+                                
+                                // Remove sketchy iframes natively
+                                if (el.tagName === 'IFRAME' && el.src && (el.src.includes('pop') || el.src.includes('ad'))) {
+                                    try { el.remove(); } catch(e){}
+                                }
+
+                                if (isFloating && el.innerText) {
+                                    const textLower = el.innerText.toLowerCase();
+                                    const hasBadKeyword = adKeywords.some(keyword => textLower.includes(keyword));
+                                    if (hasBadKeyword || (parseInt(style.zIndex) > 10000 && !el.querySelector('video'))) {
+                                        try { el.remove(); } catch(e) { el.style.setProperty('display', 'none', 'important'); }
+                                    }
+                                }
+
+                                if (isFloating && parseInt(style.zIndex) > 100) {
+                                    const rect = el.getBoundingClientRect();
+                                    const screenArea = window.innerWidth * window.innerHeight;
+                                    const elArea = rect.width * rect.height;
+                                    
+                                    if (elArea > (screenArea * 0.05) && !el.querySelector('video') && el.tagName !== 'VIDEO') {
+                                        try { el.remove(); } catch(e) { el.style.setProperty('display', 'none', 'important'); }
+                                    }
+                                }
+                            });
+
+                            // Mute logic applied to all deep iframes
+                            const mediaElements = document.querySelectorAll('video, audio');
+                            mediaElements.forEach(media => { 
+                                media.muted = muteVideo; 
+                                media.volume = muteVideo ? 0.0 : 1.0; 
+                            });
+
+                            if (!muteVideo) {
+                                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"], .unmute-btn').forEach(btn => { try { btn.click(); } catch(e){} });
                             }
-                        }
-                    });
 
-                    const mediaElements = document.querySelectorAll('video, audio');
-                    const videos = Array.from(document.querySelectorAll('video'));
-                    let realVideo = null;
-
-                    mediaElements.forEach(media => { 
-                        media.muted = muteVideo; 
-                        media.volume = muteVideo ? 0.0 : 1.0; 
-                    });
-
-                    if (!muteVideo) {
-                        document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"], .unmute-btn').forEach(btn => { try { btn.click(); } catch(e){} });
-                    }
-
-                    for (const v of videos) {
-                        if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; }
-                    }
-
-                    if (!realVideo && videos.length > 0) {
-                        realVideo = videos[0];
-                    }
-
-                    if (realVideo) { 
-                        realVideo.style.setProperty('position', 'fixed', 'important');
-                        realVideo.style.setProperty('top', '0px', 'important');
-                        realVideo.style.setProperty('left', '0px', 'important');
-                        realVideo.style.setProperty('width', '100vw', 'important');
-                        realVideo.style.setProperty('height', '100vh', 'important');
-                        realVideo.style.setProperty('z-index', '2147483646', 'important'); 
-                        realVideo.style.setProperty('background-color', 'black', 'important');
-                        realVideo.style.setProperty('object-fit', 'contain', 'important');
-                        realVideo.style.setProperty('opacity', '1', 'important');
-                        realVideo.style.setProperty('visibility', 'visible', 'important');
-                        realVideo.style.setProperty('display', 'block', 'important');
-                    }
-                } catch(err) {}
-            }, 500); 
-        }, startMuted).catch(() => {});
+                        } catch(err) {}
+                    }, 500); 
+                }, startMuted).catch(() => {});
+            } catch(e) {}
+        }
         
         // await targetFrame.evaluate((muteVideo) => {
         //     setInterval(() => {
