@@ -865,8 +865,14 @@ async function startWatchdog() {
         
         if (watchdogTicks === 1 || watchdogTicks % 90 === 0) {
             console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
-            console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
-            console.log(`[⏭️] NEXT IN QUEUE    : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
+            
+            // ✨ SIRF HEALTHY HONE PAR LIVE DETAILS DIKHAO
+            if (activeStatus.status === 'HEALTHY') {
+                console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
+                console.log(`[⏭️] NEXT IN QUEUE    : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
+            } else {
+                console.log(`[⚠️] STREAM IS NOT ACTIVE: Waiting for system to recover or swap...`);
+            }
         }
 
         if (watchdogTicks % 120 === 0) {
