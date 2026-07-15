@@ -815,6 +815,7 @@ async function startWatchdog() {
     let lastActiveTime = -1;
     let lastDecodedFrames = -1; 
     let frozenCheckTimestamp = Date.now();
+    let deadCheckTimestamp = 0; // 🚨 YEH NAYA VARIABLE ADD KAREIN
     let watchdogTicks = 0;
     
     let streamSetupTime = Date.now(); 
@@ -912,6 +913,19 @@ async function startWatchdog() {
                 await new Promise(r => setTimeout(r, 2000));
                 continue; 
             }
+
+            // 🚨 NAYA LOGIC: GRACE PERIOD FOR 'DEAD' STATUS (Panic Prevention Shield)
+            if (activeStatus.status === 'DEAD' || activeStatus.status === 'CRITICAL_ERROR') {
+                if (deadCheckTimestamp === 0) deadCheckTimestamp = Date.now();
+                let deadElapsed = Date.now() - deadCheckTimestamp;
+                
+                if (deadElapsed < 12000) { // ⏳ 12 SECONDS GRACE PERIOD
+                    console.log(`[⏳] SYSTEM SHIELD: Ignoring temporary '${activeStatus.status}' signal. Waiting for recovery... (${(deadElapsed/1000).toFixed(1)}s / 12s)`);
+                    await new Promise(r => setTimeout(r, 2000));
+                    continue; // Hot-swap rok kar wapis check karega
+                }
+            }
+            deadCheckTimestamp = 0; // Agar 12s baad swap ho raha hai, toh timer reset kar do
 
             let isProactiveRefresh = (activeStatus.status === 'FORCE_REFRESH');
 
