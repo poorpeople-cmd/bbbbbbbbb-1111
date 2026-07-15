@@ -717,12 +717,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
     } catch (e) { }
 
-    // 🔥 Added Smart Unmute Execution Here
-    await triggerSmartUnmute(page);
-    await new Promise(r => setTimeout(r, 1000));
-}
-
-async function checkPageStatus(page) {
+    // 🔥 Added Smart Unmute Execution Hereasync function checkPageStatus(page) {
     if (!page) return { status: 'DEAD' };
     try {
         for (const frame of page.frames()) {
@@ -786,7 +781,15 @@ async function checkPageStatus(page) {
                                 exactReason: freezeReason 
                             };
                         }
-                        return { status: 'DEAD', exactReason: 'No Valid Video Element Found' };
+                        
+                        // 🚨 2026 SMART DEAD DIAGNOSTICS: YAHAN SE NAYA LOGIC SHURU HAI
+                        if (targetV && targetV.currentTime === 0) {
+                            return { status: 'DEAD', exactReason: 'Video Found, but Failed to Autoplay (Time is stuck at 0s)' };
+                        } else if (targetV && targetV.ended) {
+                            return { status: 'DEAD', exactReason: 'Stream Playback Ended / Finished' };
+                        }
+                        return { status: 'DEAD', exactReason: 'No Valid Video Element Found on Page (Ad/Popup Blocked it)' };
+                        // 🚨 NAYA LOGIC YAHAN KHATAM HUA
                     }),
                     new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
                 ]);
@@ -796,6 +799,11 @@ async function checkPageStatus(page) {
     } catch (e) { return { status: 'DEAD', exactReason: 'Frame Check Crash' }; }
     return { status: 'DEAD', exactReason: 'No Active Video Frames Detected' };
 }
+    await triggerSmartUnmute(page);
+    await new Promise(r => setTimeout(r, 1000));
+}
+
+
 
 async function startWatchdog() {
     let lastActiveTime = -1;
@@ -918,9 +926,10 @@ async function startWatchdog() {
                 } catch(e) {
                     console.log(`[⏳] Proactive refresh buffer navigation handled safely.`);
                 }
-            } else {
+            } } else {
                 console.log(`\n==================================================`);
                 console.log(`[!] ❌ WATCHDOG DETECTED ISSUE: ${activeStatus.status}`);
+                console.log(`[🔍] EXACT REASON: ${activeStatus.exactReason || 'Unknown / Bot Blocked'}`);
                 console.log(`[💀] FAILED STREAM: Server [${currentUrlIndex}] -> ${activeUrlStr}`);
                 console.log(`==================================================`);
                 await takeAndBatchScreenshot(activePage, `error-${activeStatus.status.toLowerCase()}`);
