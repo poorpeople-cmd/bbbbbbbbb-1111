@@ -147,31 +147,29 @@ async function setupNetworkAdBlocker(page) {
             const url = request.url().toLowerCase();
             const type = request.resourceType();
 
-            if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
-                const targetUrl = request.url().toLowerCase();
-                // 🛑 NAYA LATEST ADDITION: adexchangerapid added to blocklist
-                const adKeywords = ['popads', 'exoclick', 'adsterra', 'onclickads', 'jerkmate', 'adrevenue', 'fanduel', 'bet', 'casino', 'adexchangerapid'];
-                const isMaliciousAd = adKeywords.some(keyword => targetUrl.includes(keyword));
+            // 🛑 Aggressive payload blocking
+            const adDomains = [
+                'popads', 'exoclick', 'adsterra', 'onclickads', 'jerkmate', 
+                'adrevenue', 'fanduel', 'adexchangerapid', 'doubleclick', 'propellerads'
+            ];
 
-                if (isMaliciousAd) {
-                    console.log(`[🛡️] NAVIGATION SHIELD: Blocked malicious ad redirection to -> ${targetUrl.substring(0, 70)}...`);
+            const isAdDomain = adDomains.some(keyword => url.includes(keyword));
+
+            if (isAdDomain) {
+                console.log(`[🛡️] NETWORK SHIELD: Blocked known ad payload -> ${url.substring(0, 50)}...`);
+                request.abort().catch(()=>{});
+                return;
+            }
+
+            if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+                const adKeywords = ['bet', 'casino'];
+                if (adKeywords.some(keyword => url.includes(keyword))) {
                     request.abort().catch(()=>{});
                     return;
                 }
             }
 
-            if (
-                url.includes('popads') || 
-                url.includes('exoclick') || 
-                url.includes('adsterra') || 
-                url.includes('onclickads') || 
-                url.includes('jerkmate') ||
-                url.includes('adrevenue') ||
-                url.includes('fanduel') ||
-                url.includes('adexchangerapid') || // 🛑 Blocking payload source
-                url.includes('doubleclick') ||
-                (type === 'script' && (url.includes('analytics') || url.includes('tracking') || url.includes('ad-delivery') || url.includes('pop') || url.includes('zone')))
-            ) {
+            if (type === 'script' && (url.includes('analytics') || url.includes('tracking') || url.includes('ad-delivery') || url.includes('pop') || url.includes('zone'))) {
                 request.abort().catch(()=>{});
             } else {
                 request.continue().catch(()=>{});
@@ -184,6 +182,31 @@ async function applyPreloadFirewall(page) {
     if (!page) return;
     try {
         await page.evaluateOnNewDocument(() => {
+            // =========================================================
+            // 🛑 ULTIMATE SHADOW DOM AD KILLER (Monkey Patch)
+            // =========================================================
+            const originalAttachShadow = Element.prototype.attachShadow;
+            Element.prototype.attachShadow = function(init) {
+                // Force all shadow roots to be 'open' so we can inspect them
+                if (init && init.mode === 'closed') {
+                    init.mode = 'open';
+                }
+                const shadowRoot = originalAttachShadow.call(this, init);
+                
+                // Mutation Observer to instantly kill the ad if it injects bad elements
+                const observer = new MutationObserver(() => {
+                    const adElements = shadowRoot.querySelectorAll('in-page-message, [id^="note-"], [id^="missclick-"], [src*="adexchangerapid"]');
+                    if (adElements.length > 0) {
+                        console.log('[🛡️] SHIELD: Shadow DOM Ad Detected & Destroyed!');
+                        this.remove(); // Kill the entire host element of the ad!
+                    }
+                });
+                
+                observer.observe(shadowRoot, { childList: true, subtree: true });
+                return shadowRoot;
+            };
+
+            // Standard Protections
             window.alert = function() {};
             window.confirm = function() { return true; };
             window.prompt = function() { return null; };
@@ -209,7 +232,11 @@ async function applyPreloadFirewall(page) {
             }, true);
 
             const style = document.createElement('style');
-            style.textContent = `html, body { background-color: #000000 !important; overflow: hidden !important; }`;
+            style.textContent = `
+                html, body { background-color: #000000 !important; overflow: hidden !important; }
+                /* Extra CSS safety net */
+                in-page-message, [id^="note-"], [id^="missclick-"] { display: none !important; opacity: 0 !important; pointer-events: none !important; }
+            `;
             document.documentElement.appendChild(style);
 
             const attachOverlay = () => {
@@ -219,14 +246,7 @@ async function applyPreloadFirewall(page) {
                     overlay.id = 'smart-stream-overlay';
                     overlay.innerHTML = `
                         <style>
-                            #smart-stream-overlay {
-                                position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
-                                width: 100vw !important; height: 100vh !important; background: #000000 !important;
-                                z-index: 2147483647 !important; display: flex !important; flex-direction: column !important;
-                                justify-content: center !important; align-items: center !important; color: #ffffff !important;
-                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
-                                pointer-events: all !important;
-                            }
+                            #smart-stream-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: #000000 !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; color: #ffffff !important; font-family: sans-serif !important; pointer-events: all !important; }
                             .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
                             .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
                             .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
