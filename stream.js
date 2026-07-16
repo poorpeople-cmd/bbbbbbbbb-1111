@@ -523,23 +523,33 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     }
 
                     // NAYA LOGIC: Hidden play button aur togglePlayPause ko direct trigger karega
+                    // NAYA LOGIC: Sirf tab click karega jab video sach mein paused ho
                     const playedCustom = await frame.evaluate(() => {
-                        // Agar direct function available hai
-                        if (typeof togglePlayPause === 'function') {
-                            togglePlayPause();
+                        const playBtn = document.getElementById('play-pause-button');
+                        
+                        // Agar button majood hai aur usme 'play' ki class hai (yani video ruki hui hai)
+                        if (playBtn && playBtn.classList.contains('play')) {
+                            if (typeof togglePlayPause === 'function') {
+                                togglePlayPause();
+                                return true;
+                            } else {
+                                playBtn.click();
+                                return true;
+                            }
+                        }
+                        
+                        // Ek aur backup check iframe ke kisi aur play button ke liye
+                        const alternativeBtn = document.querySelector('.fp-playbtn.play');
+                        if (alternativeBtn) {
+                            alternativeBtn.click();
                             return true;
                         }
-                        // Agar function nahi hai, toh hidden element ko force click karein
-                        const hiddenBtn = document.getElementById('play-pause-button') || document.querySelector('.fp-playbtn.pause');
-                        if (hiddenBtn) {
-                            hiddenBtn.click();
-                            return true;
-                        }
-                        return false;
+                        
+                        return false; // Agar pehle se chal rahi hai (class 'pause' hai) toh kuch na kare
                     });
 
                     if (playedCustom) {
-                        await takeAndBatchScreenshot(page, `hidden-play-btn-clicked`);
+                        await takeAndBatchScreenshot(page, `smart-play-btn-clicked`);
                         await new Promise(r => setTimeout(r, 3000));
                         isVideoPlaying = true;
                         break;
