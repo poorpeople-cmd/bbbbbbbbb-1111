@@ -522,6 +522,30 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         break;
                     }
 
+                    // NAYA LOGIC: Hidden play button aur togglePlayPause ko direct trigger karega
+                    const playedCustom = await frame.evaluate(() => {
+                        // Agar direct function available hai
+                        if (typeof togglePlayPause === 'function') {
+                            togglePlayPause();
+                            return true;
+                        }
+                        // Agar function nahi hai, toh hidden element ko force click karein
+                        const hiddenBtn = document.getElementById('play-pause-button') || document.querySelector('.fp-playbtn.pause');
+                        if (hiddenBtn) {
+                            hiddenBtn.click();
+                            return true;
+                        }
+                        return false;
+                    });
+
+                    if (playedCustom) {
+                        await takeAndBatchScreenshot(page, `hidden-play-btn-clicked`);
+                        await new Promise(r => setTimeout(r, 3000));
+                        isVideoPlaying = true;
+                        break;
+                    }
+
+                    // STANDARD LOGIC: Baki normal players ke liye (Jaise JW Player, VideoJS waghera)
                     const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, [class*="unmute"], .fp-play, #hero-play-btn');
                     if (playBtn) {
                         const isVisible = await frame.evaluate(el => {
@@ -1176,7 +1200,109 @@ mainLoop();
 
 
 
-// ads killer
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ============= ads bypass done alhamdullah dlhd server 3 ===============
+
+
 
 
 
@@ -1191,7 +1317,7 @@ mainLoop();
 // const { OBSWebSocket } = require('obs-websocket-js'); 
 
 // // =========================================================================================
-// // 🛡️ GLOBAL CRASH PREVENTION SHIELD
+// // 🛡️ GLOBAL CRASH PREVENTION SHIELD (2026 LATEST FIX)
 // // =========================================================================================
 // process.on('uncaughtException', (err) => {
 //     if (err.message && err.message.includes('Requesting main frame too early')) {
@@ -1329,7 +1455,7 @@ mainLoop();
 //             const url = request.url().toLowerCase();
 //             const type = request.resourceType();
 
-//             // 🛑 Aggressive payload blocking
+//             // 🛑 Aggressive payload blocking added here
 //             const adDomains = [
 //                 'popads', 'exoclick', 'adsterra', 'onclickads', 'jerkmate', 
 //                 'adrevenue', 'fanduel', 'adexchangerapid', 'doubleclick', 'propellerads'
@@ -1365,22 +1491,20 @@ mainLoop();
 //     try {
 //         await page.evaluateOnNewDocument(() => {
 //             // =========================================================
-//             // 🛑 ULTIMATE SHADOW DOM AD KILLER (Monkey Patch)
+//             // 🛑 ULTIMATE SHADOW DOM AD KILLER (Monkey Patching)
 //             // =========================================================
 //             const originalAttachShadow = Element.prototype.attachShadow;
 //             Element.prototype.attachShadow = function(init) {
-//                 // Force all shadow roots to be 'open' so we can inspect them
 //                 if (init && init.mode === 'closed') {
-//                     init.mode = 'open';
+//                     init.mode = 'open'; // Force open to allow inspection
 //                 }
 //                 const shadowRoot = originalAttachShadow.call(this, init);
                 
-//                 // Mutation Observer to instantly kill the ad if it injects bad elements
 //                 const observer = new MutationObserver(() => {
 //                     const adElements = shadowRoot.querySelectorAll('in-page-message, [id^="note-"], [id^="missclick-"], [src*="adexchangerapid"]');
 //                     if (adElements.length > 0) {
 //                         console.log('[🛡️] SHIELD: Shadow DOM Ad Detected & Destroyed!');
-//                         this.remove(); // Kill the entire host element of the ad!
+//                         this.remove(); // Kill the entire host element
 //                     }
 //                 });
                 
@@ -1416,7 +1540,6 @@ mainLoop();
 //             const style = document.createElement('style');
 //             style.textContent = `
 //                 html, body { background-color: #000000 !important; overflow: hidden !important; }
-//                 /* Extra CSS safety net */
 //                 in-page-message, [id^="note-"], [id^="missclick-"] { display: none !important; opacity: 0 !important; pointer-events: none !important; }
 //             `;
 //             document.documentElement.appendChild(style);
@@ -1428,7 +1551,14 @@ mainLoop();
 //                     overlay.id = 'smart-stream-overlay';
 //                     overlay.innerHTML = `
 //                         <style>
-//                             #smart-stream-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: #000000 !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; color: #ffffff !important; font-family: sans-serif !important; pointer-events: all !important; }
+//                             #smart-stream-overlay {
+//                                 position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+//                                 width: 100vw !important; height: 100vh !important; background: #000000 !important;
+//                                 z-index: 2147483647 !important; display: flex !important; flex-direction: column !important;
+//                                 justify-content: center !important; align-items: center !important; color: #ffffff !important;
+//                                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+//                                 pointer-events: all !important;
+//                             }
 //                             .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
 //                             .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
 //                             .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
@@ -1514,10 +1644,10 @@ mainLoop();
 //                         .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
 //                         .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
 //                         .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+//                         @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+//                         @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
 //                         .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
 //                         .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
-//                         .stream-blink { animation: blinker 1.5s linear infinite; color: #e50914; font-weight: bold; }
-//                         @keyframes blinker { 50% { opacity: 0.3; } }
 //                     </style>
 //                     <div class="stream-spinner"></div>
 //                     <div class="progress-container"><div class="progress-bar-fill"></div></div>
@@ -1606,6 +1736,9 @@ mainLoop();
 //     });
 // }
 
+// // =========================================================================================
+// // 🔊 2026 INTELLIGENT FUZZY UNMUTE ENGINE
+// // =========================================================================================
 // async function triggerSmartUnmute(page) {
 //     for (const frame of page.frames()) {
 //         try {
@@ -1628,6 +1761,7 @@ mainLoop();
 //                         const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none';
 
 //                         if (isVisible) {
+//                             console.log(`[🔊 ENGINE]: Dynamically triggered click on element with text: "${text || 'JS Action'}"`);
 //                             try { el.click(); } catch(e) {}
 //                             try { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e) {}
 //                         }
@@ -1644,10 +1778,12 @@ mainLoop();
 //         } catch (e) {}
 //     }
 // }
+// // =========================================================================================
 
 // async function initializeVideo(page, startMuted, isActivePage) {
 //     try {
 //         if (SERVER_SELECTION !== 'None') {
+//             console.log(`[*] Clicking specific Server: ${SERVER_SELECTION}`);
 //             let serverClicked = false; let serverAttempts = 0;
 //             while (!serverClicked && serverAttempts < 10) { 
 //                 serverAttempts++;
@@ -1661,6 +1797,7 @@ mainLoop();
 
 //                     if (clickSuccess) {
 //                         serverClicked = true; 
+//                         console.log(`[+] Server Button clicked successfully!`);
 //                         await takeAndBatchScreenshot(page, `server-clicked`);
 //                         await new Promise(r => setTimeout(r, 2000)); 
 //                         if (isActivePage) await page.bringToFront(); 
@@ -1669,6 +1806,7 @@ mainLoop();
 //             }
 //         }
 
+//         console.log('[*] Checking if Video is Autoplaying or Needs a Play Button...');
 //         let isVideoPlaying = false; 
 //         let attempts = 0;
         
@@ -1738,6 +1876,7 @@ mainLoop();
 //             attempts++;
 //         }
 
+//         console.log('[*] Scanning for Exact Real Video Player...');
 //         let targetFrame = null;
 //         for (const frame of page.frames()) {
 //             try {
@@ -1747,50 +1886,19 @@ mainLoop();
 //                 });
 //                 if (isRealLiveStream) { 
 //                     targetFrame = frame; 
+//                     console.log(`[+] Smart Scanner locked onto video frame!`);
 //                     break; 
 //                 }
 //             } catch (e) { }
 //         }
 
 //         await page.evaluate(() => {
-//             // 🚀 NAYA LATEST ADDITION: Deep Shadow DOM Piercing Function
-//             const scanAndDestroyShadowAds = (rootNode) => {
-//                 if (!rootNode) return;
-//                 try {
-//                     const elements = rootNode.querySelectorAll('*');
-//                     elements.forEach(el => {
-//                         if (el.shadowRoot) {
-//                             scanAndDestroyShadowAds(el.shadowRoot);
-//                         }
-                        
-//                         const tag = el.tagName.toLowerCase();
-//                         const id = (el.id || '').toLowerCase();
-//                         const cls = (typeof el.className === 'string' ? el.className : '').toLowerCase();
-                        
-//                         if (
-//                             tag === 'in-page-message' || 
-//                             tag.includes('pop') || 
-//                             tag.includes('ad-') ||
-//                             id.includes('note-0') || 
-//                             id.includes('close-0') || 
-//                             id.includes('missclick') ||
-//                             cls.includes('in-page')
-//                         ) {
-//                             try { el.remove(); } catch(e) { el.style.setProperty('display', 'none', 'important'); }
-//                         }
-//                     });
-//                 } catch(e) {}
-//             };
-
 //             setInterval(() => {
 //                 try {
 //                     document.documentElement.style.setProperty('background-color', 'black', 'important');
 //                     document.body.style.setProperty('background-color', 'black', 'important');
 //                     document.body.style.setProperty('overflow', 'hidden', 'important');
 //                     document.documentElement.style.setProperty('overflow', 'hidden', 'important');
-
-//                     // 🚀 Run the Shadow DOM cleaner on the whole document
-//                     scanAndDestroyShadowAds(document);
 
 //                     let iframes = Array.from(document.querySelectorAll('iframe'));
 //                     let mainIframe = null; let maxScore = -1;
@@ -1799,7 +1907,9 @@ mainLoop();
 //                         let width = ifr.clientWidth;
 //                         let height = ifr.clientHeight;
 //                         let area = width * height;
+
 //                         if (area < 5000) return;
+
 //                         let score = area;
                         
 //                         if (ifr.hasAttribute('allowfullscreen') || 
@@ -1807,7 +1917,10 @@ mainLoop();
 //                             ifr.hasAttribute('mozallowfullscreen')) {
 //                             score += 10000000; 
 //                         }
-//                         if (height > width) { score = -1; }
+                        
+//                         if (height > width) {
+//                             score = -1; 
+//                         }
 
 //                         if (score > maxScore) {
 //                             maxScore = score;
@@ -1851,13 +1964,13 @@ mainLoop();
 //                         mainIframe.style.setProperty('visibility', 'visible', 'important');
 //                     }
 
-//                     const junkClasses = 'in-page-message, .chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"], [id*="notification"]';
+//                     const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"], [id*="notification"]';
 //                     document.querySelectorAll(junkClasses).forEach(el => { 
 //                         try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
 //                     });
 
-//                     const adKeywords = ['jerk', 'mate', 'free', 'online', 'adult', 'dating', 'close', 'notification', 'justine', 'paying', 'job', 'missclick', 'note-0'];
-//                     document.querySelectorAll('div, section, span, a, in-page-message').forEach(el => {
+//                     const adKeywords = ['jerk', 'mate', 'free', 'online', 'adult', 'dating', 'close', 'notification', 'justine', 'paying', 'job'];
+//                     document.querySelectorAll('div, section, span, a').forEach(el => {
 //                         if (el.id === 'smart-stream-overlay') return;
                         
 //                         const style = window.getComputedStyle(el);
@@ -2007,6 +2120,7 @@ mainLoop();
 
 //             if (elapsedMs > FORCE_REFRESH_MS) {
 //                 if (!isExempted) {
+//                     console.log(`\n[⏱️ PROACTIVE REFRESH]: Stream ran smoothly for ${FORCE_REFRESH_MINUTES} minutes! Forcing SAME LINK swap to keep connection fresh...`);
 //                     activeStatus.status = 'FORCE_REFRESH'; 
 //                 }
 //             }
@@ -2019,24 +2133,26 @@ mainLoop();
 //             await triggerSmartUnmute(activePage);
             
 //             for (const frame of activePage.frames()) {
-//                 try {
-//                     if (!frame.isDetached()) {
-//                         await frame.evaluate(() => { 
-//                             document.querySelectorAll('video, audio').forEach(m => { 
-//                                 m.muted = false; 
-//                                 m.volume = 1.0; 
-                                
-//                                 if (m.tagName === 'VIDEO' && m.paused && !m.ended && m.currentTime > 0) {
-//                                     try {
-//                                         let p = m.play();
-//                                         if (p !== undefined) p.catch(() => {});
-//                                     } catch(e) {}
-//                                 }
-//                             }); 
-//                             document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
-//                         });
-//                     }
-//                 } catch(e) {}
+//         try {
+//             if (!frame.isDetached()) {
+//                 await frame.evaluate(() => { 
+//                     document.querySelectorAll('video, audio').forEach(m => { 
+//                         m.muted = false; 
+//                         m.volume = 1.0; 
+                        
+//                         // 🛑 NAYA LOGIC: Agar video pause ho gayi hai toh force play karein
+//                         if (m.tagName === 'VIDEO' && m.paused && !m.ended && m.currentTime > 0) {
+//                             try {
+//                                 console.log('[▶️] Auto-resuming paused video...');
+//                                 let p = m.play();
+//                                 if (p !== undefined) p.catch(() => {});
+//                             } catch(e) {}
+//                         }
+//                     }); 
+//                     document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
+//                 });
+//             }
+//         } catch(e) {}
 //             }
 //         }
 
@@ -2054,6 +2170,13 @@ mainLoop();
         
 //         if (watchdogTicks === 1 || watchdogTicks % 90 === 0) {
 //             console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
+            
+//             if (activeStatus.status === 'HEALTHY') {
+//                 console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
+//                 console.log(`[⏭️] NEXT IN QUEUE    : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
+//             } else {
+//                 console.log(`[⚠️] STREAM IS NOT ACTIVE: Waiting for system to recover or swap...`);
+//             }
 //         }
 
 //         if (watchdogTicks % 120 === 0) {
@@ -2063,6 +2186,7 @@ mainLoop();
 //         if (activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'FORCE_REFRESH') {
             
 //             if (isWarmupPhase && (Date.now() - streamSetupTime < WARMUP_MAX_TIME)) { 
+//                 console.log(`[⏳] Watchdog detected '${activeStatus.status}', but stream is in WARM-UP phase. Waiting...`);
 //                 await new Promise(r => setTimeout(r, 2000));
 //                 continue; 
 //             }
@@ -2070,6 +2194,11 @@ mainLoop();
 //             let isProactiveRefresh = (activeStatus.status === 'FORCE_REFRESH');
 
 //             if (isProactiveRefresh) {
+//                 console.log(`\n==================================================`);
+//                 console.log(`[!] 🔄 PROACTIVE REFRESH TRIGGERED`);
+//                 console.log(`[*] Preparing a FRESH copy of SAME Server [${currentUrlIndex}] in background...`);
+//                 console.log(`==================================================`);
+                
 //                 for (const frame of activePage.frames()) {
 //                     try { if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {}
 //                 }
@@ -2078,11 +2207,18 @@ mainLoop();
 //                     await backupPage.goto('about:blank').catch(()=>{});
 //                     await applyPreloadFirewall(backupPage);
 //                     await backupPage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
-//                 } catch(e) { }
+//                 } catch(e) {
+//                     console.log(`[⏳] Proactive refresh buffer navigation handled safely.`);
+//                 }
 //             } else {
+//                 console.log(`\n==================================================`);
+//                 console.log(`[!] ❌ WATCHDOG DETECTED ISSUE: ${activeStatus.status}`);
+//                 console.log(`[💀] FAILED STREAM: Server [${currentUrlIndex}] -> ${activeUrlStr}`);
+//                 console.log(`==================================================`);
 //                 await takeAndBatchScreenshot(activePage, `error-${activeStatus.status.toLowerCase()}`);
 //             }
             
+//             console.log(`[*] Checking Backup Tab status before switching...`);
 //             let backupStatus = await checkPageStatus(backupPage);
 
 //             if (backupStatus.status === 'HEALTHY' || backupStatus.status === 'DEAD') { 
@@ -2099,6 +2235,7 @@ mainLoop();
                 
 //                 try { await backupPage.mouse.click(10, 10); } catch(e){} 
 
+//                 console.log(`[*] Initializing Video on the newly active tab...`);
 //                 await initializeVideo(backupPage, false, true); 
 //                 await hideLoadingUI(backupPage);
 
@@ -2109,17 +2246,30 @@ mainLoop();
 //                     backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex]; 
 //                 } 
 
+//                 console.log(`\n==================================================`);
+//                 console.log(isProactiveRefresh ? `[🔄] SAME-SERVER FRESH SWAP EXECUTED SUCCESSFULLY` : `[🔄] SMART HOT-SWAP TO NEXT SERVER EXECUTED SUCCESSFULLY`);
+//                 console.log(`==================================================`);
+//                 console.log(`[📺] NEW ACTIVE STREAM : Server [${currentUrlIndex}] -> ${activeUrlStr}`);
+//                 console.log(`[🔊] LIVE AUDIO STATUS : ON (Unmuted & Forced)`);
+//                 console.log(`--------------------------------------------------`);
+//                 console.log(`[🛡️] NEXT BACKUP QUEUE : Server [${backupUrlIndex}] -> ${backupUrlStr}`);
+//                 console.log(`[🔇] BACKUP AUDIO      : MUTED (Background Loading)`);
+//                 console.log(`==================================================\n`);
+
 //                 try {
 //                     await backupPage.goto('about:blank').catch(()=>{});
 //                     await applyPreloadFirewall(backupPage);
 //                     backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-//                 } catch (e) { }
+//                 } catch (e) {
+//                     console.log(`[⏳] Background buffer navigation handled safely.`);
+//                 }
                 
 //                 streamSetupTime = Date.now(); 
 //                 isWarmupPhase = true;
 //                 currentStreamStartTime = Date.now();
 
 //             } else {
+//                 console.error(`[!] ❌ Backup Tab is ALSO DEAD/FROZEN. Hard Restarting System...`);
 //                 throw new Error("Both Active and Backup tabs failed.");
 //             }
 //         }
@@ -2129,6 +2279,7 @@ mainLoop();
 // }
 
 // async function startDirectStreaming() {
+//     console.log(`[*] Starting OBS Studio FIRST...`);
 //     setupOBSConfig();
 
 //     obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray']);
@@ -2138,9 +2289,11 @@ mainLoop();
 //         if (msg.includes('error') || msg.includes('fail')) console.log(`[OBS Error]: ${msg}`);
 //     });
 
+//     console.log('[*] Waiting for OBS to initialize before launching browser...');
 //     await new Promise(r => setTimeout(r, 6000));
 
 //     let isObsConnected = false;
+//     console.log('[*] Attempting to connect to OBS WebSocket (Polling Engine Active)...');
 //     for (let attempt = 1; attempt <= 15; attempt++) {
 //         try {
 //             await Promise.race([
@@ -2148,14 +2301,19 @@ mainLoop();
 //                 new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
 //             ]);
 //             isObsConnected = true;
+//             console.log('[+] OBS WebSocket Connected Successfully!');
 //             break;
 //         } catch (e) {
+//             console.log(`[⏳] OBS Port 4455 not ready yet. Retrying (${attempt}/15)...`);
 //             await new Promise(r => setTimeout(r, 2000));
 //         }
 //     }
 
 //     if (isObsConnected) {
-//         try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch(e){}
+//         try {
+//             await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' });
+//             console.log('[+] Enforced WaitingScene (Loading Bar Buffer Active)');
+//         } catch(e){}
 //     }
 
 //     let browserArgs = [
@@ -2185,7 +2343,10 @@ mainLoop();
 
 //     if (PROXY_ENGINE.includes('Cloudflare')) {
 //         browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
-//     } 
+//         console.log(`[*] Starting browser with EXACT viewport dimensions: ${RES_W}x${RES_H} and [CLOUDFLARE WARP] Proxy...`);
+//     } else {
+//         console.log(`[*] Starting browser with EXACT viewport dimensions: ${RES_W}x${RES_H} using [DIRECT GITHUB IP]...`);
+//     }
 
 //     browser = await puppeteer.launch({
 //         headless: false, 
@@ -2199,6 +2360,7 @@ mainLoop();
 //             const newPage = await target.page();
 //             setTimeout(async () => {
 //                 if (newPage && newPage !== activePage && newPage !== backupPage) {
+//                     console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
 //                     try { await newPage.close(); } catch(e) {}
 //                 }
 //             }, 500);
@@ -2220,6 +2382,7 @@ mainLoop();
 
 //     await activePage.bringToFront(); 
 
+//     console.log(`[*] STEP 1: Loading Server [${currentUrlIndex}] on Active Page: ${urlList[currentUrlIndex]}`);
 //     await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
     
 //     await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
@@ -2228,15 +2391,28 @@ mainLoop();
 //     await hideLoadingUI(activePage); 
 
 //     if (isObsConnected) {
+//         console.log('\n[*] Active Video is Ready! Shifting OBS from Animated Buffer to LIVE Video (MainScene)...');
 //         try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
 //     }
 
+//     console.log(`[*] STEP 2: Silently preparing Server [${backupUrlIndex}] on Backup Page: ${urlList[backupUrlIndex]}`);
 //     backupPage.goto(urlList[backupUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
     
 //     await activePage.bringToFront();
 //     try { await activePage.mouse.click(10, 10); } catch(e){} 
 //     await hideLoadingUI(activePage);
 
+//     console.log(`\n==================================================`);
+//     console.log(`[🎥] INITIAL CAPTURE STATUS: Ready to Broadcast`);
+//     console.log(`==================================================`);
+//     console.log(`[📺] CURRENT ACTIVE LIVE : Server [${currentUrlIndex}] -> ${urlList[currentUrlIndex]}`);
+//     console.log(`[🔊] LIVE AUDIO STATUS   : ON (Unmuted)`);
+//     console.log(`--------------------------------------------------`);
+//     console.log(`[🛡️] NEXT BACKUP QUEUE   : Server [${backupUrlIndex}] -> ${urlList[backupUrlIndex]}`);
+//     console.log(`[🔇] BACKUP AUDIO STATUS : MUTED (Background)`);
+//     console.log(`==================================================\n`);
+
+//     console.log('[*] Everything Setup! Dual-Tab Monitoring is Active.');
 //     await startWatchdog();
 // }
 
@@ -2244,6 +2420,8 @@ mainLoop();
 //     while (true) {
 //         try { await startDirectStreaming(); } 
 //         catch (error) {
+//             console.error(`\n[!] ALERT: ${error.message}`);
+//             console.log('[*] 🔄 Hard Restarting everything in 3 seconds...');
 //             await cleanup();
 //             await new Promise(resolve => setTimeout(resolve, 3000));
 //         }
@@ -2251,6 +2429,7 @@ mainLoop();
 // }
 
 // async function cleanup() {
+//     console.log('[*] Cleaning up resources...');
 //     try { await obs.disconnect(); } catch (e) { } 
 //     if (browser) { try { await browser.close(); } catch(e) { } browser = null; }
 //     if (obsProcess) { try { obsProcess.kill('SIGKILL'); } catch(e) { } obsProcess = null; }
@@ -2277,6 +2456,7 @@ mainLoop();
 // const exactDurationMs = parseDurationToMs(customDurationStr);
 // if (exactDurationMs) {
 //     setTimeout(async () => {
+//         console.log(`\n[*] 🛑 Time's up! The assigned duration (${customDurationStr}) is complete. Shutting down cleanly...`);
 //         await cleanup();
 //         process.exit(0);
 //     }, exactDurationMs);
@@ -2298,6 +2478,48 @@ mainLoop();
 // }
 
 // mainLoop();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
