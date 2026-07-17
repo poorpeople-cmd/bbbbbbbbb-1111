@@ -6051,15 +6051,33 @@ async function startWatchdog() {
             console.log(`[*] Checking Backup Tab status before switching...`);
             let backupStatus = await checkPageStatus(backupPage);
 
+            // if (backupStatus.status === 'HEALTHY' || backupStatus.status === 'DEAD') { 
+                
+            //     if (!isProactiveRefresh) {
+            //         for (const frame of activePage.frames()) {
+            //             try { if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {}
+            //         }
+            //     }
+
+                // await showLoadingUI(backupPage, isProactiveRefresh ? "REFRESHING CONNECTION" : "RECONNECTING", isProactiveRefresh ? "Optimizing current server stream <span class='stream-blink'>...</span>" : "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
+
             if (backupStatus.status === 'HEALTHY' || backupStatus.status === 'DEAD') { 
-                
-                if (!isProactiveRefresh) {
-                    for (const frame of activePage.frames()) {
-                        try { if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {}
-                    }
+            
+            if (!isProactiveRefresh) {
+                for (const frame of activePage.frames()) {
+                    try { if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {}
                 }
-                
-                await showLoadingUI(backupPage, isProactiveRefresh ? "REFRESHING CONNECTION" : "RECONNECTING", isProactiveRefresh ? "Optimizing current server stream <span class='stream-blink'>...</span>" : "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
+            }
+
+            // NAYA FIX: Agar 1 hi link tha, toh usay swap ke waqt load karein
+            if (urlList.length === 1 && !isProactiveRefresh) {
+                console.log(`[*] Single URL Mode: Loading stream fresh on Backup Tab...`);
+                await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
+                await applyPreloadFirewall(backupPage);
+            }
+            
+            await showLoadingUI(backupPage, isProactiveRefresh ? "REFRESHING CONNECTION" : "RECONNECTING", isProactiveRefresh ? "Optimizing current server stream <span class='stream-blink'>...</span>" : "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
+
                 await backupPage.bringToFront();
                 await new Promise(r => setTimeout(r, 1000)); 
                 
@@ -6087,10 +6105,22 @@ async function startWatchdog() {
                 console.log(`[🔇] BACKUP AUDIO      : MUTED (Background Loading)`);
                 console.log(`==================================================\n`);
 
+                // try {
+                //     await backupPage.goto('about:blank').catch(()=>{});
+                //     await applyPreloadFirewall(backupPage);
+                //     backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                // } catch (e) {
+                //     console.log(`[⏳] Background buffer navigation handled safely.`);
+                // }
+
+
                 try {
                     await backupPage.goto('about:blank').catch(()=>{});
                     await applyPreloadFirewall(backupPage);
-                    backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                    // NAYA FIX: Sirf tab background me load karo agar links 1 se zyada hon
+                    if (urlList.length > 1) {
+                        backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                    }
                 } catch (e) {
                     console.log(`[⏳] Background buffer navigation handled safely.`);
                 }
@@ -6251,8 +6281,15 @@ async function startDirectStreaming() {
         try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
     }
 
-    console.log(`[*] STEP 2: Silently preparing Server [${backupUrlIndex}] on Backup Page: ${urlList[backupUrlIndex]}`);
-    backupPage.goto(urlList[backupUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    // console.log(`[*] STEP 2: Silently preparing Server [${backupUrlIndex}] on Backup Page: ${urlList[backupUrlIndex]}`);
+    // backupPage.goto(urlList[backupUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+
+    if (urlList.length > 1) {
+        console.log(`[*] STEP 2: Silently preparing Server [${backupUrlIndex}] on Backup Page: ${urlList[backupUrlIndex]}`);
+        backupPage.goto(urlList[backupUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    } else {
+        console.log(`[*] STEP 2: Single URL detected! Background Tab preload disabled to prevent IP/Token crash.`);
+    }
     
     await activePage.bringToFront();
     try { await activePage.mouse.click(10, 10); } catch(e){} 
