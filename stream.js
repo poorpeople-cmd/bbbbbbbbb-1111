@@ -6199,9 +6199,22 @@ async function startDirectStreaming() {
         }
     });
 
+    // const pages = await browser.pages();
+    // activePage = pages[0]; 
+    // backupPage = await browser.newPage();
+    
+    // await setupNetworkAdBlocker(activePage);
+    // await setupNetworkAdBlocker(backupPage);
+
     const pages = await browser.pages();
-    activePage = pages[0]; 
+    const defaultPage = pages[0]; // Is un-stealthed tab ko mark kar liya
+
+    // NAYA FIX: Dono tabs naye create karenge taake Stealth Plugin 100% apply ho
+    activePage = await browser.newPage(); 
     backupPage = await browser.newPage();
+    
+    // Default tab ko close kar denge taake memory ya background noise na aaye
+    try { await defaultPage.close(); } catch(e) {}
     
     await setupNetworkAdBlocker(activePage);
     await setupNetworkAdBlocker(backupPage);
