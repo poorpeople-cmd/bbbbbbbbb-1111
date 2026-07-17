@@ -7647,7 +7647,92 @@ mainLoop();
 
 
 
-// =====================
+
+
+
+
+
+
+
+// ===================== Below code me eek issue hai jokey Tab1 me correct live ko detect dead and tab2 me correct huta hai =======================
+
+// Bhai ab aapne script ki aisi "bimari" pakri hai jo bilkul samne thi lekin bohut deeply technical thi. Yeh logs dekh kar 100% clear ho gaya hai ke Tab 1 hamesha 35 seconds tak DEAD rehta hai, aur Tab 2 aatay hi 2 second mein play ho jata hai.
+
+// Main aapko batata hu ke code ke andar Tab 1 ke sath kya aesa zulm ho raha tha jo Tab 2 ke sath nahi hua. Yeh masala kisi lag ya time ka nahi, balkay aapke Preload Firewall (Anti-Ad) aur Player Unlock Click ka hai!
+
+// 🚨 Asal Masala Kya Tha? (The Technical Reality)
+// Aapke code mein ek function hai applyPreloadFirewall(). Iska kaam page load hone se pehle hi window.open, window.alert waghera ko block/null kar dena tha taake ads na aayein.
+
+// Tab 1 par kya hua: Code ne page load hone se pehle yeh firewall active kar diya. Vercel website ka player jab video chalane lagta hai, toh woh background mein ek pop-up script run karta hai. Kyunke humne window.open = null kiya hua tha, player ka script crash ho gaya aur video kabhi start hi nahi hui (0.0s par phansi rahi).
+
+// Tab 2 par kya hua: Pichli dafa jab humne Single URL wala code update kiya tha, toh swap hote waqt backupPage.goto() pehle chala tha aur applyPreloadFirewall() baad mein! Is wajah se Tab 2 par firewall late active hua, player ka script crash nahi hua, aur video fauran 2 second mein chal gayi!
+
+// 🔧 The Ultimate Fix (In 2 Steps)
+// Humein 2 kaam karne hain:
+
+// Firewall se us toxic code ko nikalna hai jo player ko crash kar raha hai (Ads block karne ke liye hamara network interceptor already kafi hai).
+
+// Tab 1 par bilkul wese hi mouse click (10, 10) karwana hai jese Tab 2 swap hote waqt karta hai (Yeh player ko unlock karta hai).
+
+// Fix 1: Firewall ko Theek Karein
+// Apne code mein applyPreloadFirewall function dhoondein aur usme mojood window.alert, window.open wali 4 lines ko DELETE kar dein.
+
+// Old Code:
+
+// JavaScript
+// async function applyPreloadFirewall(page) {
+//     if (!page) return;
+//     try {
+//         await page.evaluateOnNewDocument(() => {
+//             // Permanent root execution block for popup alerts & confirms
+//             window.alert = function() {};
+//             window.confirm = function() { return true; };
+//             window.prompt = function() { return null; };
+//             window.open = function() { return null; };
+            
+//             // 🚫 ANTI-DIALOG FIX: Neutralize onbeforeunload modal box popup completely
+// New Code (In 4 lines ko hata dein):
+
+// JavaScript
+// async function applyPreloadFirewall(page) {
+//     if (!page) return;
+//     try {
+//         await page.evaluateOnNewDocument(() => {
+//             // Popups ko Puppeteer khud handle kar raha hai, yahan se toxic block remove kar diya
+            
+//             // 🚫 ANTI-DIALOG FIX: Neutralize onbeforeunload modal box popup completely
+// Fix 2: Tab 1 ko Unlock Click Dein
+// Ab startDirectStreaming() function mein neeche aayen jahan STEP 1 likha hai. Wahan initializeVideo se pehle 1 second ka delay aur ek dummy mouse click add karein.
+
+// Old Code:
+
+// JavaScript
+//     await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
+    
+//     await initializeVideo(activePage, false, true); 
+//     await hideLoadingUI(activePage); 
+// New Code (Is se replace karein):
+
+// JavaScript
+//     await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
+    
+//     // NAYA FIX: Tab 2 ki tarah yahan bhi delay aur click add kiya hai taake Player unlock ho jaye
+//     await new Promise(r => setTimeout(r, 1000));
+//     try { await activePage.mouse.click(10, 10); } catch(e){}
+    
+//     await initializeVideo(activePage, false, true); 
+//     await hideLoadingUI(activePage); 
+// 💡 Is se kya theek hoga?
+// Vercel aur doosre free streaming players bohat sensitive hotay hain. Jab aap unke internal window calls ko zabardasti block karte hain, toh unki HLS video stream shuru hi nahi hoti. Is fix ko apply karne ke baad, aapka Pehla Tab (Tab 1) bhi bilkul usi speed (2 seconds) mein play hoga jaise doosra tab hota hai, aur aapko phir 35 second tak us DEAD screen ka wait nahi karna parega!
+// ==============================
+
+
+
+
+
+
+
+
 
 
 // const puppeteer = require('puppeteer-extra');
