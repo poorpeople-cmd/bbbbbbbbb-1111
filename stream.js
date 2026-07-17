@@ -6214,12 +6214,23 @@ async function startDirectStreaming() {
 
     await activePage.bringToFront(); 
 
+    // console.log(`[*] STEP 1: Loading Server [${currentUrlIndex}] on Active Page: ${urlList[currentUrlIndex]}`);
+    // await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
+    
+    // await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
+    
+    // await initializeVideo(activePage, false, true); 
+
     console.log(`[*] STEP 1: Loading Server [${currentUrlIndex}] on Active Page: ${urlList[currentUrlIndex]}`);
     await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
     
+    // Naya Fix: DOM Structure ko stable hone ke liye 4 seconds ka time dena
+    console.log(`[*] Waiting 4 seconds for DOM & Iframes to fully settle before scanning...`);
+    await new Promise(r => setTimeout(r, 4000));
+    
     await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
     
-    await initializeVideo(activePage, false, true); 
+    await initializeVideo(activePage, false, true);
     await hideLoadingUI(activePage); 
 
     if (isObsConnected) {
