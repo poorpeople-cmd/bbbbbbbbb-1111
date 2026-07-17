@@ -5879,7 +5879,8 @@ async function startWatchdog() {
     
     let streamSetupTime = Date.now(); 
     let isWarmupPhase = true; 
-    const WARMUP_MAX_TIME = 15000; 
+    // const WARMUP_MAX_TIME = 15000;
+    const WARMUP_MAX_TIME = 35000; // <--- Isko 35000 (35 seconds) kar dein
 
     let activeUrlStr = urlList[currentUrlIndex];
     let backupUrlStr = urlList[backupUrlIndex];
@@ -5903,9 +5904,21 @@ async function startWatchdog() {
             }
         }
 
+        // if (activeStatus.status === 'HEALTHY') {
+        //     await hideLoadingUI(activePage); 
+        //     isWarmupPhase = false; 
+
         if (activeStatus.status === 'HEALTHY') {
+            // Naya Success Print Statement
+            if (isWarmupPhase) {
+                let setupTimeSec = ((Date.now() - streamSetupTime) / 1000).toFixed(1);
+                console.log(`\n[🚀] STREAM READY: Video successfully start ho gayi hai! Initial Setup & Buffering me ${setupTimeSec} seconds lagay.\n`);
+            }
+
             await hideLoadingUI(activePage); 
             isWarmupPhase = false; 
+
+            // 🔥 Added Smart Unmute Continuous Engine Here
 
             // 🔥 Added Smart Unmute Continuous Engine Here
             await triggerSmartUnmute(activePage);
@@ -5984,8 +5997,16 @@ async function startWatchdog() {
 
         if (activeStatus.status === 'FROZEN' || activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'FORCE_REFRESH') {
             
+            // if (isWarmupPhase && (Date.now() - streamSetupTime < WARMUP_MAX_TIME)) { 
+            //     console.log(`[⏳] Watchdog detected '${activeStatus.status}', but stream is in WARM-UP phase. Waiting...`);
+            //     await new Promise(r => setTimeout(r, 2000));
+            //     continue; 
+            // }
+
             if (isWarmupPhase && (Date.now() - streamSetupTime < WARMUP_MAX_TIME)) { 
-                console.log(`[⏳] Watchdog detected '${activeStatus.status}', but stream is in WARM-UP phase. Waiting...`);
+                let warmupElapsed = ((Date.now() - streamSetupTime) / 1000).toFixed(1);
+                let warmupTotal = (WARMUP_MAX_TIME / 1000).toFixed(1);
+                console.log(`[⏳] WARM-UP MONITOR: Detected '${activeStatus.status}', stream abhi buffering/setup phase me hai... (${warmupElapsed}s / ${warmupTotal}s elapsed)`);
                 await new Promise(r => setTimeout(r, 2000));
                 continue; 
             }
