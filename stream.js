@@ -5279,10 +5279,7 @@ async function applyPreloadFirewall(page) {
             };
 
             // Permanent root execution block for popup alerts & confirms
-            window.alert = function() {};
-            window.confirm = function() { return true; };
-            window.prompt = function() { return null; };
-            window.open = function() { return null; };
+            
             
             // 🚫 ANTI-DIALOG FIX: Neutralize onbeforeunload modal box popup completely
             Object.defineProperty(window, 'onbeforeunload', {
@@ -6271,10 +6268,20 @@ async function startDirectStreaming() {
     console.log(`[*] Waiting 4 seconds for DOM & Iframes to fully settle before scanning...`);
     await new Promise(r => setTimeout(r, 4000));
     
+    // await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
+    
+    // await initializeVideo(activePage, false, true);
+    // await hideLoadingUI(activePage); 
+
+
     await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
     
-    await initializeVideo(activePage, false, true);
-    await hideLoadingUI(activePage); 
+    // NAYA FIX: Tab 2 ki tarah yahan bhi delay aur click add kiya hai taake Player unlock ho jaye
+    await new Promise(r => setTimeout(r, 1000));
+    try { await activePage.mouse.click(10, 10); } catch(e){}
+    
+    await initializeVideo(activePage, false, true); 
+    await hideLoadingUI(activePage);
 
     if (isObsConnected) {
         console.log('\n[*] Active Video is Ready! Shifting OBS from Animated Buffer to LIVE Video (MainScene)...');
