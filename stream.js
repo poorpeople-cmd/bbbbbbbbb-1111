@@ -6537,7 +6537,6 @@ async function setupNetworkAdBlocker(page) {
             const url = request.url().toLowerCase();
             const type = request.resourceType();
 
-            // 🛑 Aggressive payload blocking added here
             const adDomains = [
                 'popads', 'exoclick', 'adsterra', 'onclickads', 'jerkmate', 
                 'adrevenue', 'fanduel', 'adexchangerapid', 'doubleclick', 'propellerads'
@@ -6551,7 +6550,6 @@ async function setupNetworkAdBlocker(page) {
                 return;
             }
 
-            // 🚫 SHIELD: Same-Tab Hostile Redirect Hijacking Block
             if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
                 const targetUrl = request.url().toLowerCase();
                 const adKeywords = ['bet', 'casino'];
@@ -6575,13 +6573,10 @@ async function applyPreloadFirewall(page) {
     if (!page) return;
     try {
         await page.evaluateOnNewDocument(() => {
-            // =========================================================
-            // 🛑 ULTIMATE SHADOW DOM AD KILLER (Monkey Patching)
-            // =========================================================
             const originalAttachShadow = Element.prototype.attachShadow;
             Element.prototype.attachShadow = function(init) {
                 if (init && init.mode === 'closed') {
-                    init.mode = 'open'; // Force open to allow inspection
+                    init.mode = 'open'; 
                 }
                 const shadowRoot = originalAttachShadow.call(this, init);
                 
@@ -6589,7 +6584,7 @@ async function applyPreloadFirewall(page) {
                     const adElements = shadowRoot.querySelectorAll('in-page-message, [id^="note-"], [id^="missclick-"], [src*="adexchangerapid"]');
                     if (adElements.length > 0) {
                         console.log('[🛡️] SHIELD: Shadow DOM Ad Detected & Destroyed!');
-                        this.remove(); // Kill the entire host element
+                        this.remove(); 
                     }
                 });
                 
@@ -6597,13 +6592,6 @@ async function applyPreloadFirewall(page) {
                 return shadowRoot;
             };
 
-            // Permanent root execution block for popup alerts & confirms
-            // window.alert = function() {};
-            // window.confirm = function() { return true; };
-            // window.prompt = function() { return null; };
-            // window.open = function() { return null; };
-            
-            // 🚫 ANTI-DIALOG FIX: Neutralize onbeforeunload modal box popup completely
             Object.defineProperty(window, 'onbeforeunload', {
                 configurable: true,
                 get: function() { return null; },
@@ -6652,6 +6640,8 @@ async function applyPreloadFirewall(page) {
                             @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
                             .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
                             .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
+                            .stream-blink { animation: blinker 1.5s linear infinite; color: #e50914; font-weight: bold; }
+                            @keyframes blinker { 50% { opacity: 0.3; } }
                         </style>
                         <div class="stream-spinner"></div>
                         <div class="progress-container"><div class="progress-bar-fill"></div></div>
@@ -6714,34 +6704,6 @@ async function showLoadingUI(page, title, sub) {
                 overlay.style.setProperty('opacity', '1', 'important');
                 overlay.style.setProperty('z-index', '2147483647', 'important');
             } 
-            else {
-                overlay = document.createElement('div');
-                overlay.id = 'smart-stream-overlay';
-                overlay.innerHTML = `
-                    <style>
-                        #smart-stream-overlay {
-                            position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
-                            width: 100vw !important; height: 100vh !important; background: #000000 !important;
-                            z-index: 2147483647 !important; display: flex !important; flex-direction: column !important;
-                            justify-content: center !important; align-items: center !important; color: #ffffff !important;
-                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
-                            pointer-events: all !important;
-                        }
-                        .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
-                        .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
-                        .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-                        @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                        @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
-                        .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
-                        .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
-                    </style>
-                    <div class="stream-spinner"></div>
-                    <div class="progress-container"><div class="progress-bar-fill"></div></div>
-                    <div class="stream-title">${t}</div>
-                    <div class="stream-sub">${s}</div>
-                `;
-                document.documentElement.appendChild(overlay);
-            }
         }, title, sub);
     } catch (e) {}
 }
@@ -6992,7 +6954,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     let iframes = Array.from(document.querySelectorAll('iframe'));
                     let mainIframe = null; let maxScore = -1;
 
-                    // 1. ADVANCED GEOMETRIC SCORING
                     iframes.forEach(ifr => {
                         let width = ifr.clientWidth;
                         let height = ifr.clientHeight;
@@ -7127,7 +7088,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
     } catch (e) { }
 
-    // 🔥 Added Smart Unmute Execution Here
     await triggerSmartUnmute(page);
     await new Promise(r => setTimeout(r, 1000));
 }
@@ -7194,14 +7154,12 @@ async function startWatchdog() {
     let frozenCheckTimestamp = Date.now();
     let watchdogTicks = 0;
 
-    // Naye tracker flags hang state aur logging frequency monitor karne ke liye
     let isCurrentlyHanging = false; 
     let lastHangLogTime = 0;
     
     let streamSetupTime = Date.now(); 
     let isWarmupPhase = true; 
-    // const WARMUP_MAX_TIME = 15000;
-    const WARMUP_MAX_TIME = 35000; // <--- Isko 35000 (35 seconds) kar dein
+    const WARMUP_MAX_TIME = 35000;
 
     let activeUrlStr = urlList[currentUrlIndex];
     let backupUrlStr = urlList[backupUrlIndex];
@@ -7213,6 +7171,7 @@ async function startWatchdog() {
 
         let activeStatus = await checkPageStatus(activePage);
 
+        // 1. Proactive Refresh Logic
         if (activeStatus.status === 'HEALTHY' && !isWarmupPhase) {
             let elapsedMs = Date.now() - currentStreamStartTime;
             let isExempted = NO_REFRESH_DOMAINS.some(domain => activeUrlStr.includes(domain));
@@ -7225,12 +7184,8 @@ async function startWatchdog() {
             }
         }
 
-        // if (activeStatus.status === 'HEALTHY') {
-        //     await hideLoadingUI(activePage); 
-        //     isWarmupPhase = false; 
-
+        // 2. Health & Hang Detection Engine
         if (activeStatus.status === 'HEALTHY') {
-            // Naya Success Print Statement
             if (isWarmupPhase) {
                 let setupTimeSec = ((Date.now() - streamSetupTime) / 1000).toFixed(1);
                 console.log(`\n[🚀] STREAM READY: Video successfully start ho gayi hai! Initial Setup & Buffering me ${setupTimeSec} seconds lagay.\n`);
@@ -7239,26 +7194,24 @@ async function startWatchdog() {
             await hideLoadingUI(activePage); 
             isWarmupPhase = false; 
 
-            // 🔥 Added Smart Unmute Continuous Engine Here
-
-            // 🔥 Added Smart Unmute Continuous Engine Here
             await triggerSmartUnmute(activePage);
 
             let isTimeStuck = (activeStatus.currentTime === lastActiveTime);
             let isFrameStuck = (activeStatus.decodedFrames === lastDecodedFrames && activeStatus.decodedFrames > 0);
 
+            // ==========================================
+            // 🚨 HANG START (Stuck State)
+            // ==========================================
             if (isTimeStuck || isFrameStuck) {
                 let hangDuration = Date.now() - frozenCheckTimestamp;
                 
-                // 🛑 JAISE HI HANG DETECT HO (UX MASKING START)
+                // 🛑 1st Second of Hang: Trigger UX Mask
                 if (!isCurrentlyHanging) {
                     isCurrentlyHanging = true;
                     console.log(`\n[⚠️] HANG DETECTED: Triggering Professional Broadcast Mask...`);
                     
-                    // 1. Browser pe Black Loading Screen laga do taake frozen video chhup jaye
                     showLoadingUI(activePage, "SIGNAL OPTIMIZING", "Resyncing live feed with backend server <span class='stream-blink'>...</span>").catch(()=>{});
                     
-                    // 2. Audio Mute kar do taake hang hone par stuttering/kharab aawaz na aaye
                     for (const frame of activePage.frames()) {
                         try {
                             if (!frame.isDetached()) {
@@ -7267,7 +7220,6 @@ async function startWatchdog() {
                         } catch(e){}
                     }
                     
-                    // 3. OBS ko "WaitingScene" par shift kar do taake stream bilkul TV ki tarah behave kare
                     try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch(e){}
                 }
 
@@ -7277,34 +7229,36 @@ async function startWatchdog() {
                     lastHangLogTime = Date.now();
                 }
 
-                // Agar 16 Second (FROZEN_THRESHOLD) se upar ho gaya
+                // 💥 16s Crossed: Trigger Hot-Swap
                 if (hangDuration > FROZEN_THRESHOLD_MS) {
                     activeStatus.status = 'FROZEN';
                     if (isFrameStuck && !isTimeStuck) {
                         console.log(`[!] ⚠️ SYSTEM SHIELD: Detected Black Screen (Audio playing, but video frames stuck). Triggering HOT-SWAP.`);
                     }
                 }
-            } else {
-                // ✅ JAISE HI STREAM 16 SEC SE PEHLE RECOVER HO JAYE
+            } 
+            // ==========================================
+            // ✅ STREAM RECOVERED (Running Fine)
+            // ==========================================
+            else {
+                // Recovery BEFORE 16s
                 if (isCurrentlyHanging) {
                     console.log(`[✅] RECOVERY SUCCESS: Live stream synchronized! Total Hang Time: ${((Date.now() - frozenCheckTimestamp) / 1000).toFixed(1)}s\n`);
                     isCurrentlyHanging = false;
 
-                    // 1. Purane repeat scene ko skip kar ke direct LIVE Edge par jump lagao (2026 API)
+                    // FIX: Live Edge Snap AND Audio Unmute
                     for (const frame of activePage.frames()) {
                         try {
                             if (!frame.isDetached()) {
                                 frame.evaluate(() => {
                                     document.querySelectorAll('video').forEach(v => {
-                                        // seekable property humein stream ka asal LIVE waqt batati hai
                                         if (v.seekable && v.seekable.length > 0) {
                                             const liveEdge = v.seekable.end(v.seekable.length - 1);
-                                            v.currentTime = liveEdge - 0.5; // Snap directly to Live Edge
+                                            v.currentTime = liveEdge - 0.5; 
                                         } else if (v.duration && v.duration !== Infinity) {
                                             v.currentTime = v.duration - 0.5;
                                         }
-                                        // Audio wapas ON karein
-                                        v.muted = false;
+                                        v.muted = false; // MUTE BUG FIXED HERE
                                         v.volume = 1.0;
                                     });
                                 }).catch(()=>{});
@@ -7312,35 +7266,36 @@ async function startWatchdog() {
                         } catch(e) {}
                     }
 
-                    // 2. Browser se Loading Screen hatao
                     hideLoadingUI(activePage).catch(()=>{});
-                    
-                    // 3. OBS ko wapas "MainScene" (Live) par le aao
                     try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch(e){}
                     
                     console.log(`[⏩] ENGINE: Video snapped to True Live Edge & Broadcast Resumed Seamlessly!`);
                 }
 
+                // Normal running update
                 lastActiveTime = activeStatus.currentTime; 
                 lastDecodedFrames = activeStatus.decodedFrames; 
-                frozenCheckTimestamp = Date.now();
-                lastHangLogTime = Date.now(); // Log timer reset
                 
-                // ... the existing mute/volume logic below ...
-                
+                // IMPORTANT: Frozen timer sirf tab update hoga jab stream healthy hogi
+                if (!isCurrentlyHanging) {
+                    frozenCheckTimestamp = Date.now();
+                }
+                lastHangLogTime = Date.now(); 
+
+                // regular unmute push
                 for (const frame of activePage.frames()) {
                     try {
                         if (!frame.isDetached()) {
                             frame.evaluate(() => { 
-                                document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
                                 document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
                             }).catch(()=>{});
                         }
                     } catch(e) {}
                 }
             }
-        }
+        } // End of HEALTHY block
 
+        // 3. Keep Backup Page Muted
         if (backupPage) {
             for (const frame of backupPage.frames()) {
                 try {
@@ -7363,14 +7318,11 @@ async function startWatchdog() {
             await takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
         }
 
+        // ==========================================
+        // ❌ DEAD / FROZEN / REFRESH TRIGGERED
+        // ==========================================
         if (activeStatus.status === 'FROZEN' || activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'FORCE_REFRESH') {
             
-            // if (isWarmupPhase && (Date.now() - streamSetupTime < WARMUP_MAX_TIME)) { 
-            //     console.log(`[⏳] Watchdog detected '${activeStatus.status}', but stream is in WARM-UP phase. Waiting...`);
-            //     await new Promise(r => setTimeout(r, 2000));
-            //     continue; 
-            // }
-
             if (isWarmupPhase && (Date.now() - streamSetupTime < WARMUP_MAX_TIME)) { 
                 let warmupElapsed = ((Date.now() - streamSetupTime) / 1000).toFixed(1);
                 let warmupTotal = (WARMUP_MAX_TIME / 1000).toFixed(1);
@@ -7427,11 +7379,13 @@ async function startWatchdog() {
                 await initializeVideo(backupPage, false, true); 
                 await hideLoadingUI(backupPage);
 
-                // 🚀 FINAL FLAW FIX: Hot-Swap successful hone ke baad OBS ko wapas Live Scene par lana!
+                // 🚀 OBS MAIN SCENE BUG FIXED HERE
                 try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch(e){}
 
                 let brokenPage = activePage; activePage = backupPage; backupPage = brokenPage;
-                lastActiveTime = -1; frozenCheckTimestamp = Date.now();
+                lastActiveTime = -1; 
+                frozenCheckTimestamp = Date.now();
+                isCurrentlyHanging = false; // 🚀 NAYA FIX: Phantom Recovery Bug kill
 
                 if (!isProactiveRefresh) {
                     currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex]; 
@@ -7577,22 +7531,16 @@ async function startDirectStreaming() {
     console.log(`[*] STEP 1: Loading Server [${currentUrlIndex}] on Active Page: ${urlList[currentUrlIndex]}`);
     await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
     
-    // await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
-    
-    // await initializeVideo(activePage, false, true); 
-    // await hideLoadingUI(activePage); 
-
-
+    // Double Trouble Code Removed Here
     await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
     
-    // NAYA FIX: Tab 2 ki tarah yahan bhi delay aur click add kiya hai taake Player unlock ho jaye
+    // Delay aur click add kiya hai taake Player unlock ho jaye
     await new Promise(r => setTimeout(r, 1000));
     try { await activePage.mouse.click(10, 10); } catch(e){}
     
     await initializeVideo(activePage, false, true); 
     await hideLoadingUI(activePage);
     
-
     if (isObsConnected) {
         console.log('\n[*] Active Video is Ready! Shifting OBS from Animated Buffer to LIVE Video (MainScene)...');
         try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
@@ -7681,7 +7629,6 @@ if (exactDurationMs) {
 }
 
 mainLoop();
-
 
 
 
