@@ -20413,7 +20413,7 @@ async function setupNetworkAdBlocker(page) {
     } catch (e) { console.log('[⚠️] Request interception setup failed.'); }
 }
 
-
+async function applyPreloadFirewall(page) {
     if (!page) return;
     try {
         await page.evaluateOnNewDocument(() => {
@@ -21391,7 +21391,6 @@ if (exactDurationMs) {
         } catch (err) { }
     }, 21000000);
 }
-
 
 mainLoop();
 
