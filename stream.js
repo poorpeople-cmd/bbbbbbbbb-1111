@@ -778,87 +778,12 @@ async function checkPageStatus(page) {
     return { status: 'DEAD' };
 }
 
-// async function startWatchdog() {
-//     let lastActiveTime = -1;
-//     let lastDecodedFrames = -1; 
-//     let frozenCheckTimestamp = Date.now();
-//     let watchdogTicks = 0;
-    
-//     let streamSetupTime = Date.now(); 
-//     let isWarmupPhase = true; 
-//     const WARMUP_MAX_TIME = 15000; 
-
-//     let activeUrlStr = urlList[currentUrlIndex];
-//     let backupUrlStr = urlList[backupUrlIndex];
-
-//     let currentStreamStartTime = Date.now();
-
-//     while (true) {
-//         if (!browser || !browser.isConnected()) throw new Error("Browser closed.");
-
-//         let activeStatus = await checkPageStatus(activePage);
-
-//         if (activeStatus.status === 'HEALTHY' && !isWarmupPhase) {
-//             let elapsedMs = Date.now() - currentStreamStartTime;
-//             let isExempted = NO_REFRESH_DOMAINS.some(domain => activeUrlStr.includes(domain));
-
-//             if (elapsedMs > FORCE_REFRESH_MS) {
-//                 if (!isExempted) {
-//                     console.log(`\n[⏱️ PROACTIVE REFRESH]: Stream ran smoothly for ${FORCE_REFRESH_MINUTES} minutes! Forcing SAME LINK swap to keep connection fresh...`);
-//                     activeStatus.status = 'FORCE_REFRESH'; 
-//                 }
-//             }
-//         }
-
-//         if (activeStatus.status === 'HEALTHY') {
-//             await hideLoadingUI(activePage); 
-//             isWarmupPhase = false; 
-
-//             // 🔥 Added Smart Unmute Continuous Engine Here
-//             await triggerSmartUnmute(activePage);
-
-//             let isTimeStuck = (activeStatus.currentTime === lastActiveTime);
-//             let isFrameStuck = (activeStatus.decodedFrames === lastDecodedFrames && activeStatus.decodedFrames > 0);
-
-//             if (isTimeStuck || isFrameStuck) {
-//                 if (Date.now() - frozenCheckTimestamp > FROZEN_THRESHOLD_MS) {
-//                     activeStatus.status = 'FROZEN';
-//                     if (isFrameStuck && !isTimeStuck) {
-//                         console.log(`[!] ⚠️ SYSTEM SHIELD: Detected Black Screen (Audio playing, but video frames stuck). Triggering HOT-SWAP.`);
-//                     }
-//                 }
-//             } else {
-//                 lastActiveTime = activeStatus.currentTime; 
-//                 lastDecodedFrames = activeStatus.decodedFrames; 
-//                 frozenCheckTimestamp = Date.now();
-                
-//                 for (const frame of activePage.frames()) {
-//                     try {
-//                         if (!frame.isDetached()) {
-//                             frame.evaluate(() => { 
-//                                 document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
-//                                 document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
-//                             }).catch(()=>{});
-//                         }
-//                     } catch(e) {}
-//                 }
-//             }
-//         }
-
-
-// =========================================================================================
-// 🛡️ UPDATED WATCHDOG WITH HANG DETECTION LOGGING
-// =========================================================================================
 async function startWatchdog() {
     let lastActiveTime = -1;
     let lastDecodedFrames = -1; 
     let frozenCheckTimestamp = Date.now();
     let watchdogTicks = 0;
     
-    // Added tracker variables for hang logs
-    let isCurrentlyHanging = false; 
-    let lastHangLogTime = 0;
-
     let streamSetupTime = Date.now(); 
     let isWarmupPhase = true; 
     const WARMUP_MAX_TIME = 15000; 
@@ -895,41 +820,18 @@ async function startWatchdog() {
             let isTimeStuck = (activeStatus.currentTime === lastActiveTime);
             let isFrameStuck = (activeStatus.decodedFrames === lastDecodedFrames && activeStatus.decodedFrames > 0);
 
-            // 🛑 HANG DETECTION LOGIC
             if (isTimeStuck || isFrameStuck) {
-                let hangDuration = Date.now() - frozenCheckTimestamp;
-                
-                // Freeze detect hone par pehla alert
-                if (!isCurrentlyHanging) {
-                    isCurrentlyHanging = true;
-                    console.log(`\n[⚠️] HANG DETECTED: Stream lag check start... Monitoring recovery.`);
-                }
-
-                // Har 2000ms (2 seconds) baad progress print karega jab tak threshold poora na ho
-                if (Date.now() - lastHangLogTime >= 2000 && hangDuration < FROZEN_THRESHOLD_MS) {
-                    console.log(`[⏳] HANG MONITOR: Stream abhi bhi pause/stuck hai... (${(hangDuration / 1000).toFixed(1)}s / ${(FROZEN_THRESHOLD_MS / 1000).toFixed(1)}s elapsed)`);
-                    lastHangLogTime = Date.now();
-                }
-
-                if (hangDuration > FROZEN_THRESHOLD_MS) {
+                if (Date.now() - frozenCheckTimestamp > FROZEN_THRESHOLD_MS) {
                     activeStatus.status = 'FROZEN';
                     if (isFrameStuck && !isTimeStuck) {
                         console.log(`[!] ⚠️ SYSTEM SHIELD: Detected Black Screen (Audio playing, but video frames stuck). Triggering HOT-SWAP.`);
                     }
                 }
             } else {
-                // Agar threshold se pehle frames dobara start ho jayen
-                if (isCurrentlyHanging) {
-                    console.log(`[✅] RECOVERY SUCCESS: Stream wapas start ho gayi hai! Total Hang Time: ${((Date.now() - frozenCheckTimestamp) / 1000).toFixed(1)}s\n`);
-                    isCurrentlyHanging = false;
-                }
-
                 lastActiveTime = activeStatus.currentTime; 
                 lastDecodedFrames = activeStatus.decodedFrames; 
                 frozenCheckTimestamp = Date.now();
-                lastHangLogTime = Date.now(); // Log timer reset
                 
-                // Unmute logic...
                 for (const frame of activePage.frames()) {
                     try {
                         if (!frame.isDetached()) {
@@ -942,7 +844,8 @@ async function startWatchdog() {
                 }
             }
         }
-        // ... (Baaki watchdog ka code waisa hi rahega)
+
+
 
         if (backupPage) {
             for (const frame of backupPage.frames()) {
