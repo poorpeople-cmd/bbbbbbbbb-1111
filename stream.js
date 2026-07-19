@@ -1,4 +1,177 @@
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
 
+const { OBSWebSocket } = require('obs-websocket-js');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+// ============================================================
+// SIMPLE CONFIGURATION - CHANGE THESE VALUES
+// ============================================================
+const TARGET_URL = 'https://dlhd.st/watch.php?id=111';  // Your stream URL
+const OKRU_STREAM_KEY = '15254238731883_15281627925099_najspfkgne';   // Your OK.ru key
+const STREAM_DURATION_MINUTES = 60;                                   // How long to stream
+
+// Quality settings (same as your previous code)
+const RES_W = 1920;   // Width
+const RES_H = 1080;   // Height
+const BITRATE = 6000; // kbps
+
+// ============================================================
+// SIMPLE OBS SETUP (Using your OK.ru RTMP)
+// ============================================================
+function setupOBS() {
+    const obsDir = path.join(os.homedir(), '.config', 'obs-studio');
+    const profilesDir = path.join(obsDir, 'basic', 'profiles', 'Untitled');
+    const scenesDir = path.join(obsDir, 'basic', 'scenes');
+
+    fs.mkdirSync(profilesDir, { recursive: true });
+    fs.mkdirSync(scenesDir, { recursive: true });
+
+    // OBS WebSocket config
+    const globalIni = `[General]\nLicenseAccepted=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
+    fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIni);
+
+    // Video settings
+    const basicIni = `[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\n`;
+    fs.writeFileSync(path.join(profilesDir, 'basic.ini'), basicIni);
+
+    // OK.ru stream settings (using your RTMP server and key)
+    const serviceJson = {
+        "settings": { 
+            "server": "rtmp://vsu.okcdn.ru/input/",  // Your OK.ru RTMP server
+            "key": OKRU_STREAM_KEY                    // Your stream key
+        },
+        "type": "rtmp_custom"
+    };
+    fs.writeFileSync(path.join(profilesDir, 'service.json'), JSON.stringify(serviceJson, null, 2));
+
+    // Scene with screen capture
+    const sceneJson = {
+        "current_scene": "MainScene",
+        "sources": [
+            { "id": "xshm_input", "name": "Screen", "settings": { "show_cursor": false } },
+            { "id": "pulse_output_capture", "name": "Audio", "settings": {} }
+        ]
+    };
+    fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify(sceneJson, null, 2));
+}
+
+// ============================================================
+// SIMPLE BROWSER + STREAMING
+// ============================================================
+async function simpleStream() {
+    console.log('🚀 Starting Simple Stream to OK.ru');
+    console.log(`📺 URL: ${TARGET_URL}`);
+    console.log(`🔑 Key: ${OKRU_STREAM_KEY.substring(0, 20)}...`);
+    console.log(`⏱️ Duration: ${STREAM_DURATION_MINUTES} minutes`);
+    console.log(`📐 Resolution: ${RES_W}x${RES_H} @ ${BITRATE}kbps\n`);
+    
+    // 1. Setup and start OBS
+    setupOBS();
+    console.log('⚙️ OBS configured');
+    
+    const obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray']);
+    console.log('🎥 OBS started... waiting 5 seconds');
+    await new Promise(r => setTimeout(r, 5000));
+
+    // 2. Connect to OBS WebSocket
+    const obs = new OBSWebSocket();
+    let obsConnected = false;
+    
+    for (let i = 0; i < 10; i++) {
+        try {
+            await obs.connect('ws://127.0.0.1:4455', 'secret');
+            obsConnected = true;
+            console.log('✅ Connected to OBS WebSocket');
+            break;
+        } catch(e) {
+            console.log(`⏳ Waiting for OBS... (${i+1}/10)`);
+            await new Promise(r => setTimeout(r, 2000));
+        }
+    }
+
+    // 3. Launch browser with stealth (same as your previous code)
+    console.log('🌐 Launching browser with stealth...');
+    const browser = await puppeteer.launch({
+        headless: false,
+        defaultViewport: { width: RES_W, height: RES_H },
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            `--window-size=${RES_W},${RES_H}`,
+            '--kiosk',
+            '--autoplay-policy=no-user-gesture-required',
+            '--disable-dev-shm-usage',
+            '--ignore-certificate-errors',
+            '--disable-web-security'
+        ]
+    });
+
+    // 4. Load the URL
+    const page = await browser.newPage();
+    console.log(`📄 Loading: ${TARGET_URL}`);
+    await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+    // 5. Try to click play/unmute buttons (simplified from your code)
+    try {
+        await page.evaluate(() => {
+            // Click any play button
+            const playButtons = document.querySelectorAll('button, .play, .jw-icon-display, .vjs-big-play-button, [aria-label="Play"]');
+            playButtons.forEach(el => {
+                try { el.click(); } catch(e) {}
+            });
+            
+            // Unmute and play video
+            document.querySelectorAll('video').forEach(v => {
+                v.muted = false;
+                v.volume = 1.0;
+                v.play().catch(() => {});
+            });
+            
+            console.log('🔊 Attempted to start video/audio');
+        });
+    } catch(e) {
+        console.log('⚠️ Could not auto-start video');
+    }
+
+    // 6. Switch OBS to capture this page
+    if (obsConnected) {
+        try {
+            await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' });
+            console.log('✅ OBS now capturing browser');
+        } catch(e) {
+            console.log('⚠️ Could not switch OBS scene');
+        }
+    }
+
+    console.log(`\n📡 STREAMING LIVE TO OK.RU!`);
+    console.log(`🔗 RTMP: rtmp://vsu.okcdn.ru/input/`);
+    console.log(`🔑 Key: ${OKRU_STREAM_KEY}`);
+    console.log(`⏱️ Will run for ${STREAM_DURATION_MINUTES} minutes`);
+    console.log(`Press Ctrl+C to stop early\n`);
+
+    // 7. Keep running for the specified duration
+    await new Promise(r => setTimeout(r, STREAM_DURATION_MINUTES * 60 * 1000));
+
+    // 8. Cleanup
+    console.log('🛑 Stopping stream...');
+    await browser.close();
+    obsProcess.kill('SIGKILL');
+    console.log('✅ Done!');
+    process.exit(0);
+}
+
+// ============================================================
+// RUN IT
+// ============================================================
+simpleStream().catch(err => {
+    console.error('❌ Error:', err.message);
+    process.exit(1);
+});
 
 
 
