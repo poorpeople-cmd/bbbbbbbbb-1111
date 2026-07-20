@@ -68,12 +68,12 @@ function setupOBSConfig() {
 }
 
 // ==========================================================================================
-// 3️⃣ LAUNCH OBS MODULE (With Robust Connection Retry Loop)
+// 3️⃣ LAUNCH OBS MODULE 
 // ==========================================================================================
 async function launchOBS() {
     obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray', '--disable-updater']);
     
-    // Retry OBS connection up to 5 times (total 15s timeout)
+    // Retry OBS connection up to 5 times
     for (let attempt = 1; attempt <= 5; attempt++) {
         await new Promise(r => setTimeout(r, 3000));
         try {
@@ -141,7 +141,7 @@ async function triggerSmartUnmute(page) {
 }
 
 // ==========================================================================================
-// 6️⃣ OPEN WEBSITE & FORCED FULLSCREEN (Fixed Video Element Selector)
+// 6️⃣ OPEN WEBSITE & FORCED FULLSCREEN (RESTORED TO ORIGINAL WORKING LOGIC)
 // ==========================================================================================
 async function handleVideoPlayback(page) {
     await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
@@ -164,16 +164,9 @@ async function handleVideoPlayback(page) {
                     const vids = Array.from(document.querySelectorAll('video'));
                     const frames = Array.from(document.querySelectorAll('iframe'));
                     
-                    // Priority to videos that have loaded video content (videoWidth > 0 or readyState > 0)
-                    const activeVids = vids.filter(v => v.videoWidth > 0 || v.readyState > 0 || v.src || v.currentSrc);
-                    
-                    if (activeVids.length > 0) {
-                        targetElement = activeVids.sort((a,b) => (b.videoWidth * b.videoHeight) - (a.videoWidth * a.videoHeight))[0];
-                    } else if (vids.length > 0) {
-                        targetElement = vids[0];
-                    } else if (frames.length > 0) {
-                        targetElement = frames.sort((a,b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
-                    }
+                    // Restored exactly as it was in your original script
+                    if (vids.length > 0) targetElement = vids.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
+                    else if (frames.length > 0) targetElement = frames.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
 
                     if (targetElement) {
                         targetElement.style.setProperty('position', 'fixed', 'important');
@@ -205,7 +198,7 @@ function forceChromeToFrontOS() {
 }
 
 // ==========================================================================================
-// 8️⃣ 💎 BEAUTIFUL LIVE DATA DASHBOARD (Fixed Detection & Clean Screen)
+// 8️⃣ 💎 BEAUTIFUL LIVE DATA DASHBOARD (FIXED DETECTION AND DISPLAY)
 // ==========================================================================================
 async function startBeautifulDashboard(page) {
     let lastTime = 0;
@@ -220,11 +213,8 @@ async function startBeautifulDashboard(page) {
                     const vids = Array.from(document.querySelectorAll('video'));
                     if (vids.length === 0) return null;
                     
-                    // Filter out empty video elements
-                    const activeVids = vids.filter(v => v.videoWidth > 0 || v.readyState > 0 || v.src || v.currentSrc);
-                    const v = activeVids.length > 0 
-                        ? activeVids.sort((a,b) => (b.videoWidth * b.videoHeight) - (a.videoWidth * a.videoHeight))[0] 
-                        : vids[0];
+                    // Grab the largest video element (same as original logic)
+                    const v = vids.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
                     
                     const dur = isNaN(v.duration) ? 'NaN' : (!isFinite(v.duration) ? 'Infinity' : v.duration);
                     
@@ -249,25 +239,29 @@ async function startBeautifulDashboard(page) {
             } catch(e) {}
         }
 
-        // Proper cross-platform console clear
-        process.stdout.write('\x1Bc');
+        // Bulletproof screen clear method
+        console.clear();
         
         console.log(`\x1b[1m\x1b[35m=============================================================\x1b[0m`);
         console.log(`\x1b[1m\x1b[36m 🚀  STREAMING AUTOMATION DASHBOARD - PRO LIVE MONITOR \x1b[0m`);
         console.log(`\x1b[1m\x1b[35m=============================================================\x1b[0m`);
         console.log(`\x1b[1m 🌐 TARGET :\x1b[0m ${TARGET_URL}`);
-        console.log(`\x1b[1m 🔌 OBS    :\x1b[0m ${isObsConnected ? '\x1b[32m✅ Socket Connected & Capturing\x1b[0m' : '\x1b[31m❌ Socket Disconnected (Retrying...)\x1b[0m'}`);
+        console.log(`\x1b[1m 🔌 OBS    :\x1b[0m ${isObsConnected ? '\x1b[32m✅ Socket Connected\x1b[0m' : '\x1b[31m❌ Socket Disconnected\x1b[0m'}`);
         console.log(`\x1b[1m\x1b[36m-------------------------------------------------------------\x1b[0m`);
         console.log(`\x1b[1m 📺 VIDEO FEED STATUS \x1b[0m`);
 
-        if (!bestStats || (bestStats.width === 0 && bestStats.readyState === 0)) {
-            console.log(`\n\x1b[33m ⏳ [Scanning/Loading Stream...] Waiting for video decoder to initialize...\x1b[0m\n`);
+        if (!bestStats) {
+            console.log(`\n\x1b[33m ⏳ [Scanning...] Waiting for video element to appear in DOM...\x1b[0m\n`);
         } else {
-            // Strict condition for actual live video rendering
-            const isLive = bestStats.currentTime > lastTime && bestStats.readyState >= 2;
-            const statusTxt = isLive 
-                ? `\x1b[32m✅ LIVE DATA ARRIVING (Frames Decoding)\x1b[0m` 
-                : `\x1b[31m❌ VIDEO FROZEN / BUFFERING\x1b[0m`;
+            // Check if frames are actually moving forward
+            const isLive = bestStats.currentTime > lastTime;
+            
+            let statusTxt = `\x1b[33m⏳ VIDEO FOUND (Waiting to start...)\x1b[0m`;
+            if (isLive && bestStats.readyState >= 2) {
+                statusTxt = `\x1b[32m✅ LIVE DATA ARRIVING (Frames Decoding)\x1b[0m`;
+            } else if (!isLive && bestStats.currentTime > 0) {
+                statusTxt = `\x1b[31m❌ VIDEO FROZEN / BUFFERING\x1b[0m`;
+            }
 
             const durTxt = typeof bestStats.duration === 'string' ? `${bestStats.duration} (Live/HLS)` : `${bestStats.duration.toFixed(2)}s`;
             const rsColor = bestStats.readyState >= 3 ? '\x1b[32m' : '\x1b[33m';
@@ -313,7 +307,6 @@ process.on('SIGINT', async () => {
 
 // Run the engine
 main();
-
 
 
 
