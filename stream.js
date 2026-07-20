@@ -813,7 +813,7 @@ async function startWatchdog() {
     let streamSetupTime = Date.now(); 
     let isWarmupPhase = true; 
     // const WARMUP_MAX_TIME = 15000;
-    const WARMUP_MAX_TIME = 25000; 
+    const WARMUP_MAX_TIME = 15000;
     
 
     let activeUrlStr = urlList[currentUrlIndex];
