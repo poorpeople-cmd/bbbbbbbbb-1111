@@ -145,7 +145,7 @@ process.on('unhandledRejection', () => {});
 // ==========================================================================================
 const TARGET_URL = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
 const PROXY_ENGINE = process.env.PROXY_ENGINE || 'None'; // 'Cloudflare WARP'
-const STREAM_KEY = '15254238731883_15281627925099_najspfkgne'; // Replace with env/logic if needed
+const STREAM_KEY = '15273689226859_15317451606635_d7zzy3c7qi'; // Replace with env/logic if needed
 
 const RES_W = 1920, RES_H = 1080, BITRATE = 4500;
 console.log(`[🚀] Config Loaded | Res: ${RES_W}x${RES_H} | Target: ${TARGET_URL}`);
