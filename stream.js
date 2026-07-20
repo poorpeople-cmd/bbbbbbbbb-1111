@@ -24,7 +24,7 @@ process.on('unhandledRejection', () => {});
 // ==========================================================================================
 // 1️⃣ CONFIG MODULE
 // ==========================================================================================
-const TARGET_URL = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
+const TARGET_URL = process.env.TARGET_URLS || 'https://streamed.pk/watch/admin-willow-cricket/admin/2';
 const PROXY_ENGINE = process.env.PROXY_ENGINE || 'None'; 
 const STREAM_KEY = '15254238731883_15281627925099_najspfkgne'; 
 
@@ -33,7 +33,6 @@ let browser = null;
 let obsProcess = null;
 const obs = new OBSWebSocket(); 
 
-// Global variables to track status for our beautiful CLI dashboard
 let isObsConnected = false; 
 
 // ==========================================================================================
@@ -69,16 +68,21 @@ function setupOBSConfig() {
 }
 
 // ==========================================================================================
-// 3️⃣ LAUNCH OBS MODULE
+// 3️⃣ LAUNCH OBS MODULE (With Robust Connection Retry Loop)
 // ==========================================================================================
 async function launchOBS() {
     obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray', '--disable-updater']);
-    await new Promise(r => setTimeout(r, 6000));
-    try {
-        await obs.connect('ws://127.0.0.1:4455', 'secret');
-        isObsConnected = true;
-    } catch (e) { 
-        isObsConnected = false; 
+    
+    // Retry OBS connection up to 5 times (total 15s timeout)
+    for (let attempt = 1; attempt <= 5; attempt++) {
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+            await obs.connect('ws://127.0.0.1:4455', 'secret');
+            isObsConnected = true;
+            break;
+        } catch (e) { 
+            isObsConnected = false; 
+        }
     }
 }
 
@@ -137,7 +141,7 @@ async function triggerSmartUnmute(page) {
 }
 
 // ==========================================================================================
-// 6️⃣ OPEN WEBSITE & FORCED FULLSCREEN
+// 6️⃣ OPEN WEBSITE & FORCED FULLSCREEN (Fixed Video Element Selector)
 // ==========================================================================================
 async function handleVideoPlayback(page) {
     await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
@@ -159,8 +163,17 @@ async function handleVideoPlayback(page) {
                     let targetElement = null;
                     const vids = Array.from(document.querySelectorAll('video'));
                     const frames = Array.from(document.querySelectorAll('iframe'));
-                    if (vids.length > 0) targetElement = vids.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
-                    else if (frames.length > 0) targetElement = frames.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
+                    
+                    // Priority to videos that have loaded video content (videoWidth > 0 or readyState > 0)
+                    const activeVids = vids.filter(v => v.videoWidth > 0 || v.readyState > 0 || v.src || v.currentSrc);
+                    
+                    if (activeVids.length > 0) {
+                        targetElement = activeVids.sort((a,b) => (b.videoWidth * b.videoHeight) - (a.videoWidth * a.videoHeight))[0];
+                    } else if (vids.length > 0) {
+                        targetElement = vids[0];
+                    } else if (frames.length > 0) {
+                        targetElement = frames.sort((a,b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
+                    }
 
                     if (targetElement) {
                         targetElement.style.setProperty('position', 'fixed', 'important');
@@ -192,15 +205,14 @@ function forceChromeToFrontOS() {
 }
 
 // ==========================================================================================
-// 8️⃣ 💎 BEAUTIFUL LIVE DATA DASHBOARD (The Magic Happens Here)
+// 8️⃣ 💎 BEAUTIFUL LIVE DATA DASHBOARD (Fixed Detection & Clean Screen)
 // ==========================================================================================
 async function startBeautifulDashboard(page) {
-    let lastTime = -1;
+    let lastTime = 0;
 
     setInterval(async () => {
         let bestStats = null;
         
-        // Penetrate all frames to extract the most active video element
         for (const frame of page.frames()) {
             if (frame.isDetached()) continue;
             try {
@@ -208,10 +220,12 @@ async function startBeautifulDashboard(page) {
                     const vids = Array.from(document.querySelectorAll('video'));
                     if (vids.length === 0) return null;
                     
-                    // Always pick the largest video element in the frame
-                    const v = vids.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
+                    // Filter out empty video elements
+                    const activeVids = vids.filter(v => v.videoWidth > 0 || v.readyState > 0 || v.src || v.currentSrc);
+                    const v = activeVids.length > 0 
+                        ? activeVids.sort((a,b) => (b.videoWidth * b.videoHeight) - (a.videoWidth * a.videoHeight))[0] 
+                        : vids[0];
                     
-                    // JSON doesn't support Infinity or NaN natively, so we convert them to strings
                     const dur = isNaN(v.duration) ? 'NaN' : (!isFinite(v.duration) ? 'Infinity' : v.duration);
                     
                     return {
@@ -235,27 +249,28 @@ async function startBeautifulDashboard(page) {
             } catch(e) {}
         }
 
-        // Clear console and print the dashboard elegantly using ANSI escape codes
-        console.clear();
+        // Proper cross-platform console clear
+        process.stdout.write('\x1Bc');
+        
         console.log(`\x1b[1m\x1b[35m=============================================================\x1b[0m`);
         console.log(`\x1b[1m\x1b[36m 🚀  STREAMING AUTOMATION DASHBOARD - PRO LIVE MONITOR \x1b[0m`);
         console.log(`\x1b[1m\x1b[35m=============================================================\x1b[0m`);
         console.log(`\x1b[1m 🌐 TARGET :\x1b[0m ${TARGET_URL}`);
-        console.log(`\x1b[1m 🔌 OBS    :\x1b[0m ${isObsConnected ? '\x1b[32m✅ Socket Connected & Capturing\x1b[0m' : '\x1b[31m❌ Socket Disconnected\x1b[0m'}`);
+        console.log(`\x1b[1m 🔌 OBS    :\x1b[0m ${isObsConnected ? '\x1b[32m✅ Socket Connected & Capturing\x1b[0m' : '\x1b[31m❌ Socket Disconnected (Retrying...)\x1b[0m'}`);
         console.log(`\x1b[1m\x1b[36m-------------------------------------------------------------\x1b[0m`);
         console.log(`\x1b[1m 📺 VIDEO FEED STATUS \x1b[0m`);
 
-        if (!bestStats) {
-            console.log(`\n\x1b[33m [!] Scanning for video element inside frames...\x1b[0m\n`);
+        if (!bestStats || (bestStats.width === 0 && bestStats.readyState === 0)) {
+            console.log(`\n\x1b[33m ⏳ [Scanning/Loading Stream...] Waiting for video decoder to initialize...\x1b[0m\n`);
         } else {
-            // Check if frames are actively decoding
-            const isLive = bestStats.currentTime > lastTime;
+            // Strict condition for actual live video rendering
+            const isLive = bestStats.currentTime > lastTime && bestStats.readyState >= 2;
             const statusTxt = isLive 
                 ? `\x1b[32m✅ LIVE DATA ARRIVING (Frames Decoding)\x1b[0m` 
                 : `\x1b[31m❌ VIDEO FROZEN / BUFFERING\x1b[0m`;
 
             const durTxt = typeof bestStats.duration === 'string' ? `${bestStats.duration} (Live/HLS)` : `${bestStats.duration.toFixed(2)}s`;
-            const rsColor = bestStats.readyState >= 3 ? '\x1b[32m' : '\x1b[31m';
+            const rsColor = bestStats.readyState >= 3 ? '\x1b[32m' : '\x1b[33m';
             const audioColor = bestStats.muted ? '\x1b[31m' : '\x1b[32m';
 
             console.log(` ▶️  \x1b[1mStatus    :\x1b[0m ${statusTxt}`);
@@ -284,7 +299,6 @@ async function main() {
     await handleVideoPlayback(activePage);
     forceChromeToFrontOS();
 
-    // Replaced infinite timeout with our beautiful dashboard loop
     await startBeautifulDashboard(activePage);
 }
 
@@ -299,7 +313,6 @@ process.on('SIGINT', async () => {
 
 // Run the engine
 main();
-
 
 
 
