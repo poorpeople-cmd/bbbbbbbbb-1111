@@ -153,6 +153,9 @@ let uploadCycleCount = 0;
 // =========================================================================================
 // 🛡️ ADVANCED NETWORK INTELLIGENCE & NAVIGATION SHIELD (UPDATED FOR SOCKET LIMITS)
 // =========================================================================================
+// =========================================================================================
+// 🛡️ ADVANCED NETWORK INTELLIGENCE & NAVIGATION SHIELD (SMART SOCKET FIX)
+// =========================================================================================
 async function setupNetworkAdBlocker(page) {
      if (!page) return;
      try {
@@ -170,20 +173,23 @@ async function setupNetworkAdBlocker(page) {
                  }
              }
 
-             // 2. 🟢 Aggressive Tracker & WebSocket Blocking (Frees up Chrome Connection Limits)
+             // 2. 🟢 Tracker Blocking (BUT ALLOWING ESSENTIAL WEBSOCKETS FOR STREAM AUTH)
              const junkKeywords = [
                  'popads', 'exoclick', 'adsterra', 'onclickads', 'jerkmate', 'adrevenue', 
                  'fanduel', 'doubleclick', 'adexchangerapid', 'googletagmanager', 
-                 'google-analytics', 'metrics', 'beacon', 'hotjar', 'clarity', 'scorecardresearch',
-                 'webrtc', 'chat', 'io', 'socket.io', 'wss://'
+                 'google-analytics', 'metrics', 'beacon', 'hotjar', 'clarity', 'scorecardresearch'
+                 // 🔴 REMOVED: 'socket.io', 'wss://', 'io' (Taake streamed.pk ka player crash na ho)
              ];
 
              const isJunk = junkKeywords.some(kw => url.includes(kw));
+             
+             // Sirf chat wale sockets ko block karein, baqi stream sockets allow karein
+             const isChatSocket = type === 'websocket' && (url.includes('chat') || url.includes('message'));
 
              if (
-                 isJunk || 
-                 (type === 'script' && (url.includes('analytics') || url.includes('tracking') || url.includes('ad-delivery'))) ||
-                 type === 'websocket' // 🔴 Kill all WebSockets that cause connection jams
+                 isJunk || isChatSocket ||
+                 (type === 'script' && (url.includes('analytics') || url.includes('tracking') || url.includes('ad-delivery')))
+                 // 🔴 REMOVED: type === 'websocket' (Absolute kill switch hata diya)
              ) {
                  request.abort().catch(()=>{});
              } else {
