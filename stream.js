@@ -12,12 +12,12 @@ const { OBSWebSocket } = require('obs-websocket-js');
 process.on('uncaughtException', () => {});
 process.on('unhandledRejection', () => {});
 
-// =========================================================================================
+// ==========================================================================================
 // 1️⃣ CONFIG MODULE
 // ==========================================================================================
 const TARGET_URL = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
-const PROXY_ENGINE = process.env.PROXY_ENGINE || 'None'; // 'Cloudflare WARP'
-const STREAM_KEY = '15254238731883_15281627925099_najspfkgne'; // Replace with env/logic if needed
+const PROXY_ENGINE = process.env.PROXY_ENGINE || 'None';
+const STREAM_KEY = '15254238731883_15281627925099_najspfkgne'; // Adjust logic if needed
 
 const RES_W = 1920, RES_H = 1080, BITRATE = 4500;
 console.log(`[🚀] Config Loaded | Res: ${RES_W}x${RES_H} | Target: ${TARGET_URL}`);
@@ -38,7 +38,6 @@ function setupOBSConfig() {
     fs.mkdirSync(profilesDir, { recursive: true });
     fs.mkdirSync(scenesDir, { recursive: true });
 
-    // Block ALL popups, wizards, and safe mode prompts permanently
     const globalIni = `[General]\nLicenseAccepted=true\nEnableAutoUpdates=false\nFirstRun=false\n[Basic]\nProfile=Untitled\nSceneCollection=Untitled\n[BasicWindow]\nShowAutoConfig=false\nShowSafeModeNotice=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
     fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIni);
     
@@ -71,7 +70,7 @@ async function launchOBS() {
     try {
         await obs.connect('ws://127.0.0.1:4455', 'secret');
         console.log('[+] OBS Connected via WebSocket.');
-    } catch (e) { console.log('[-] OBS WebSocket Error (Ignored).'); }
+    } catch (e) {}
 }
 
 // ==========================================================================================
@@ -102,11 +101,86 @@ async function launchChrome() {
     const pages = await browser.pages();
     const page = pages[0];
 
-    // Basic popup blocker
     page.on('dialog', async dialog => { try { await dialog.dismiss(); } catch(e){} });
     await page.evaluateOnNewDocument(() => { window.alert = window.confirm = window.prompt = window.open = function() { return null; }; });
 
     return page;
+}
+
+// ==========================================================================================
+// 🔊 SMART UNMUTE ENGINE
+// ==========================================================================================
+async function triggerSmartUnmute(page) {
+    for (const frame of page.frames()) {
+        try {
+            if (frame.isDetached()) continue;
+
+            await frame.evaluate(() => {
+                document.querySelectorAll('video, audio').forEach(media => {
+                    media.muted = false;
+                    media.volume = 1.0;
+                    if (media.paused) { media.play().catch(()=>{}); }
+                });
+
+                const searchKeywords = ['UNMUTE', 'MUTE ME', 'STREAM UNMUTE', 'AUDIO', 'SOUND', 'SPEAKER', 'VOLUME', 'CLICK TO UNMUTE', 'TAP TO UNMUTE', 'ENABLE AUDIO'];
+                const searchJS = ['unmute', 'volume', 'audio', 'sound', 'speaker'];
+
+                const potentialElements = Array.from(document.querySelectorAll('button, div, span, a, i, svg, img'));
+                
+                potentialElements.forEach(el => {
+                    const text = (el.innerText || el.textContent || '').trim().toUpperCase();
+                    const onClickStr = (el.getAttribute('onclick') || '').toLowerCase();
+                    const ariaLabel = (el.getAttribute('aria-label') || '').toUpperCase();
+                    const className = (el.className || '').toString().toUpperCase();
+                    
+                    if (searchKeywords.some(kw => text.includes(kw)) || searchJS.some(kw => onClickStr.includes(kw)) || 
+                        searchKeywords.some(kw => ariaLabel.includes(kw)) || searchKeywords.some(kw => className.includes(kw))) {
+                        
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none') {
+                            try { el.click(); } catch(e) {}
+                            try { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e) {}
+                        }
+                    }
+                });
+            }).catch(() => {});
+        } catch (e) {}
+    }
+}
+
+// ==========================================================================================
+// 💓 HEARTBEAT LOGGER MODULE (NEW)
+// ==========================================================================================
+function startHeartbeatLogger(page) {
+    setInterval(async () => {
+        if (!page) return;
+        try {
+            let videoTime = 'N/A';
+            let isHealthy = 'UNKNOWN';
+
+            for (const frame of page.frames()) {
+                if (frame.isDetached()) continue;
+                try {
+                    const time = await frame.evaluate(() => {
+                        const vids = Array.from(document.querySelectorAll('video'));
+                        for (const v of vids) {
+                            if (v.currentTime > 0) return v.currentTime.toFixed(1) + 's';
+                        }
+                        return null;
+                    });
+
+                    if (time) {
+                        videoTime = time;
+                        isHealthy = 'HEALTHY';
+                        break;
+                    }
+                } catch (e) {}
+            }
+
+            console.log(`\n[💓] STREAM HEARTBEAT: Status is ${isHealthy} | Video Time: ${videoTime}`);
+            console.log(`[▶️] CURRENTLY LIVE   : (Audio ON) -> ${TARGET_URL}`);
+        } catch (e) {}
+    }, 60000); // Logs every 60 seconds (1 minute)
 }
 
 // ==========================================================================================
@@ -117,21 +191,18 @@ async function handleVideoPlayback(page) {
     await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
 
     console.log(`[*] Detecting and Forcing Video Fullscreen...`);
+    
     await page.evaluate(() => {
-        // Run a continuous loop to ensure video stays fullscreen and unmuted
         setInterval(() => {
             try {
-                // Blackout background
                 document.documentElement.style.setProperty('background-color', 'black', 'important');
                 document.body.style.setProperty('background-color', 'black', 'important');
                 document.body.style.setProperty('overflow', 'hidden', 'important');
 
-                // Nuke junk elements
                 document.querySelectorAll('.chat, #chat, header, footer, .sidebar, .banner, .ads, [id*="pop"]').forEach(el => { 
                     try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
                 });
 
-                // Detect Video or Iframe
                 let targetElement = null;
                 const vids = Array.from(document.querySelectorAll('video'));
                 const frames = Array.from(document.querySelectorAll('iframe'));
@@ -139,7 +210,6 @@ async function handleVideoPlayback(page) {
                 if (vids.length > 0) targetElement = vids.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
                 else if (frames.length > 0) targetElement = frames.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
 
-                // Force Fullscreen CSS
                 if (targetElement) {
                     targetElement.style.setProperty('position', 'fixed', 'important');
                     targetElement.style.setProperty('top', '0px', 'important');
@@ -151,61 +221,34 @@ async function handleVideoPlayback(page) {
                     targetElement.style.setProperty('opacity', '1', 'important');
                     targetElement.style.setProperty('display', 'block', 'important');
                 }
-
-                // Force Play & Unmute
-                document.querySelectorAll('video, audio').forEach(media => { 
-                    media.muted = false; 
-                    media.volume = 1.0; 
-                    if (media.paused) { media.play().catch(()=>{}); }
-                });
             } catch (err) {}
         }, 1000); 
     });
 
-    // Attempt a physical click in the center to trigger play if blocked by user-gesture rules
+    console.log(`[*] 🔊 Starting Smart Audio Engine...`);
+    setInterval(async () => {
+        await triggerSmartUnmute(page);
+    }, 3000); 
+
     await new Promise(r => setTimeout(r, 3000));
     try { await page.mouse.click(RES_W/2, RES_H/2); } catch(e){} 
+
+    // 🔥 Start the Heartbeat Logger
+    startHeartbeatLogger(page);
 }
-
-// ==========================================================================================
-// 6️⃣ BRING CHROME TO FRONT (OS LEVEL) MODULE
-// ==========================================================================================
-// function forceChromeToFrontOS() {
-//     console.log(`[*] Forcing Chrome to Top Window at OS Level...`);
-//     try {
-//         // 1. Force minimize OBS if it exists
-//         execSync('xdotool search --name "OBS" windowminimize || true', { stdio: 'ignore' });
-        
-//         // 2. Force activate Chrome window
-//         execSync('xdotool search --onlyvisible --class "chrome" windowactivate || wmctrl -a "Google Chrome" || true', { stdio: 'ignore' });
-//     } catch (e) {
-//         console.log(`[!] OS level focus tools (xdotool/wmctrl) failed or not installed. Trusting launch order.`);
-//     }
-// }
-
 
 // ==========================================================================================
 // 6️⃣ AGGRESSIVE WINDOW MANAGEMENT (OS LEVEL FIX)
 // ==========================================================================================
 function forceChromeToFrontOS() {
     console.log(`[*] 🛡️ Activating Aggressive Screen Clearing Shield...`);
-    
-    // Yeh loop har 3 second baad chalega aur screen ko saaf rakhega
     setInterval(() => {
         try {
-            // 1. Wizard ko kill karo (Agar "Auto-Configuration" popup aaye toh usay 'Escape' press karwa do)
             execSync('xdotool search --name "Auto-Configuration" key Escape || true', { stdio: 'ignore' });
             execSync('xdotool search --name "Usage Information" key Escape || true', { stdio: 'ignore' });
-            
-            // 2. OBS ko screen se bahar phek do (Coordinates 3000x3000 par le jao)
-            // Is se OBS chalega zaroor, lekin stream capture area (1920x1080) mein nazar nahi aayega!
             execSync('xdotool search --class "obs" windowmove 3000 3000 || true', { stdio: 'ignore' });
-            
-            // 3. Chrome ko zabardasti 0,0 position par laa kar full screen (1920x1080) kar do
             execSync('xdotool search --class "chrome" windowmove 0 0 windowsize 1920 1080 windowactivate || true', { stdio: 'ignore' });
-        } catch (e) {
-            // Agar window momentarily na milay toh error ignore karo
-        }
+        } catch (e) {}
     }, 3000);
 }
 
@@ -224,7 +267,7 @@ async function main() {
     console.log(`\n✅ ARCHITECTURE COMPLETE: Stream is LIVE and Capturing. Entering Infinite Loop...\n`);
     
     while (true) {
-        await new Promise(r => setTimeout(r, 60000)); // Sleep loop
+        await new Promise(r => setTimeout(r, 60000));
     }
 }
 
@@ -252,9 +295,405 @@ main();
 
 
 
+// =========== iss mey bas audio ko unmute karney wala code nahey hai ====================
 
 
-// ====================================
+
+// const puppeteer = require('puppeteer-extra');
+// const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+// puppeteer.use(StealthPlugin());
+
+// const fs = require('fs');
+// const path = require('path');
+// const os = require('os');
+// const { spawn, execSync } = require('child_process');
+// const { OBSWebSocket } = require('obs-websocket-js'); 
+
+// // 🛡️ Global Error Shield
+// process.on('uncaughtException', () => {});
+// process.on('unhandledRejection', () => {});
+
+// // =========================================================================================
+// // 1️⃣ CONFIG MODULE
+// // ==========================================================================================
+// const TARGET_URL = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
+// const PROXY_ENGINE = process.env.PROXY_ENGINE || 'None'; // 'Cloudflare WARP'
+// const STREAM_KEY = '15254238731883_15281627925099_najspfkgne'; // Replace with env/logic if needed
+
+// const RES_W = 1920, RES_H = 1080, BITRATE = 4500;
+// console.log(`[🚀] Config Loaded | Res: ${RES_W}x${RES_H} | Target: ${TARGET_URL}`);
+
+// let browser = null;
+// let obsProcess = null;
+// const obs = new OBSWebSocket(); 
+
+// // ==========================================================================================
+// // 2️⃣ OBS SETUP MODULE
+// // ==========================================================================================
+// function setupOBSConfig() {
+//     console.log(`[*] Setting up OBS configuration files...`);
+//     const obsDir = path.join(os.homedir(), '.config', 'obs-studio');
+//     const profilesDir = path.join(obsDir, 'basic', 'profiles', 'Untitled');
+//     const scenesDir = path.join(obsDir, 'basic', 'scenes');
+
+//     fs.mkdirSync(profilesDir, { recursive: true });
+//     fs.mkdirSync(scenesDir, { recursive: true });
+
+//     // Block ALL popups, wizards, and safe mode prompts permanently
+//     const globalIni = `[General]\nLicenseAccepted=true\nEnableAutoUpdates=false\nFirstRun=false\n[Basic]\nProfile=Untitled\nSceneCollection=Untitled\n[BasicWindow]\nShowAutoConfig=false\nShowSafeModeNotice=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
+//     fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIni);
+    
+//     const basicIni = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\nx264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0\n`;
+//     fs.writeFileSync(path.join(profilesDir, 'basic.ini'), basicIni);
+
+//     const serviceJson = { "settings": { "server": "rtmp://vsu.okcdn.ru/input/", "key": STREAM_KEY }, "type": "rtmp_custom" };
+//     fs.writeFileSync(path.join(profilesDir, 'service.json'), JSON.stringify(serviceJson, null, 2));
+
+//     const sceneJson = {
+//         "current_scene": "MainScene", "current_program_scene": "MainScene", "name": "Untitled",
+//         "scene_order": [{"name": "MainScene"}],
+//         "sources": [
+//             { "id": "xshm_input", "name": "Screen", "settings": { "show_cursor": false } },
+//             { "id": "pulse_output_capture", "name": "Audio", "settings": {} },
+//             { "id": "scene", "name": "MainScene", "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true}, {"name": "Audio", "id": 2, "visible": true} ] } }
+//         ]
+//     };
+//     fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify(sceneJson, null, 2));
+// }
+
+// // ==========================================================================================
+// // 3️⃣ LAUNCH OBS MODULE
+// // ==========================================================================================
+// async function launchOBS() {
+//     console.log(`[*] Launching OBS Studio...`);
+//     obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray', '--disable-updater']);
+    
+//     await new Promise(r => setTimeout(r, 6000));
+//     try {
+//         await obs.connect('ws://127.0.0.1:4455', 'secret');
+//         console.log('[+] OBS Connected via WebSocket.');
+//     } catch (e) { console.log('[-] OBS WebSocket Error (Ignored).'); }
+// }
+
+// // ==========================================================================================
+// // 4️⃣ LAUNCH CHROME MODULE
+// // ==========================================================================================
+// async function launchChrome() {
+//     console.log(`[*] Launching Chrome...`);
+//     let browserArgs = [
+//         '--no-sandbox', '--disable-setuid-sandbox',
+//         `--window-size=${RES_W},${RES_H}`, '--window-position=0,0', 
+//         '--kiosk', '--start-fullscreen',
+//         '--autoplay-policy=no-user-gesture-required',
+//         `--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`,
+//         `--load-extension=${path.join(process.cwd(), 'ublock-lite')}`
+//     ];
+
+//     if (PROXY_ENGINE.includes('Cloudflare')) {
+//         browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
+//     }
+
+//     browser = await puppeteer.launch({
+//         headless: false, 
+//         defaultViewport: { width: RES_W, height: RES_H },
+//         ignoreDefaultArgs: ['--enable-automation'], 
+//         args: browserArgs
+//     });
+
+//     const pages = await browser.pages();
+//     const page = pages[0];
+
+//     // Basic popup blocker
+//     page.on('dialog', async dialog => { try { await dialog.dismiss(); } catch(e){} });
+//     await page.evaluateOnNewDocument(() => { window.alert = window.confirm = window.prompt = window.open = function() { return null; }; });
+
+//     return page;
+// }
+
+// // ==========================================================================================
+// // 5️⃣ OPEN WEBSITE & DETECT/PLAY/FULLSCREEN MODULE
+// // ==========================================================================================
+// async function handleVideoPlayback(page) {
+//     console.log(`[*] Opening Website -> ${TARGET_URL}`);
+//     await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
+
+//     console.log(`[*] Detecting and Forcing Video Fullscreen...`);
+//     await page.evaluate(() => {
+//         // Run a continuous loop to ensure video stays fullscreen and unmuted
+//         setInterval(() => {
+//             try {
+//                 // Blackout background
+//                 document.documentElement.style.setProperty('background-color', 'black', 'important');
+//                 document.body.style.setProperty('background-color', 'black', 'important');
+//                 document.body.style.setProperty('overflow', 'hidden', 'important');
+
+//                 // Nuke junk elements
+//                 document.querySelectorAll('.chat, #chat, header, footer, .sidebar, .banner, .ads, [id*="pop"]').forEach(el => { 
+//                     try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
+//                 });
+
+//                 // Detect Video or Iframe
+//                 let targetElement = null;
+//                 const vids = Array.from(document.querySelectorAll('video'));
+//                 const frames = Array.from(document.querySelectorAll('iframe'));
+
+//                 if (vids.length > 0) targetElement = vids.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
+//                 else if (frames.length > 0) targetElement = frames.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
+
+//                 // Force Fullscreen CSS
+//                 if (targetElement) {
+//                     targetElement.style.setProperty('position', 'fixed', 'important');
+//                     targetElement.style.setProperty('top', '0px', 'important');
+//                     targetElement.style.setProperty('left', '0px', 'important');
+//                     targetElement.style.setProperty('width', '100vw', 'important');
+//                     targetElement.style.setProperty('height', '100vh', 'important');
+//                     targetElement.style.setProperty('z-index', '2147483647', 'important'); 
+//                     targetElement.style.setProperty('background-color', 'black', 'important');
+//                     targetElement.style.setProperty('opacity', '1', 'important');
+//                     targetElement.style.setProperty('display', 'block', 'important');
+//                 }
+
+//                 // Force Play & Unmute
+//                 document.querySelectorAll('video, audio').forEach(media => { 
+//                     media.muted = false; 
+//                     media.volume = 1.0; 
+//                     if (media.paused) { media.play().catch(()=>{}); }
+//                 });
+//             } catch (err) {}
+//         }, 1000); 
+//     });
+
+//     // Attempt a physical click in the center to trigger play if blocked by user-gesture rules
+//     await new Promise(r => setTimeout(r, 3000));
+//     try { await page.mouse.click(RES_W/2, RES_H/2); } catch(e){} 
+// }
+
+// // ==========================================================================================
+// // 6️⃣ BRING CHROME TO FRONT (OS LEVEL) MODULE
+// // ==========================================================================================
+// // function forceChromeToFrontOS() {
+// //     console.log(`[*] Forcing Chrome to Top Window at OS Level...`);
+// //     try {
+// //         // 1. Force minimize OBS if it exists
+// //         execSync('xdotool search --name "OBS" windowminimize || true', { stdio: 'ignore' });
+        
+// //         // 2. Force activate Chrome window
+// //         execSync('xdotool search --onlyvisible --class "chrome" windowactivate || wmctrl -a "Google Chrome" || true', { stdio: 'ignore' });
+// //     } catch (e) {
+// //         console.log(`[!] OS level focus tools (xdotool/wmctrl) failed or not installed. Trusting launch order.`);
+// //     }
+// // }
+
+
+// // ==========================================================================================
+// // 6️⃣ AGGRESSIVE WINDOW MANAGEMENT (OS LEVEL FIX)
+// // ==========================================================================================
+// function forceChromeToFrontOS() {
+//     console.log(`[*] 🛡️ Activating Aggressive Screen Clearing Shield...`);
+    
+//     // Yeh loop har 3 second baad chalega aur screen ko saaf rakhega
+//     setInterval(() => {
+//         try {
+//             // 1. Wizard ko kill karo (Agar "Auto-Configuration" popup aaye toh usay 'Escape' press karwa do)
+//             execSync('xdotool search --name "Auto-Configuration" key Escape || true', { stdio: 'ignore' });
+//             execSync('xdotool search --name "Usage Information" key Escape || true', { stdio: 'ignore' });
+            
+//             // 2. OBS ko screen se bahar phek do (Coordinates 3000x3000 par le jao)
+//             // Is se OBS chalega zaroor, lekin stream capture area (1920x1080) mein nazar nahi aayega!
+//             execSync('xdotool search --class "obs" windowmove 3000 3000 || true', { stdio: 'ignore' });
+            
+//             // 3. Chrome ko zabardasti 0,0 position par laa kar full screen (1920x1080) kar do
+//             execSync('xdotool search --class "chrome" windowmove 0 0 windowsize 1920 1080 windowactivate || true', { stdio: 'ignore' });
+//         } catch (e) {
+//             // Agar window momentarily na milay toh error ignore karo
+//         }
+//     }, 3000);
+// }
+
+// // ==========================================================================================
+// // 7️⃣ INFINITE WAIT MODULE
+// // ==========================================================================================
+// async function main() {
+//     setupOBSConfig();
+//     await launchOBS();
+    
+//     const activePage = await launchChrome();
+//     await handleVideoPlayback(activePage);
+    
+//     forceChromeToFrontOS();
+
+//     console.log(`\n✅ ARCHITECTURE COMPLETE: Stream is LIVE and Capturing. Entering Infinite Loop...\n`);
+    
+//     while (true) {
+//         await new Promise(r => setTimeout(r, 60000)); // Sleep loop
+//     }
+// }
+
+// // 🧹 Cleanup logic
+// process.on('SIGINT', async () => {
+//     console.log('\n[*] Exiting and cleaning up...');
+//     try { await obs.disconnect(); } catch (e) {} 
+//     if (browser) { try { await browser.close(); } catch(e) {} }
+//     try { execSync('pkill -9 obs chrome puppeteer || true', { stdio: 'ignore' }); } catch (e) {}
+//     process.exit(0);
+// });
+
+// // Run the engine
+// main();
+
+
+
+
+
+
+// ================================= upper jina bey code hai woo simple and single url k hai short ====================================
+// ================================= upper jina bey code hai woo simple and single url k hai short ====================================
+// ================================= upper jina bey code hai woo simple and single url k hai short ====================================
+// ================================= upper jina bey code hai woo simple and single url k hai short ====================================
+// ================================= upper jina bey code hai woo simple and single url k hai short ====================================
+// ================================= upper jina bey code hai woo simple and single url k hai short ====================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// # ================== yeh king hey below yeh original haoi %^^%$%&***@^#%%##&#*( =================
+
 
 
 
