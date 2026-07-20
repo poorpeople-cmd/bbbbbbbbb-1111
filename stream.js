@@ -170,17 +170,43 @@ async function handleVideoPlayback(page) {
 // ==========================================================================================
 // 6️⃣ BRING CHROME TO FRONT (OS LEVEL) MODULE
 // ==========================================================================================
-function forceChromeToFrontOS() {
-    console.log(`[*] Forcing Chrome to Top Window at OS Level...`);
-    try {
-        // 1. Force minimize OBS if it exists
-        execSync('xdotool search --name "OBS" windowminimize || true', { stdio: 'ignore' });
+// function forceChromeToFrontOS() {
+//     console.log(`[*] Forcing Chrome to Top Window at OS Level...`);
+//     try {
+//         // 1. Force minimize OBS if it exists
+//         execSync('xdotool search --name "OBS" windowminimize || true', { stdio: 'ignore' });
         
-        // 2. Force activate Chrome window
-        execSync('xdotool search --onlyvisible --class "chrome" windowactivate || wmctrl -a "Google Chrome" || true', { stdio: 'ignore' });
-    } catch (e) {
-        console.log(`[!] OS level focus tools (xdotool/wmctrl) failed or not installed. Trusting launch order.`);
-    }
+//         // 2. Force activate Chrome window
+//         execSync('xdotool search --onlyvisible --class "chrome" windowactivate || wmctrl -a "Google Chrome" || true', { stdio: 'ignore' });
+//     } catch (e) {
+//         console.log(`[!] OS level focus tools (xdotool/wmctrl) failed or not installed. Trusting launch order.`);
+//     }
+// }
+
+
+// ==========================================================================================
+// 6️⃣ AGGRESSIVE WINDOW MANAGEMENT (OS LEVEL FIX)
+// ==========================================================================================
+function forceChromeToFrontOS() {
+    console.log(`[*] 🛡️ Activating Aggressive Screen Clearing Shield...`);
+    
+    // Yeh loop har 3 second baad chalega aur screen ko saaf rakhega
+    setInterval(() => {
+        try {
+            // 1. Wizard ko kill karo (Agar "Auto-Configuration" popup aaye toh usay 'Escape' press karwa do)
+            execSync('xdotool search --name "Auto-Configuration" key Escape || true', { stdio: 'ignore' });
+            execSync('xdotool search --name "Usage Information" key Escape || true', { stdio: 'ignore' });
+            
+            // 2. OBS ko screen se bahar phek do (Coordinates 3000x3000 par le jao)
+            // Is se OBS chalega zaroor, lekin stream capture area (1920x1080) mein nazar nahi aayega!
+            execSync('xdotool search --class "obs" windowmove 3000 3000 || true', { stdio: 'ignore' });
+            
+            // 3. Chrome ko zabardasti 0,0 position par laa kar full screen (1920x1080) kar do
+            execSync('xdotool search --class "chrome" windowmove 0 0 windowsize 1920 1080 windowactivate || true', { stdio: 'ignore' });
+        } catch (e) {
+            // Agar window momentarily na milay toh error ignore karo
+        }
+    }, 3000);
 }
 
 // ==========================================================================================
