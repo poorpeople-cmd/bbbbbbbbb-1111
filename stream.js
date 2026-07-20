@@ -46,7 +46,7 @@ let browser = null;
 let obsProcess = null;
 
 // =========================================================================================
-// 🎥 OBS SETUP
+// 🎥 OBS SETUP (POPUP FIX APPLIED)
 // =========================================================================================
 function setupOBSConfig() {
     const obsDir = path.join(os.homedir(), '.config', 'obs-studio');
@@ -56,7 +56,28 @@ function setupOBSConfig() {
     fs.mkdirSync(profilesDir, { recursive: true });
     fs.mkdirSync(scenesDir, { recursive: true });
 
-    const globalIniContent = `[General]\nLicenseAccepted=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
+    // 🔥 FIX: Block Auto-Config, Updates, and Safe Mode prompts completely
+    const globalIniContent = `[General]
+LicenseAccepted=true
+EnableAutoUpdates=false
+FirstRun=false
+
+[Basic]
+Profile=Untitled
+ProfileDir=Untitled
+SceneCollection=Untitled
+SceneCollectionFile=Untitled
+
+[BasicWindow]
+ShowAutoConfig=false
+ShowSafeModeNotice=false
+Warned=true
+
+[OBSWebSocket]
+ServerEnabled=true
+ServerPort=4455
+ServerPassword=secret
+`;
     fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIniContent);
     
     const basicIniContent = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\nx264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0\n`;
@@ -66,13 +87,12 @@ function setupOBSConfig() {
     fs.writeFileSync(path.join(profilesDir, 'service.json'), JSON.stringify(serviceJson, null, 2));
 
     const sceneJson = {
-        "current_scene": "WaitingScene", "current_program_scene": "WaitingScene", "name": "Untitled",
-        "scene_order": [{"name": "WaitingScene"}, {"name": "MainScene"}],
+        "current_scene": "MainScene", "current_program_scene": "MainScene", "name": "Untitled",
+        "scene_order": [{"name": "MainScene"}],
         "sources": [
             { "id": "xshm_input", "name": "Screen", "settings": { "show_cursor": false } },
             { "id": "pulse_output_capture", "name": "Audio", "settings": {} },
-            { "id": "scene", "name": "MainScene", "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true}, {"name": "Audio", "id": 2, "visible": true} ] } },
-            { "id": "scene", "name": "WaitingScene", "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true} ] } } 
+            { "id": "scene", "name": "MainScene", "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true}, {"name": "Audio", "id": 2, "visible": true} ] } }
         ]
     };
     fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify(sceneJson, null, 2));
@@ -87,18 +107,15 @@ async function forceVideoFullscreen(page) {
         await page.evaluate(() => {
             setInterval(() => {
                 try {
-                    // 1. Make Background Black
                     document.documentElement.style.setProperty('background-color', 'black', 'important');
                     document.body.style.setProperty('background-color', 'black', 'important');
                     document.body.style.setProperty('overflow', 'hidden', 'important');
 
-                    // 2. Hide Junk Elements
                     const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [id*="pop"], [class*="pop"]';
                     document.querySelectorAll(junkClasses).forEach(el => { 
                         try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
                     });
 
-                    // 3. Find Iframes or Videos and Make Fullscreen
                     let targetElement = null;
                     const iframes = Array.from(document.querySelectorAll('iframe'));
                     const videos = Array.from(document.querySelectorAll('video'));
@@ -121,14 +138,12 @@ async function forceVideoFullscreen(page) {
                         targetElement.style.setProperty('display', 'block', 'important');
                     }
 
-                    // 4. Force Unmute
                     document.querySelectorAll('video, audio').forEach(media => { 
                         media.muted = false; 
                         media.volume = 1.0; 
                     });
-
                 } catch (err) {}
-            }, 1000); // Runs every 1 second to ensure video stays fullscreen
+            }, 1000); 
         });
     } catch (e) {}
 }
@@ -141,7 +156,15 @@ async function startDirectStreaming() {
     setupOBSConfig();
 
     console.log(`[*] STEP 2: Starting OBS Studio...`);
-    obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray']);
+    // 🔥 FIX: Added arguments to force profile and disable updaters completely
+    obsProcess = spawn('obs', [
+        '--startstreaming', 
+        '--minimize-to-tray',
+        '--profile', 'Untitled',
+        '--collection', 'Untitled',
+        '--disable-updater'
+    ]);
+    
     await new Promise(r => setTimeout(r, 6000));
 
     let isObsConnected = false;
@@ -149,7 +172,6 @@ async function startDirectStreaming() {
         await obs.connect('ws://127.0.0.1:4455', 'secret');
         isObsConnected = true;
         console.log('[+] OBS Connected!');
-        await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' });
     } catch (e) { console.log('[-] OBS WebSocket Error, continuing anyway.'); }
 
     let browserArgs = [
@@ -177,7 +199,6 @@ async function startDirectStreaming() {
     const pages = await browser.pages();
     const page = pages[0]; 
 
-    // Basic AdBlocker / Popup Blocker for the single tab
     page.on('dialog', async dialog => { try { await dialog.dismiss(); } catch(e){} });
     await page.evaluateOnNewDocument(() => {
         window.alert = window.confirm = window.prompt = window.open = function() { return null; };
@@ -188,25 +209,17 @@ async function startDirectStreaming() {
 
     console.log(`[*] STEP 5: Forcing Video to Fullscreen & Unmuting...`);
     await forceVideoFullscreen(page);
-    await new Promise(r => setTimeout(r, 3000)); // Give it 3 seconds to apply styles
+    await new Promise(r => setTimeout(r, 3000)); 
     
-    // Auto-click play button if needed
     try { await page.mouse.click(RES_W/2, RES_H/2); } catch(e){} 
-
-    if (isObsConnected) {
-        console.log('[*] STEP 6: Shifting OBS to LIVE Broadcast (MainScene)...');
-        try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
-    }
 
     console.log(`\n✅ STREAM IS NOW LIVE AND CAPTURING! (Press Ctrl+C to stop)\n`);
 
-    // Keep script running infinitely
     while (true) {
         await new Promise(r => setTimeout(r, 10000));
     }
 }
 
-// Cleanup function on exit
 async function cleanup() {
     console.log('[*] Cleaning up...');
     try { await obs.disconnect(); } catch (e) {} 
@@ -218,7 +231,6 @@ async function cleanup() {
 
 process.on('SIGINT', cleanup);
 
-// Start the engine
 startDirectStreaming();
 
 
