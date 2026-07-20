@@ -8,47 +8,29 @@ const os = require('os');
 const { spawn, execSync } = require('child_process');
 const { OBSWebSocket } = require('obs-websocket-js'); 
 
-// =========================================================================================
-// 🛡️ GLOBAL CRASH PREVENTION SHIELD
-// =========================================================================================
-process.on('uncaughtException', (err) => console.log(`[⚠️] IGNORED EXCEPTION: ${err.message}`));
-process.on('unhandledRejection', (reason) => console.log(`[⚠️] IGNORED REJECTION: ${reason}`));
-
-const obs = new OBSWebSocket(); 
-
-// 🚀 Multi-Stream Key Manager
-const STREAM_KEYS = {
-    '1': '15254238731883_15281627925099_najspfkgne', 
-    '2': '15254299352683_15281743071851_7dvz3h5d7q',
-    '3': '15254341885547_15281821059691_hhlpb5vicy'
-    // Add your other keys here...
-};
+// 🛡️ Global Error Shield
+process.on('uncaughtException', () => {});
+process.on('unhandledRejection', () => {});
 
 // =========================================================================================
-// ⚙️ CONFIGURATION & SETTINGS
-// =========================================================================================
+// 1️⃣ CONFIG MODULE
+// ==========================================================================================
 const TARGET_URL = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
-const SELECTED_CHANNEL = process.env.OKRU_STREAM_ID || '1';
-const PROXY_ENGINE = process.env.PROXY_ENGINE || 'Cloudflare WARP';
-const selectedQuality = process.env.STREAM_QUALITY || '1080p';
-const ACTIVE_STREAM_KEY = STREAM_KEYS[SELECTED_CHANNEL] || STREAM_KEYS['1'];
+const PROXY_ENGINE = process.env.PROXY_ENGINE || 'None'; // 'Cloudflare WARP'
+const STREAM_KEY = '15254238731883_15281627925099_najspfkgne'; // Replace with env/logic if needed
 
-let RES_W = 1920, RES_H = 1080, BITRATE = 5000;
-if (selectedQuality === '360p') { RES_W = 640; RES_H = 360; BITRATE = 800; }
-else if (selectedQuality === '480p') { RES_W = 854; RES_H = 480; BITRATE = 1500; }
-else if (selectedQuality === '720p') { RES_W = 1280; RES_H = 720; BITRATE = 3000; }
-else if (selectedQuality === '1080p') { RES_W = 1920; RES_H = 1080; BITRATE = 4500; }
-
-console.log(`[🚀] Stream Engine Locked to: ${RES_W}x${RES_H} @ ${BITRATE}kbps`);
-console.log(`[🔗] Target URL: ${TARGET_URL}`);
+const RES_W = 1920, RES_H = 1080, BITRATE = 4500;
+console.log(`[🚀] Config Loaded | Res: ${RES_W}x${RES_H} | Target: ${TARGET_URL}`);
 
 let browser = null;
 let obsProcess = null;
+const obs = new OBSWebSocket(); 
 
-// =========================================================================================
-// 🎥 OBS SETUP (POPUP FIX APPLIED)
-// =========================================================================================
+// ==========================================================================================
+// 2️⃣ OBS SETUP MODULE
+// ==========================================================================================
 function setupOBSConfig() {
+    console.log(`[*] Setting up OBS configuration files...`);
     const obsDir = path.join(os.homedir(), '.config', 'obs-studio');
     const profilesDir = path.join(obsDir, 'basic', 'profiles', 'Untitled');
     const scenesDir = path.join(obsDir, 'basic', 'scenes');
@@ -56,34 +38,14 @@ function setupOBSConfig() {
     fs.mkdirSync(profilesDir, { recursive: true });
     fs.mkdirSync(scenesDir, { recursive: true });
 
-    // 🔥 FIX: Block Auto-Config, Updates, and Safe Mode prompts completely
-    const globalIniContent = `[General]
-LicenseAccepted=true
-EnableAutoUpdates=false
-FirstRun=false
-
-[Basic]
-Profile=Untitled
-ProfileDir=Untitled
-SceneCollection=Untitled
-SceneCollectionFile=Untitled
-
-[BasicWindow]
-ShowAutoConfig=false
-ShowSafeModeNotice=false
-Warned=true
-
-[OBSWebSocket]
-ServerEnabled=true
-ServerPort=4455
-ServerPassword=secret
-`;
-    fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIniContent);
+    // Block ALL popups, wizards, and safe mode prompts permanently
+    const globalIni = `[General]\nLicenseAccepted=true\nEnableAutoUpdates=false\nFirstRun=false\n[Basic]\nProfile=Untitled\nSceneCollection=Untitled\n[BasicWindow]\nShowAutoConfig=false\nShowSafeModeNotice=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
+    fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIni);
     
-    const basicIniContent = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\nx264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0\n`;
-    fs.writeFileSync(path.join(profilesDir, 'basic.ini'), basicIniContent);
+    const basicIni = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\nx264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0\n`;
+    fs.writeFileSync(path.join(profilesDir, 'basic.ini'), basicIni);
 
-    const serviceJson = { "settings": { "server": "rtmp://vsu.okcdn.ru/input/", "key": ACTIVE_STREAM_KEY }, "type": "rtmp_custom" };
+    const serviceJson = { "settings": { "server": "rtmp://vsu.okcdn.ru/input/", "key": STREAM_KEY }, "type": "rtmp_custom" };
     fs.writeFileSync(path.join(profilesDir, 'service.json'), JSON.stringify(serviceJson, null, 2));
 
     const sceneJson = {
@@ -98,82 +60,25 @@ ServerPassword=secret
     fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify(sceneJson, null, 2));
 }
 
-// =========================================================================================
-// 🌐 VIDEO FULLSCREEN & UNMUTE ENGINE
-// =========================================================================================
-async function forceVideoFullscreen(page) {
-    if (!page) return;
-    try {
-        await page.evaluate(() => {
-            setInterval(() => {
-                try {
-                    document.documentElement.style.setProperty('background-color', 'black', 'important');
-                    document.body.style.setProperty('background-color', 'black', 'important');
-                    document.body.style.setProperty('overflow', 'hidden', 'important');
-
-                    const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [id*="pop"], [class*="pop"]';
-                    document.querySelectorAll(junkClasses).forEach(el => { 
-                        try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
-                    });
-
-                    let targetElement = null;
-                    const iframes = Array.from(document.querySelectorAll('iframe'));
-                    const videos = Array.from(document.querySelectorAll('video'));
-
-                    if (videos.length > 0) {
-                        targetElement = videos.sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
-                    } else if (iframes.length > 0) {
-                        targetElement = iframes.sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
-                    }
-
-                    if (targetElement) {
-                        targetElement.style.setProperty('position', 'fixed', 'important');
-                        targetElement.style.setProperty('top', '0px', 'important');
-                        targetElement.style.setProperty('left', '0px', 'important');
-                        targetElement.style.setProperty('width', '100vw', 'important');
-                        targetElement.style.setProperty('height', '100vh', 'important');
-                        targetElement.style.setProperty('z-index', '2147483647', 'important'); 
-                        targetElement.style.setProperty('background-color', 'black', 'important');
-                        targetElement.style.setProperty('opacity', '1', 'important');
-                        targetElement.style.setProperty('display', 'block', 'important');
-                    }
-
-                    document.querySelectorAll('video, audio').forEach(media => { 
-                        media.muted = false; 
-                        media.volume = 1.0; 
-                    });
-                } catch (err) {}
-            }, 1000); 
-        });
-    } catch (e) {}
-}
-
-// =========================================================================================
-// 🚀 MAIN STREAMING ENGINE
-// =========================================================================================
-async function startDirectStreaming() {
-    console.log(`[*] STEP 1: Setting up OBS Config...`);
-    setupOBSConfig();
-
-    console.log(`[*] STEP 2: Starting OBS Studio...`);
-    // 🔥 FIX: Added arguments to force profile and disable updaters completely
-    obsProcess = spawn('obs', [
-        '--startstreaming', 
-        '--minimize-to-tray',
-        '--profile', 'Untitled',
-        '--collection', 'Untitled',
-        '--disable-updater'
-    ]);
+// ==========================================================================================
+// 3️⃣ LAUNCH OBS MODULE
+// ==========================================================================================
+async function launchOBS() {
+    console.log(`[*] Launching OBS Studio...`);
+    obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray', '--disable-updater']);
     
     await new Promise(r => setTimeout(r, 6000));
-
-    let isObsConnected = false;
     try {
         await obs.connect('ws://127.0.0.1:4455', 'secret');
-        isObsConnected = true;
-        console.log('[+] OBS Connected!');
-    } catch (e) { console.log('[-] OBS WebSocket Error, continuing anyway.'); }
+        console.log('[+] OBS Connected via WebSocket.');
+    } catch (e) { console.log('[-] OBS WebSocket Error (Ignored).'); }
+}
 
+// ==========================================================================================
+// 4️⃣ LAUNCH CHROME MODULE
+// ==========================================================================================
+async function launchChrome() {
+    console.log(`[*] Launching Chrome...`);
     let browserArgs = [
         '--no-sandbox', '--disable-setuid-sandbox',
         `--window-size=${RES_W},${RES_H}`, '--window-position=0,0', 
@@ -185,10 +90,8 @@ async function startDirectStreaming() {
 
     if (PROXY_ENGINE.includes('Cloudflare')) {
         browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
-        console.log(`[*] Starting browser with [CLOUDFLARE WARP] Proxy...`);
     }
 
-    console.log(`[*] STEP 3: Launching Browser...`);
     browser = await puppeteer.launch({
         headless: false, 
         defaultViewport: { width: RES_W, height: RES_H },
@@ -197,57 +100,135 @@ async function startDirectStreaming() {
     });
 
     const pages = await browser.pages();
-    const page = pages[0]; 
+    const page = pages[0];
 
+    // Basic popup blocker
     page.on('dialog', async dialog => { try { await dialog.dismiss(); } catch(e){} });
-    await page.evaluateOnNewDocument(() => {
-        window.alert = window.confirm = window.prompt = window.open = function() { return null; };
-    });
+    await page.evaluateOnNewDocument(() => { window.alert = window.confirm = window.prompt = window.open = function() { return null; }; });
 
-    console.log(`[*] STEP 4: Opening Target URL -> ${TARGET_URL}`);
+    return page;
+}
+
+// ==========================================================================================
+// 5️⃣ OPEN WEBSITE & DETECT/PLAY/FULLSCREEN MODULE
+// ==========================================================================================
+async function handleVideoPlayback(page) {
+    console.log(`[*] Opening Website -> ${TARGET_URL}`);
     await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
 
-    console.log(`[*] STEP 5: Forcing Video to Fullscreen & Unmuting...`);
-    await forceVideoFullscreen(page);
-    await new Promise(r => setTimeout(r, 3000)); 
-    
+    console.log(`[*] Detecting and Forcing Video Fullscreen...`);
+    await page.evaluate(() => {
+        // Run a continuous loop to ensure video stays fullscreen and unmuted
+        setInterval(() => {
+            try {
+                // Blackout background
+                document.documentElement.style.setProperty('background-color', 'black', 'important');
+                document.body.style.setProperty('background-color', 'black', 'important');
+                document.body.style.setProperty('overflow', 'hidden', 'important');
+
+                // Nuke junk elements
+                document.querySelectorAll('.chat, #chat, header, footer, .sidebar, .banner, .ads, [id*="pop"]').forEach(el => { 
+                    try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
+                });
+
+                // Detect Video or Iframe
+                let targetElement = null;
+                const vids = Array.from(document.querySelectorAll('video'));
+                const frames = Array.from(document.querySelectorAll('iframe'));
+
+                if (vids.length > 0) targetElement = vids.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
+                else if (frames.length > 0) targetElement = frames.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
+
+                // Force Fullscreen CSS
+                if (targetElement) {
+                    targetElement.style.setProperty('position', 'fixed', 'important');
+                    targetElement.style.setProperty('top', '0px', 'important');
+                    targetElement.style.setProperty('left', '0px', 'important');
+                    targetElement.style.setProperty('width', '100vw', 'important');
+                    targetElement.style.setProperty('height', '100vh', 'important');
+                    targetElement.style.setProperty('z-index', '2147483647', 'important'); 
+                    targetElement.style.setProperty('background-color', 'black', 'important');
+                    targetElement.style.setProperty('opacity', '1', 'important');
+                    targetElement.style.setProperty('display', 'block', 'important');
+                }
+
+                // Force Play & Unmute
+                document.querySelectorAll('video, audio').forEach(media => { 
+                    media.muted = false; 
+                    media.volume = 1.0; 
+                    if (media.paused) { media.play().catch(()=>{}); }
+                });
+            } catch (err) {}
+        }, 1000); 
+    });
+
+    // Attempt a physical click in the center to trigger play if blocked by user-gesture rules
+    await new Promise(r => setTimeout(r, 3000));
     try { await page.mouse.click(RES_W/2, RES_H/2); } catch(e){} 
+}
 
-    console.log(`\n✅ STREAM IS NOW LIVE AND CAPTURING! (Press Ctrl+C to stop)\n`);
-
-    while (true) {
-        await new Promise(r => setTimeout(r, 10000));
+// ==========================================================================================
+// 6️⃣ BRING CHROME TO FRONT (OS LEVEL) MODULE
+// ==========================================================================================
+function forceChromeToFrontOS() {
+    console.log(`[*] Forcing Chrome to Top Window at OS Level...`);
+    try {
+        // 1. Force minimize OBS if it exists
+        execSync('xdotool search --name "OBS" windowminimize || true', { stdio: 'ignore' });
+        
+        // 2. Force activate Chrome window
+        execSync('xdotool search --onlyvisible --class "chrome" windowactivate || wmctrl -a "Google Chrome" || true', { stdio: 'ignore' });
+    } catch (e) {
+        console.log(`[!] OS level focus tools (xdotool/wmctrl) failed or not installed. Trusting launch order.`);
     }
 }
 
-async function cleanup() {
-    console.log('[*] Cleaning up...');
-    try { await obs.disconnect(); } catch (e) {} 
-    if (browser) { try { await browser.close(); } catch(e) {} }
-    if (obsProcess) { try { obsProcess.kill('SIGKILL'); } catch(e) {} }
-    try { execSync('pkill -9 obs chrome puppeteer || true', { stdio: 'ignore' }); } catch (e) {}
-    process.exit(0);
+// ==========================================================================================
+// 7️⃣ INFINITE WAIT MODULE
+// ==========================================================================================
+async function main() {
+    setupOBSConfig();
+    await launchOBS();
+    
+    const activePage = await launchChrome();
+    await handleVideoPlayback(activePage);
+    
+    forceChromeToFrontOS();
+
+    console.log(`\n✅ ARCHITECTURE COMPLETE: Stream is LIVE and Capturing. Entering Infinite Loop...\n`);
+    
+    while (true) {
+        await new Promise(r => setTimeout(r, 60000)); // Sleep loop
+    }
 }
 
-process.on('SIGINT', cleanup);
+// 🧹 Cleanup logic
+process.on('SIGINT', async () => {
+    console.log('\n[*] Exiting and cleaning up...');
+    try { await obs.disconnect(); } catch (e) {} 
+    if (browser) { try { await browser.close(); } catch(e) {} }
+    try { execSync('pkill -9 obs chrome puppeteer || true', { stdio: 'ignore' }); } catch (e) {}
+    process.exit(0);
+});
 
-startDirectStreaming();
-
-
-
-
-
-
-
-
-
-
+// Run the engine
+main();
 
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+// ====================================
 
 
 
