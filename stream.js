@@ -12,12 +12,12 @@ const { OBSWebSocket } = require('obs-websocket-js');
 process.on('uncaughtException', () => {});
 process.on('unhandledRejection', () => {});
 
-// ==========================================================================================
+// =========================================================================================
 // 1️⃣ CONFIG MODULE
 // ==========================================================================================
 const TARGET_URL = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
-const PROXY_ENGINE = process.env.PROXY_ENGINE || 'None';
-const STREAM_KEY = '15254238731883_15281627925099_najspfkgne'; // Adjust logic if needed
+const PROXY_ENGINE = process.env.PROXY_ENGINE || 'None'; // 'Cloudflare WARP'
+const STREAM_KEY = '15254238731883_15281627925099_najspfkgne'; // Replace with env/logic if needed
 
 const RES_W = 1920, RES_H = 1080, BITRATE = 4500;
 console.log(`[🚀] Config Loaded | Res: ${RES_W}x${RES_H} | Target: ${TARGET_URL}`);
@@ -27,7 +27,7 @@ let obsProcess = null;
 const obs = new OBSWebSocket(); 
 
 // ==========================================================================================
-// 2️⃣ OBS SETUP MODULE
+// 2️⃣ OBS SETUP MODULE (Updated with Global Audio Device)
 // ==========================================================================================
 function setupOBSConfig() {
     console.log(`[*] Setting up OBS configuration files...`);
@@ -38,10 +38,12 @@ function setupOBSConfig() {
     fs.mkdirSync(profilesDir, { recursive: true });
     fs.mkdirSync(scenesDir, { recursive: true });
 
+    // Block ALL popups, wizards, and safe mode prompts permanently
     const globalIni = `[General]\nLicenseAccepted=true\nEnableAutoUpdates=false\nFirstRun=false\n[Basic]\nProfile=Untitled\nSceneCollection=Untitled\n[BasicWindow]\nShowAutoConfig=false\nShowSafeModeNotice=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
     fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIni);
     
-    const basicIni = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\nx264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0\n`;
+    // Added [Audio] section to force OBS to listen to the system's default pulse audio
+    const basicIni = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Audio]\nDesktopAudioDevice1=default\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\nx264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0\n`;
     fs.writeFileSync(path.join(profilesDir, 'basic.ini'), basicIni);
 
     const serviceJson = { "settings": { "server": "rtmp://vsu.okcdn.ru/input/", "key": STREAM_KEY }, "type": "rtmp_custom" };
@@ -70,11 +72,11 @@ async function launchOBS() {
     try {
         await obs.connect('ws://127.0.0.1:4455', 'secret');
         console.log('[+] OBS Connected via WebSocket.');
-    } catch (e) {}
+    } catch (e) { console.log('[-] OBS WebSocket Error (Ignored).'); }
 }
 
 // ==========================================================================================
-// 4️⃣ LAUNCH CHROME MODULE
+// 4️⃣ LAUNCH CHROME MODULE (Updated with Audio Flags)
 // ==========================================================================================
 async function launchChrome() {
     console.log(`[*] Launching Chrome...`);
@@ -83,6 +85,8 @@ async function launchChrome() {
         `--window-size=${RES_W},${RES_H}`, '--window-position=0,0', 
         '--kiosk', '--start-fullscreen',
         '--autoplay-policy=no-user-gesture-required',
+        '--disable-features=AudioServiceOutOfProcess', // Ensure audio service runs
+        '--alsa-output-device=plug:hw',                // Route audio properly on Linux
         `--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`,
         `--load-extension=${path.join(process.cwd(), 'ublock-lite')}`
     ];
@@ -108,7 +112,7 @@ async function launchChrome() {
 }
 
 // ==========================================================================================
-// 🔊 SMART UNMUTE ENGINE
+// 🔊 NEW MODULE: 2026 INTELLIGENT FUZZY UNMUTE ENGINE
 // ==========================================================================================
 async function triggerSmartUnmute(page) {
     for (const frame of page.frames()) {
@@ -116,32 +120,36 @@ async function triggerSmartUnmute(page) {
             if (frame.isDetached()) continue;
 
             await frame.evaluate(() => {
-                document.querySelectorAll('video, audio').forEach(media => {
-                    media.muted = false;
-                    media.volume = 1.0;
-                    if (media.paused) { media.play().catch(()=>{}); }
-                });
-
-                const searchKeywords = ['UNMUTE', 'MUTE ME', 'STREAM UNMUTE', 'AUDIO', 'SOUND', 'SPEAKER', 'VOLUME', 'CLICK TO UNMUTE', 'TAP TO UNMUTE', 'ENABLE AUDIO'];
-                const searchJS = ['unmute', 'volume', 'audio', 'sound', 'speaker'];
-
-                const potentialElements = Array.from(document.querySelectorAll('button, div, span, a, i, svg, img'));
+                // 1. Scan all interactive elements for Unmute text or classes
+                const potentialElements = Array.from(document.querySelectorAll('button, div, span, a, i'));
                 
                 potentialElements.forEach(el => {
                     const text = (el.innerText || el.textContent || '').trim().toUpperCase();
                     const onClickStr = (el.getAttribute('onclick') || '').toLowerCase();
                     const ariaLabel = (el.getAttribute('aria-label') || '').toUpperCase();
-                    const className = (el.className || '').toString().toUpperCase();
                     
-                    if (searchKeywords.some(kw => text.includes(kw)) || searchJS.some(kw => onClickStr.includes(kw)) || 
-                        searchKeywords.some(kw => ariaLabel.includes(kw)) || searchKeywords.some(kw => className.includes(kw))) {
-                        
+                    const matchesText = text.includes('UNMUTE') || text.includes('MUTE ME') || text.includes('STREAM UNMUTE') || text.includes('AUDIO');
+                    const matchesJS = onClickStr.includes('unmute') || onClickStr.includes('volume') || onClickStr.includes('audio');
+                    const matchesAria = ariaLabel.includes('UNMUTE') || ariaLabel.includes('VOLUME');
+
+                    if (matchesText || matchesJS || matchesAria) {
                         const rect = el.getBoundingClientRect();
-                        if (rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none') {
+                        const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none';
+                        if (isVisible) {
                             try { el.click(); } catch(e) {}
                             try { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e) {}
                         }
                     }
+                });
+
+                // 2. Bruteforce Browser Native Media Layer & Known Player Classes
+                document.querySelectorAll('video, audio').forEach(media => {
+                    if (media.muted) { media.muted = false; media.volume = 1.0; }
+                    if (media.paused) { media.play().catch(()=>{}); }
+                });
+                
+                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { 
+                    try { btn.click(); } catch(e){} 
                 });
             }).catch(() => {});
         } catch (e) {}
@@ -149,92 +157,61 @@ async function triggerSmartUnmute(page) {
 }
 
 // ==========================================================================================
-// 💓 HEARTBEAT LOGGER MODULE (NEW)
-// ==========================================================================================
-function startHeartbeatLogger(page) {
-    setInterval(async () => {
-        if (!page) return;
-        try {
-            let videoTime = 'N/A';
-            let isHealthy = 'UNKNOWN';
-
-            for (const frame of page.frames()) {
-                if (frame.isDetached()) continue;
-                try {
-                    const time = await frame.evaluate(() => {
-                        const vids = Array.from(document.querySelectorAll('video'));
-                        for (const v of vids) {
-                            if (v.currentTime > 0) return v.currentTime.toFixed(1) + 's';
-                        }
-                        return null;
-                    });
-
-                    if (time) {
-                        videoTime = time;
-                        isHealthy = 'HEALTHY';
-                        break;
-                    }
-                } catch (e) {}
-            }
-
-            console.log(`\n[💓] STREAM HEARTBEAT: Status is ${isHealthy} | Video Time: ${videoTime}`);
-            console.log(`[▶️] CURRENTLY LIVE   : (Audio ON) -> ${TARGET_URL}`);
-        } catch (e) {}
-    }, 60000); // Logs every 60 seconds (1 minute)
-}
-
-// ==========================================================================================
-// 5️⃣ OPEN WEBSITE & DETECT/PLAY/FULLSCREEN MODULE
+// 5️⃣ OPEN WEBSITE & DETECT/PLAY/FULLSCREEN MODULE (Updated for Iframes)
 // ==========================================================================================
 async function handleVideoPlayback(page) {
     console.log(`[*] Opening Website -> ${TARGET_URL}`);
     await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
 
-    console.log(`[*] Detecting and Forcing Video Fullscreen...`);
+    console.log(`[*] Detecting, Forcing Fullscreen and Engaging Unmute Engine...`);
     
-    await page.evaluate(() => {
-        setInterval(() => {
-            try {
-                document.documentElement.style.setProperty('background-color', 'black', 'important');
-                document.body.style.setProperty('background-color', 'black', 'important');
-                document.body.style.setProperty('overflow', 'hidden', 'important');
-
-                document.querySelectorAll('.chat, #chat, header, footer, .sidebar, .banner, .ads, [id*="pop"]').forEach(el => { 
-                    try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
-                });
-
-                let targetElement = null;
-                const vids = Array.from(document.querySelectorAll('video'));
-                const frames = Array.from(document.querySelectorAll('iframe'));
-
-                if (vids.length > 0) targetElement = vids.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
-                else if (frames.length > 0) targetElement = frames.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
-
-                if (targetElement) {
-                    targetElement.style.setProperty('position', 'fixed', 'important');
-                    targetElement.style.setProperty('top', '0px', 'important');
-                    targetElement.style.setProperty('left', '0px', 'important');
-                    targetElement.style.setProperty('width', '100vw', 'important');
-                    targetElement.style.setProperty('height', '100vh', 'important');
-                    targetElement.style.setProperty('z-index', '2147483647', 'important'); 
-                    targetElement.style.setProperty('background-color', 'black', 'important');
-                    targetElement.style.setProperty('opacity', '1', 'important');
-                    targetElement.style.setProperty('display', 'block', 'important');
-                }
-            } catch (err) {}
-        }, 1000); 
-    });
-
-    console.log(`[*] 🔊 Starting Smart Audio Engine...`);
-    setInterval(async () => {
-        await triggerSmartUnmute(page);
-    }, 3000); 
-
+    // Attempt a physical click in the center initially to trigger user-gesture
     await new Promise(r => setTimeout(r, 3000));
     try { await page.mouse.click(RES_W/2, RES_H/2); } catch(e){} 
 
-    // 🔥 Start the Heartbeat Logger
-    startHeartbeatLogger(page);
+    // Continuous loop running in Node.js to penetrate ALL frames
+    setInterval(async () => {
+        try {
+            // Step A: Nuke junk elements on the main page
+            await page.evaluate(() => {
+                document.documentElement.style.setProperty('background-color', 'black', 'important');
+                document.body.style.setProperty('background-color', 'black', 'important');
+                document.body.style.setProperty('overflow', 'hidden', 'important');
+                document.querySelectorAll('.chat, #chat, header, footer, .sidebar, .banner, .ads, [id*="pop"]').forEach(el => { 
+                    try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
+                });
+            }).catch(()=>{});
+
+            // Step B: Force Fullscreen on Video or Iframe inside every possible frame
+            for (const frame of page.frames()) {
+                if (frame.isDetached()) continue;
+                await frame.evaluate(() => {
+                    let targetElement = null;
+                    const vids = Array.from(document.querySelectorAll('video'));
+                    const frames = Array.from(document.querySelectorAll('iframe'));
+
+                    if (vids.length > 0) targetElement = vids.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
+                    else if (frames.length > 0) targetElement = frames.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
+
+                    if (targetElement) {
+                        targetElement.style.setProperty('position', 'fixed', 'important');
+                        targetElement.style.setProperty('top', '0px', 'important');
+                        targetElement.style.setProperty('left', '0px', 'important');
+                        targetElement.style.setProperty('width', '100vw', 'important');
+                        targetElement.style.setProperty('height', '100vh', 'important');
+                        targetElement.style.setProperty('z-index', '2147483647', 'important'); 
+                        targetElement.style.setProperty('background-color', 'black', 'important');
+                        targetElement.style.setProperty('opacity', '1', 'important');
+                        targetElement.style.setProperty('display', 'block', 'important');
+                    }
+                }).catch(()=>{});
+            }
+
+            // Step C: Execute the Smart Unmute Engine across all frames continuously
+            await triggerSmartUnmute(page);
+
+        } catch (err) {}
+    }, 2000);
 }
 
 // ==========================================================================================
@@ -242,6 +219,7 @@ async function handleVideoPlayback(page) {
 // ==========================================================================================
 function forceChromeToFrontOS() {
     console.log(`[*] 🛡️ Activating Aggressive Screen Clearing Shield...`);
+    
     setInterval(() => {
         try {
             execSync('xdotool search --name "Auto-Configuration" key Escape || true', { stdio: 'ignore' });
@@ -282,7 +260,6 @@ process.on('SIGINT', async () => {
 
 // Run the engine
 main();
-
 
 
 
