@@ -134,7 +134,8 @@ let obsProcess = null;
 let activePage = null;
 let backupPage = null;
 
-const FROZEN_THRESHOLD_MS = 8000; 
+// const FROZEN_THRESHOLD_MS = 8000; 
+const FROZEN_THRESHOLD_MS = 30000;
 
 if (!fs.existsSync('./screenshots')) fs.mkdirSync('./screenshots');
 let pendingScreenshots = [];
