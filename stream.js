@@ -1224,225 +1224,167 @@
 
 // ============= great yeh below code simple code hai lekin bilkul teek code hai . yeh bas video elemt ko find karata hai and broadcast karta chahey data hu ya n hu .streamed.pk ko test keya hai teek chal raha hai ============================
 
-// const puppeteer = require('puppeteer-extra');
-// const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-// puppeteer.use(StealthPlugin());
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
 
-// const fs = require('fs');
-// const path = require('path');
-// const os = require('os');
-// const { spawn, execSync } = require('child_process');
-// const { OBSWebSocket } = require('obs-websocket-js'); 
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { spawn, execSync } = require('child_process');
+const { OBSWebSocket } = require('obs-websocket-js'); 
 
-// // 🛡️ Global Error Shield
-// process.on('uncaughtException', () => {});
-// process.on('unhandledRejection', () => {});
+// 🛡️ Global Error Shield
+process.on('uncaughtException', () => {});
+process.on('unhandledRejection', () => {});
 
-// // =========================================================================================
-// // 1️⃣ CONFIG MODULE
-// // ==========================================================================================
-// const TARGET_URL = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
-// const PROXY_ENGINE = process.env.PROXY_ENGINE || 'None'; // 'Cloudflare WARP'
-// const STREAM_KEY = '15273689226859_15317451606635_d7zzy3c7qi'; // Replace with env/logic if needed
+// =========================================================================================
+// 1️⃣ CONFIG MODULE
+// ==========================================================================================
+const TARGET_URL = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
+const PROXY_ENGINE = process.env.PROXY_ENGINE || 'None'; // 'Cloudflare WARP'
+const STREAM_KEY = '15273689226859_15317451606635_d7zzy3c7qi'; // Replace with env/logic if needed
 
-// const RES_W = 1920, RES_H = 1080, BITRATE = 4500;
-// console.log(`[🚀] Config Loaded | Res: ${RES_W}x${RES_H} | Target: ${TARGET_URL}`);
+const RES_W = 1920, RES_H = 1080, BITRATE = 4500;
+console.log(`[🚀] Config Loaded | Res: ${RES_W}x${RES_H} | Target: ${TARGET_URL}`);
 
-// let browser = null;
-// let obsProcess = null;
-// const obs = new OBSWebSocket(); 
+let browser = null;
+let obsProcess = null;
+const obs = new OBSWebSocket(); 
 
-// // ==========================================================================================
-// // 2️⃣ OBS SETUP MODULE (Updated with Global Audio Device)
-// // ==========================================================================================
-// function setupOBSConfig() {
-//     console.log(`[*] Setting up OBS configuration files...`);
-//     const obsDir = path.join(os.homedir(), '.config', 'obs-studio');
-//     const profilesDir = path.join(obsDir, 'basic', 'profiles', 'Untitled');
-//     const scenesDir = path.join(obsDir, 'basic', 'scenes');
+// ==========================================================================================
+// 2️⃣ OBS SETUP MODULE (Updated with Global Audio Device)
+// ==========================================================================================
+function setupOBSConfig() {
+    console.log(`[*] Setting up OBS configuration files...`);
+    const obsDir = path.join(os.homedir(), '.config', 'obs-studio');
+    const profilesDir = path.join(obsDir, 'basic', 'profiles', 'Untitled');
+    const scenesDir = path.join(obsDir, 'basic', 'scenes');
 
-//     fs.mkdirSync(profilesDir, { recursive: true });
-//     fs.mkdirSync(scenesDir, { recursive: true });
+    fs.mkdirSync(profilesDir, { recursive: true });
+    fs.mkdirSync(scenesDir, { recursive: true });
 
-//     // Block ALL popups, wizards, and safe mode prompts permanently
-//     const globalIni = `[General]\nLicenseAccepted=true\nEnableAutoUpdates=false\nFirstRun=false\n[Basic]\nProfile=Untitled\nSceneCollection=Untitled\n[BasicWindow]\nShowAutoConfig=false\nShowSafeModeNotice=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
-//     fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIni);
+    // Block ALL popups, wizards, and safe mode prompts permanently
+    const globalIni = `[General]\nLicenseAccepted=true\nEnableAutoUpdates=false\nFirstRun=false\n[Basic]\nProfile=Untitled\nSceneCollection=Untitled\n[BasicWindow]\nShowAutoConfig=false\nShowSafeModeNotice=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
+    fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIni);
     
-//     // Added [Audio] section to force OBS to listen to the system's default pulse audio
-//     const basicIni = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Audio]\nDesktopAudioDevice1=default\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\nx264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0\n`;
-//     fs.writeFileSync(path.join(profilesDir, 'basic.ini'), basicIni);
+    // Added [Audio] section to force OBS to listen to the system's default pulse audio
+    const basicIni = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Audio]\nDesktopAudioDevice1=default\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\nx264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0\n`;
+    fs.writeFileSync(path.join(profilesDir, 'basic.ini'), basicIni);
 
-//     const serviceJson = { "settings": { "server": "rtmp://vsu.okcdn.ru/input/", "key": STREAM_KEY }, "type": "rtmp_custom" };
-//     fs.writeFileSync(path.join(profilesDir, 'service.json'), JSON.stringify(serviceJson, null, 2));
+    const serviceJson = { "settings": { "server": "rtmp://vsu.okcdn.ru/input/", "key": STREAM_KEY }, "type": "rtmp_custom" };
+    fs.writeFileSync(path.join(profilesDir, 'service.json'), JSON.stringify(serviceJson, null, 2));
 
-//     const sceneJson = {
-//         "current_scene": "MainScene", "current_program_scene": "MainScene", "name": "Untitled",
-//         "scene_order": [{"name": "MainScene"}],
-//         "sources": [
-//             { "id": "xshm_input", "name": "Screen", "settings": { "show_cursor": false } },
-//             { "id": "pulse_output_capture", "name": "Audio", "settings": {} },
-//             { "id": "scene", "name": "MainScene", "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true}, {"name": "Audio", "id": 2, "visible": true} ] } }
-//         ]
-//     };
-//     fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify(sceneJson, null, 2));
-// }
+    const sceneJson = {
+        "current_scene": "MainScene", "current_program_scene": "MainScene", "name": "Untitled",
+        "scene_order": [{"name": "MainScene"}],
+        "sources": [
+            { "id": "xshm_input", "name": "Screen", "settings": { "show_cursor": false } },
+            { "id": "pulse_output_capture", "name": "Audio", "settings": {} },
+            { "id": "scene", "name": "MainScene", "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true}, {"name": "Audio", "id": 2, "visible": true} ] } }
+        ]
+    };
+    fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify(sceneJson, null, 2));
+}
 
-// // ==========================================================================================
-// // 3️⃣ LAUNCH OBS MODULE
-// // ==========================================================================================
-// async function launchOBS() {
-//     console.log(`[*] Launching OBS Studio...`);
-//     obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray', '--disable-updater']);
+// ==========================================================================================
+// 3️⃣ LAUNCH OBS MODULE
+// ==========================================================================================
+async function launchOBS() {
+    console.log(`[*] Launching OBS Studio...`);
+    obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray', '--disable-updater']);
     
-//     await new Promise(r => setTimeout(r, 6000));
-//     try {
-//         await obs.connect('ws://127.0.0.1:4455', 'secret');
-//         console.log('[+] OBS Connected via WebSocket.');
-//     } catch (e) { console.log('[-] OBS WebSocket Error (Ignored).'); }
-// }
+    await new Promise(r => setTimeout(r, 6000));
+    try {
+        await obs.connect('ws://127.0.0.1:4455', 'secret');
+        console.log('[+] OBS Connected via WebSocket.');
+    } catch (e) { console.log('[-] OBS WebSocket Error (Ignored).'); }
+}
 
-// // ==========================================================================================
-// // 4️⃣ LAUNCH CHROME MODULE (Updated with Audio Flags)
-// // ==========================================================================================
-// async function launchChrome() {
-//     console.log(`[*] Launching Chrome...`);
-//     let browserArgs = [
-//         '--no-sandbox', '--disable-setuid-sandbox',
-//         `--window-size=${RES_W},${RES_H}`, '--window-position=0,0', 
-//         '--kiosk', '--start-fullscreen',
-//         '--autoplay-policy=no-user-gesture-required',
-//         '--disable-features=AudioServiceOutOfProcess', // Ensure audio service runs
-//         '--alsa-output-device=plug:hw',                // Route audio properly on Linux
-//         `--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`,
-//         `--load-extension=${path.join(process.cwd(), 'ublock-lite')}`
-//     ];
+// ==========================================================================================
+// 4️⃣ LAUNCH CHROME MODULE (Updated with Audio Flags)
+// ==========================================================================================
+async function launchChrome() {
+    console.log(`[*] Launching Chrome...`);
+    let browserArgs = [
+        '--no-sandbox', '--disable-setuid-sandbox',
+        `--window-size=${RES_W},${RES_H}`, '--window-position=0,0', 
+        '--kiosk', '--start-fullscreen',
+        '--autoplay-policy=no-user-gesture-required',
+        '--disable-features=AudioServiceOutOfProcess', // Ensure audio service runs
+        '--alsa-output-device=plug:hw',                // Route audio properly on Linux
+        `--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`,
+        `--load-extension=${path.join(process.cwd(), 'ublock-lite')}`
+    ];
 
-//     if (PROXY_ENGINE.includes('Cloudflare')) {
-//         browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
-//     }
+    if (PROXY_ENGINE.includes('Cloudflare')) {
+        browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
+    }
 
-//     browser = await puppeteer.launch({
-//         headless: false, 
-//         defaultViewport: { width: RES_W, height: RES_H },
-//         ignoreDefaultArgs: ['--enable-automation'], 
-//         args: browserArgs
-//     });
+    browser = await puppeteer.launch({
+        headless: false, 
+        defaultViewport: { width: RES_W, height: RES_H },
+        ignoreDefaultArgs: ['--enable-automation'], 
+        args: browserArgs
+    });
 
-//     const pages = await browser.pages();
-//     const page = pages[0];
+    const pages = await browser.pages();
+    const page = pages[0];
 
-//     page.on('dialog', async dialog => { try { await dialog.dismiss(); } catch(e){} });
-//     await page.evaluateOnNewDocument(() => { window.alert = window.confirm = window.prompt = window.open = function() { return null; }; });
+    page.on('dialog', async dialog => { try { await dialog.dismiss(); } catch(e){} });
+    await page.evaluateOnNewDocument(() => { window.alert = window.confirm = window.prompt = window.open = function() { return null; }; });
 
-//     return page;
-// }
+    return page;
+}
 
-// // ==========================================================================================
-// // 🔊 NEW MODULE: 2026 INTELLIGENT FUZZY UNMUTE ENGINE
-// // ==========================================================================================
-// async function triggerSmartUnmute(page) {
-//     for (const frame of page.frames()) {
-//         try {
-//             if (frame.isDetached()) continue;
+// ==========================================================================================
+// 🔊 NEW MODULE: 2026 INTELLIGENT FUZZY UNMUTE ENGINE
+// ==========================================================================================
+async function triggerSmartUnmute(page) {
+    for (const frame of page.frames()) {
+        try {
+            if (frame.isDetached()) continue;
 
-//             await frame.evaluate(() => {
-//                 // 1. Scan all interactive elements for Unmute text or classes
-//                 const potentialElements = Array.from(document.querySelectorAll('button, div, span, a, i'));
+            await frame.evaluate(() => {
+                // 1. Scan all interactive elements for Unmute text or classes
+                const potentialElements = Array.from(document.querySelectorAll('button, div, span, a, i'));
                 
-//                 potentialElements.forEach(el => {
-//                     const text = (el.innerText || el.textContent || '').trim().toUpperCase();
-//                     const onClickStr = (el.getAttribute('onclick') || '').toLowerCase();
-//                     const ariaLabel = (el.getAttribute('aria-label') || '').toUpperCase();
+                potentialElements.forEach(el => {
+                    const text = (el.innerText || el.textContent || '').trim().toUpperCase();
+                    const onClickStr = (el.getAttribute('onclick') || '').toLowerCase();
+                    const ariaLabel = (el.getAttribute('aria-label') || '').toUpperCase();
                     
-//                     const matchesText = text.includes('UNMUTE') || text.includes('MUTE ME') || text.includes('STREAM UNMUTE') || text.includes('AUDIO');
-//                     const matchesJS = onClickStr.includes('unmute') || onClickStr.includes('volume') || onClickStr.includes('audio');
-//                     const matchesAria = ariaLabel.includes('UNMUTE') || ariaLabel.includes('VOLUME');
+                    const matchesText = text.includes('UNMUTE') || text.includes('MUTE ME') || text.includes('STREAM UNMUTE') || text.includes('AUDIO');
+                    const matchesJS = onClickStr.includes('unmute') || onClickStr.includes('volume') || onClickStr.includes('audio');
+                    const matchesAria = ariaLabel.includes('UNMUTE') || ariaLabel.includes('VOLUME');
 
-//                     if (matchesText || matchesJS || matchesAria) {
-//                         const rect = el.getBoundingClientRect();
-//                         const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none';
-//                         if (isVisible) {
-//                             try { el.click(); } catch(e) {}
-//                             try { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e) {}
-//                         }
-//                     }
-//                 });
+                    if (matchesText || matchesJS || matchesAria) {
+                        const rect = el.getBoundingClientRect();
+                        const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none';
+                        if (isVisible) {
+                            try { el.click(); } catch(e) {}
+                            try { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e) {}
+                        }
+                    }
+                });
 
-//                 // 2. Bruteforce Browser Native Media Layer & Known Player Classes
-//                 document.querySelectorAll('video, audio').forEach(media => {
-//                     if (media.muted) { media.muted = false; media.volume = 1.0; }
-//                     if (media.paused) { media.play().catch(()=>{}); }
-//                 });
+                // 2. Bruteforce Browser Native Media Layer & Known Player Classes
+                document.querySelectorAll('video, audio').forEach(media => {
+                    if (media.muted) { media.muted = false; media.volume = 1.0; }
+                    if (media.paused) { media.play().catch(()=>{}); }
+                });
                 
-//                 document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { 
-//                     try { btn.click(); } catch(e){} 
-//                 });
-//             }).catch(() => {});
-//         } catch (e) {}
-//     }
-// }
+                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { 
+                    try { btn.click(); } catch(e){} 
+                });
+            }).catch(() => {});
+        } catch (e) {}
+    }
+}
 
-// // ==========================================================================================
-// // 5️⃣ OPEN WEBSITE & DETECT/PLAY/FULLSCREEN MODULE (Updated for Iframes)
-// // ==========================================================================================
-// // async function handleVideoPlayback(page) {
-// //     console.log(`[*] Opening Website -> ${TARGET_URL}`);
-// //     await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
-
-// //     console.log(`[*] Detecting, Forcing Fullscreen and Engaging Unmute Engine...`);
-    
-// //     // Attempt a physical click in the center initially to trigger user-gesture
-// //     await new Promise(r => setTimeout(r, 3000));
-// //     try { await page.mouse.click(RES_W/2, RES_H/2); } catch(e){} 
-
-// //     // Continuous loop running in Node.js to penetrate ALL frames
-// //     setInterval(async () => {
-// //         try {
-// //             // Step A: Nuke junk elements on the main page
-// //             await page.evaluate(() => {
-// //                 document.documentElement.style.setProperty('background-color', 'black', 'important');
-// //                 document.body.style.setProperty('background-color', 'black', 'important');
-// //                 document.body.style.setProperty('overflow', 'hidden', 'important');
-// //                 document.querySelectorAll('.chat, #chat, header, footer, .sidebar, .banner, .ads, [id*="pop"]').forEach(el => { 
-// //                     try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
-// //                 });
-// //             }).catch(()=>{});
-
-// //             // Step B: Force Fullscreen on Video or Iframe inside every possible frame
-// //             for (const frame of page.frames()) {
-// //                 if (frame.isDetached()) continue;
-// //                 await frame.evaluate(() => {
-// //                     let targetElement = null;
-// //                     const vids = Array.from(document.querySelectorAll('video'));
-// //                     const frames = Array.from(document.querySelectorAll('iframe'));
-
-// //                     if (vids.length > 0) targetElement = vids.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
-// //                     else if (frames.length > 0) targetElement = frames.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
-
-// //                     if (targetElement) {
-// //                         targetElement.style.setProperty('position', 'fixed', 'important');
-// //                         targetElement.style.setProperty('top', '0px', 'important');
-// //                         targetElement.style.setProperty('left', '0px', 'important');
-// //                         targetElement.style.setProperty('width', '100vw', 'important');
-// //                         targetElement.style.setProperty('height', '100vh', 'important');
-// //                         targetElement.style.setProperty('z-index', '2147483647', 'important'); 
-// //                         targetElement.style.setProperty('background-color', 'black', 'important');
-// //                         targetElement.style.setProperty('opacity', '1', 'important');
-// //                         targetElement.style.setProperty('display', 'block', 'important');
-// //                     }
-// //                 }).catch(()=>{});
-// //             }
-
-// //             // Step C: Execute the Smart Unmute Engine across all frames continuously
-// //             await triggerSmartUnmute(page);
-
-// //         } catch (err) {}
-// //     }, 2000);
-// // }
-
-// // ==========================================================================================
-// // 5️⃣ OPEN WEBSITE & DETECT/PLAY/FULLSCREEN MODULE (Updated: No Blackout, Deep Iframe Support)
-// // ==========================================================================================
+// ==========================================================================================
+// 5️⃣ OPEN WEBSITE & DETECT/PLAY/FULLSCREEN MODULE (Updated for Iframes)
+// ==========================================================================================
 // async function handleVideoPlayback(page) {
 //     console.log(`[*] Opening Website -> ${TARGET_URL}`);
 //     await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
@@ -1453,21 +1395,20 @@
 //     await new Promise(r => setTimeout(r, 3000));
 //     try { await page.mouse.click(RES_W/2, RES_H/2); } catch(e){} 
 
-//     // Continuous loop running in Node.js to penetrate ALL nested frames
+//     // Continuous loop running in Node.js to penetrate ALL frames
 //     setInterval(async () => {
 //         try {
-//             // Step A: Nuke junk elements (Ads, chat) WITHOUT making the background black
+//             // Step A: Nuke junk elements on the main page
 //             await page.evaluate(() => {
-//                 // Hiding scrollbars
+//                 document.documentElement.style.setProperty('background-color', 'black', 'important');
+//                 document.body.style.setProperty('background-color', 'black', 'important');
 //                 document.body.style.setProperty('overflow', 'hidden', 'important');
-                
-//                 // Removing junk classes
 //                 document.querySelectorAll('.chat, #chat, header, footer, .sidebar, .banner, .ads, [id*="pop"]').forEach(el => { 
 //                     try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
 //                 });
 //             }).catch(()=>{});
 
-//             // Step B: Deep Iframe Penetration (Finds video in ANY nested frame)
+//             // Step B: Force Fullscreen on Video or Iframe inside every possible frame
 //             for (const frame of page.frames()) {
 //                 if (frame.isDetached()) continue;
 //                 await frame.evaluate(() => {
@@ -1475,11 +1416,9 @@
 //                     const vids = Array.from(document.querySelectorAll('video'));
 //                     const frames = Array.from(document.querySelectorAll('iframe'));
 
-//                     // Grab the largest video or iframe available in THIS specific frame
 //                     if (vids.length > 0) targetElement = vids.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
 //                     else if (frames.length > 0) targetElement = frames.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
 
-//                     // If we found the video, force it to cover the entire screen
 //                     if (targetElement) {
 //                         targetElement.style.setProperty('position', 'fixed', 'important');
 //                         targetElement.style.setProperty('top', '0px', 'important');
@@ -1487,9 +1426,9 @@
 //                         targetElement.style.setProperty('width', '100vw', 'important');
 //                         targetElement.style.setProperty('height', '100vh', 'important');
 //                         targetElement.style.setProperty('z-index', '2147483647', 'important'); 
+//                         targetElement.style.setProperty('background-color', 'black', 'important');
 //                         targetElement.style.setProperty('opacity', '1', 'important');
 //                         targetElement.style.setProperty('display', 'block', 'important');
-//                         // Removed the background-color black from here as well
 //                     }
 //                 }).catch(()=>{});
 //             }
@@ -1501,52 +1440,113 @@
 //     }, 2000);
 // }
 
-// // ==========================================================================================
-// // 6️⃣ AGGRESSIVE WINDOW MANAGEMENT (OS LEVEL FIX)
-// // ==========================================================================================
-// function forceChromeToFrontOS() {
-//     console.log(`[*] 🛡️ Activating Aggressive Screen Clearing Shield...`);
-    
-//     setInterval(() => {
-//         try {
-//             execSync('xdotool search --name "Auto-Configuration" key Escape || true', { stdio: 'ignore' });
-//             execSync('xdotool search --name "Usage Information" key Escape || true', { stdio: 'ignore' });
-//             execSync('xdotool search --class "obs" windowmove 3000 3000 || true', { stdio: 'ignore' });
-//             execSync('xdotool search --class "chrome" windowmove 0 0 windowsize 1920 1080 windowactivate || true', { stdio: 'ignore' });
-//         } catch (e) {}
-//     }, 3000);
-// }
+// ==========================================================================================
+// 5️⃣ OPEN WEBSITE & DETECT/PLAY/FULLSCREEN MODULE (Updated: No Blackout, Deep Iframe Support)
+// ==========================================================================================
+async function handleVideoPlayback(page) {
+    console.log(`[*] Opening Website -> ${TARGET_URL}`);
+    await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
 
-// // ==========================================================================================
-// // 7️⃣ INFINITE WAIT MODULE
-// // ==========================================================================================
-// async function main() {
-//     setupOBSConfig();
-//     await launchOBS();
+    console.log(`[*] Detecting, Forcing Fullscreen and Engaging Unmute Engine...`);
     
-//     const activePage = await launchChrome();
-//     await handleVideoPlayback(activePage);
+    // Attempt a physical click in the center initially to trigger user-gesture
+    await new Promise(r => setTimeout(r, 3000));
+    try { await page.mouse.click(RES_W/2, RES_H/2); } catch(e){} 
+
+    // Continuous loop running in Node.js to penetrate ALL nested frames
+    setInterval(async () => {
+        try {
+            // Step A: Nuke junk elements (Ads, chat) WITHOUT making the background black
+            await page.evaluate(() => {
+                // Hiding scrollbars
+                document.body.style.setProperty('overflow', 'hidden', 'important');
+                
+                // Removing junk classes
+                document.querySelectorAll('.chat, #chat, header, footer, .sidebar, .banner, .ads, [id*="pop"]').forEach(el => { 
+                    try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
+                });
+            }).catch(()=>{});
+
+            // Step B: Deep Iframe Penetration (Finds video in ANY nested frame)
+            for (const frame of page.frames()) {
+                if (frame.isDetached()) continue;
+                await frame.evaluate(() => {
+                    let targetElement = null;
+                    const vids = Array.from(document.querySelectorAll('video'));
+                    const frames = Array.from(document.querySelectorAll('iframe'));
+
+                    // Grab the largest video or iframe available in THIS specific frame
+                    if (vids.length > 0) targetElement = vids.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
+                    else if (frames.length > 0) targetElement = frames.sort((a,b) => (b.clientWidth*b.clientHeight) - (a.clientWidth*a.clientHeight))[0];
+
+                    // If we found the video, force it to cover the entire screen
+                    if (targetElement) {
+                        targetElement.style.setProperty('position', 'fixed', 'important');
+                        targetElement.style.setProperty('top', '0px', 'important');
+                        targetElement.style.setProperty('left', '0px', 'important');
+                        targetElement.style.setProperty('width', '100vw', 'important');
+                        targetElement.style.setProperty('height', '100vh', 'important');
+                        targetElement.style.setProperty('z-index', '2147483647', 'important'); 
+                        targetElement.style.setProperty('opacity', '1', 'important');
+                        targetElement.style.setProperty('display', 'block', 'important');
+                        // Removed the background-color black from here as well
+                    }
+                }).catch(()=>{});
+            }
+
+            // Step C: Execute the Smart Unmute Engine across all frames continuously
+            await triggerSmartUnmute(page);
+
+        } catch (err) {}
+    }, 2000);
+}
+
+// ==========================================================================================
+// 6️⃣ AGGRESSIVE WINDOW MANAGEMENT (OS LEVEL FIX)
+// ==========================================================================================
+function forceChromeToFrontOS() {
+    console.log(`[*] 🛡️ Activating Aggressive Screen Clearing Shield...`);
     
-//     forceChromeToFrontOS();
+    setInterval(() => {
+        try {
+            execSync('xdotool search --name "Auto-Configuration" key Escape || true', { stdio: 'ignore' });
+            execSync('xdotool search --name "Usage Information" key Escape || true', { stdio: 'ignore' });
+            execSync('xdotool search --class "obs" windowmove 3000 3000 || true', { stdio: 'ignore' });
+            execSync('xdotool search --class "chrome" windowmove 0 0 windowsize 1920 1080 windowactivate || true', { stdio: 'ignore' });
+        } catch (e) {}
+    }, 3000);
+}
 
-//     console.log(`\n✅ ARCHITECTURE COMPLETE: Stream is LIVE and Capturing. Entering Infinite Loop...\n`);
+// ==========================================================================================
+// 7️⃣ INFINITE WAIT MODULE
+// ==========================================================================================
+async function main() {
+    setupOBSConfig();
+    await launchOBS();
     
-//     while (true) {
-//         await new Promise(r => setTimeout(r, 60000));
-//     }
-// }
+    const activePage = await launchChrome();
+    await handleVideoPlayback(activePage);
+    
+    forceChromeToFrontOS();
 
-// // 🧹 Cleanup logic
-// process.on('SIGINT', async () => {
-//     console.log('\n[*] Exiting and cleaning up...');
-//     try { await obs.disconnect(); } catch (e) {} 
-//     if (browser) { try { await browser.close(); } catch(e) {} }
-//     try { execSync('pkill -9 obs chrome puppeteer || true', { stdio: 'ignore' }); } catch (e) {}
-//     process.exit(0);
-// });
+    console.log(`\n✅ ARCHITECTURE COMPLETE: Stream is LIVE and Capturing. Entering Infinite Loop...\n`);
+    
+    while (true) {
+        await new Promise(r => setTimeout(r, 60000));
+    }
+}
 
-// // Run the engine
-// main();
+// 🧹 Cleanup logic
+process.on('SIGINT', async () => {
+    console.log('\n[*] Exiting and cleaning up...');
+    try { await obs.disconnect(); } catch (e) {} 
+    if (browser) { try { await browser.close(); } catch(e) {} }
+    try { execSync('pkill -9 obs chrome puppeteer || true', { stdio: 'ignore' }); } catch (e) {}
+    process.exit(0);
+});
+
+// Run the engine
+main();
 
 
 
