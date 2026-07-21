@@ -888,14 +888,17 @@ async function startWatchdog() {
             let isFrameStuck = (activeStatus.decodedFrames === lastDecodedFrames && activeStatus.decodedFrames > 0);
 
             if (isTimeStuck || isFrameStuck) {
-                // 🔥 NEW: INSTANT HANG RECOVERY SHIELD TRIGGER (0 Seconds Delay)
-                if (!isRecoveryUIShown) {
+                let currentFreezeDuration = Date.now() - frozenCheckTimestamp;
+
+                // 🔥 1. DELAYED OVERLAY: Jab freeze hue 5000ms (5 seconds) guzar jayein, tab overlay show karo
+                if (currentFreezeDuration > 5000 && !isRecoveryUIShown) {
                     await showRecoveryUI(activePage);
                     isRecoveryUIShown = true;
-                    console.log(`[⚠️] Stream Hang Detected! Showing Signal Recovery Shield instantly...`);
+                    console.log(`[⚠️] Stream Hang > 5s! Showing Signal Recovery Shield...`);
                 }
 
-                if (Date.now() - frozenCheckTimestamp > FROZEN_THRESHOLD_MS) {
+                // 🔥 2. HOT-SWAP: Jab freeze hue 30000ms (30 seconds) guzar jayein, tab server change karo
+                if (currentFreezeDuration > FROZEN_THRESHOLD_MS) {
                     activeStatus.status = 'FROZEN';
                     if (isFrameStuck && !isTimeStuck) {
                         console.log(`[!] ⚠️ SYSTEM SHIELD: Detected Black Screen (Audio playing, but video frames stuck). Triggering HOT-SWAP.`);
