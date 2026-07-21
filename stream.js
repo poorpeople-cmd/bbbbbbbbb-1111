@@ -1122,6 +1122,20 @@ async function startDirectStreaming() {
         args: browserArgs
     });
 
+    // ====================================================================
+    // --- 🌍 PROXY LOCATION CHECKER (NEW CODE PASTE HERE) ---
+    try {
+        console.log('[*] Checking Cloudflare Proxy Location...');
+        const ipPage = await browser.newPage();
+        await ipPage.goto('https://ipinfo.io/json', { waitUntil: 'domcontentloaded', timeout: 15000 });
+        const ipData = await ipPage.evaluate(() => JSON.parse(document.body.innerText));
+        console.log(`[🌍] PROXY CONNECTED: IP -> ${ipData.ip} | Country -> ${ipData.country} | City -> ${ipData.city}`);
+        await ipPage.close();
+    } catch (e) {
+        console.log('[⚠️] Proxy location check failed or timed out.');
+    }
+    // ====================================================================
+
     browser.on('targetcreated', async (target) => {
         if (target.type() === 'page') {
             const newPage = await target.page();
