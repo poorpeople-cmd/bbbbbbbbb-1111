@@ -580,7 +580,11 @@ async function startSingleTabWatchdog() {
 // =========================================================================================
 // 🎬 ENGINE INITIALIZATION
 // =========================================================================================
-// 🔥 WIZARD KO BYPASS KARNE KE LIYE SAFE FLAGS (Tray flag removed)
+async function startDirectStreaming() {
+    console.log(`[*] Starting OBS Studio FIRST...`);
+    setupOBSConfig();
+
+    // 🔥 WIZARD KO BYPASS KARNE KE LIYE SAFE FLAGS (Tray flag removed)
     obsProcess = spawn('obs', [
         '--startstreaming', 
         '--disable-updater',
@@ -600,7 +604,7 @@ async function startSingleTabWatchdog() {
             console.log('[🛡️] Auto-killing OBS Configuration Wizard & Dialogs...');
             // Agar popup window hai to usay close kar dega
             execSync('xdotool search --name "Auto-Configuration" windowkill || true', { stdio: 'ignore' });
-            // Agar koi normal dialog aya to Escape press kar ke band kar dega
+            // Agar normal dialog aya to Escape press kar ke band kar dega
             execSync('xdotool search --class "obs" windowactivate key Escape || true', { stdio: 'ignore' });
         } catch (e) {
             // Agar wizard nahi aya to silently ignore karega
