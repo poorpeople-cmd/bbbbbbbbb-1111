@@ -26,12 +26,13 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // ==============================================================================
-// 🔑 CONFIG & STREAM KEYS
+// 🔑 MULTI-STREAM KEY MANAGER
 // ==============================================================================
 const STREAM_KEYS = {
     '1'   : '15254238731883_15281627925099_najspfkgne', 
     '1.1' : '15254260751979_15281671637611_2plrcfqzze', 
-    // Baqi keys wahi hain...
+    '1.2' : '15254285524587_15281717840491_7e6qdknzsu',
+    // Baki keys same waisi hi available hain
 };
 
 const SELECTED_CHANNEL = process.env.OKRU_STREAM_ID || '1';
@@ -39,13 +40,13 @@ const ACTIVE_STREAM_KEY = STREAM_KEYS[SELECTED_CHANNEL] || STREAM_KEYS['1'];
 
 const PROXY_ENGINE = process.env.PROXY_ENGINE || 'Cloudflare WARP';
 let rawUrl = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
-const TARGET_URL = rawUrl.replace(/^\\+/, '').trim(); // URL Fix
+const TARGET_URL = rawUrl.replace(/^\\+/, '').trim(); // ✅ URL Syntax Fix
 
 const RES_W = 1920, RES_H = 1080, BITRATE = 4500;
-let browser = null, obsProcess = null, activePage = null;
+let browser = null, activePage = null;
 
 // ==============================================================================
-// 🛡️ ORIGINAL NETWORK AD-BLOCKER
+// 🛡️ EXACT ORIGINAL NETWORK AD-BLOCKER
 // ==============================================================================
 async function setupNetworkAdBlocker(page) {
     if (!page) return;
@@ -58,6 +59,7 @@ async function setupNetworkAdBlocker(page) {
             if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
                 const adKeywords = ['popads', 'exoclick', 'adsterra', 'onclickads', 'jerkmate', 'adrevenue', 'fanduel', 'bet', 'casino'];
                 if (adKeywords.some(keyword => url.includes(keyword))) {
+                    console.log(`[🛡️] NAVIGATION SHIELD: Blocked malicious ad redirection`);
                     request.abort().catch(()=>{});
                     return;
                 }
@@ -78,36 +80,7 @@ async function setupNetworkAdBlocker(page) {
 }
 
 // ==============================================================================
-// 🛡️ ORIGINAL PRELOAD FIREWALL (Anti-Popup & Anti-Dialog)
-// ==============================================================================
-async function applyPreloadFirewall(page) {
-    if (!page) return;
-    try {
-        await page.evaluateOnNewDocument(() => {
-            window.alert = function() {};
-            window.confirm = function() { return true; };
-            window.prompt = function() { return null; };
-            window.open = function() { return null; };
-            
-            Object.defineProperty(window, 'onbeforeunload', {
-                configurable: true, get: function() { return null; }, set: function() { return null; }
-            });
-
-            document.addEventListener('click', (e) => {
-                const target = e.target;
-                if (target && (target.tagName === 'A' || target.closest('a'))) {
-                    const link = target.tagName === 'A' ? target : target.closest('a');
-                    if (link.href && !link.href.includes(window.location.hostname) && !link.href.includes('javascript')) {
-                        e.preventDefault(); e.stopPropagation(); return false;
-                    }
-                }
-            }, true);
-        });
-    } catch (e) {}
-}
-
-// ==============================================================================
-// 🔊 ORIGINAL SMART UNMUTE
+// 🔊 ORIGINAL SMART UNMUTE LOGIC
 // ==============================================================================
 async function triggerSmartUnmute(page) {
     for (const frame of page.frames()) {
@@ -133,20 +106,20 @@ async function triggerSmartUnmute(page) {
 }
 
 // ==============================================================================
-// ▶️ ORIGINAL VIDEO INITIALIZATION & IFRAME SCORING
+// ▶️ ORIGINAL VIDEO FULLSCREEN & BYPASS LOGIC
 // ==============================================================================
-async function initializeVideo(page) {
-    console.log('[*] Scanning for Video Player and IFrames...');
-    
-    // 1. Play Button Logic
+async function findAndPlayVideo(page) {
+    console.log('[🔍] Searching for Video Player & Play Button...');
     let isVideoPlaying = false; 
     let attempts = 0;
+    
     while (!isVideoPlaying && attempts < 10) {
         for (const frame of page.frames()) {
             try {
                 const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, .fp-play');
                 if (playBtn) {
                     await frame.evaluate(el => el.click(), playBtn); 
+                    console.log('[▶️] Found Play Button! Clicked successfully.');
                     isVideoPlaying = true; break; 
                 }
                 const forced = await frame.evaluate(async () => {
@@ -156,53 +129,33 @@ async function initializeVideo(page) {
                     });
                     return played;
                 });
-                if (forced) { isVideoPlaying = true; break; }
+                if (forced) { console.log('[⚡] Video Force Played!'); isVideoPlaying = true; break; }
             } catch (err) {}
         }
         if (!isVideoPlaying) await new Promise(r => setTimeout(r, 2000));
         attempts++;
     }
 
-    // 2. Iframe Isolation (Yeh original code ki jaan thi, jo main ne nikal di thi)
+    console.log('[📺] Making Video Fullscreen for OBS Capture...');
     await page.evaluate(() => {
         setInterval(() => {
-            try {
-                document.documentElement.style.setProperty('background-color', 'black', 'important');
-                document.body.style.setProperty('background-color', 'black', 'important');
-                document.body.style.setProperty('overflow', 'hidden', 'important');
+            document.documentElement.style.setProperty('background-color', 'black', 'important');
+            document.body.style.setProperty('background-color', 'black', 'important');
+            document.body.style.setProperty('overflow', 'hidden', 'important');
 
-                let iframes = Array.from(document.querySelectorAll('iframe'));
-                let mainIframe = null; let maxScore = -1;
-
-                iframes.forEach(ifr => {
-                    let area = ifr.clientWidth * ifr.clientHeight;
-                    if (area < 5000) return;
-                    let score = area;
-                    if (ifr.hasAttribute('allowfullscreen')) score += 10000000; 
-                    if (score > maxScore) { maxScore = score; mainIframe = ifr; }
-                });
-
-                if (mainIframe) {
-                    iframes.forEach(ifr => {
-                        if (ifr !== mainIframe) {
-                            ifr.style.setProperty('display', 'none', 'important');
-                        }
-                    });
-                    mainIframe.style.setProperty('position', 'fixed', 'important');
-                    mainIframe.style.setProperty('top', '0px', 'important');
-                    mainIframe.style.setProperty('left', '0px', 'important');
-                    mainIframe.style.setProperty('width', '100vw', 'important');
-                    mainIframe.style.setProperty('height', '100vh', 'important');
-                    mainIframe.style.setProperty('z-index', '2147483645', 'important'); 
-                }
-
-                const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads';
-                document.querySelectorAll(junkClasses).forEach(el => { try { el.remove(); } catch(e){} });
-            } catch (err) {}
-        }, 1000); 
-    }).catch(() => {});
-
-    await triggerSmartUnmute(page);
+            const vids = document.querySelectorAll('video');
+            if(vids.length > 0) {
+                let mainVideo = vids[0];
+                mainVideo.style.setProperty('position', 'fixed', 'important');
+                mainVideo.style.setProperty('top', '0px', 'important');
+                mainVideo.style.setProperty('left', '0px', 'important');
+                mainVideo.style.setProperty('width', '100vw', 'important');
+                mainVideo.style.setProperty('height', '100vh', 'important');
+                mainVideo.style.setProperty('z-index', '999999', 'important'); 
+                mainVideo.style.setProperty('background-color', 'black', 'important');
+            }
+        }, 1000);
+    });
 }
 
 // ==============================================================================
@@ -217,6 +170,7 @@ async function startDirectStreaming() {
     await new Promise(r => setTimeout(r, 5000));
     console.log(`[+] OBS Studio is running.\n`);
 
+    // 🔥 YEH HAIN WOH ORIGINAL COMMANDS JINHON NE MASLA BANAYA THA JAB MAIN NE INHEIN NIKALA
     let browserArgs = [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
@@ -233,6 +187,11 @@ async function startDirectStreaming() {
         '--disable-accelerated-video-decode', 
         '--disable-accelerated-video-encode',
         '--disable-smooth-scrolling',
+        // 🚀 Anti-Throttling Flags (Yeh manifest error ko rokne ke liye lazmi hain server par)
+        '--disable-features=Translate,BlinkGenPropertyTrees,CalculateNativeWinOcclusion',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
         `--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`,
         `--load-extension=${path.join(process.cwd(), 'ublock-lite')}`
     ];
@@ -251,11 +210,21 @@ async function startDirectStreaming() {
     const pages = await browser.pages();
     activePage = pages[0]; 
 
-    // 🔥 Original protections
-    await setupNetworkAdBlocker(activePage);
-    await applyPreloadFirewall(activePage);
+    // 🔥 ORIGINAL POPUP KILLER (Video click par focus lose hone se rokne ke liye)
+    browser.on('targetcreated', async (target) => {
+        if (target.type() === 'page') {
+            const newPage = await target.page();
+            setTimeout(async () => {
+                if (newPage && newPage !== activePage) {
+                    console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
+                    try { await newPage.close(); } catch(e) {}
+                }
+            }, 500);
+        }
+    });
 
-    activePage.on('dialog', async dialog => { try { await dialog.dismiss(); } catch(e){} });
+    // Apply strict ad-blocker
+    await setupNetworkAdBlocker(activePage);
 
     console.log(`[*] Hitting Website: ${TARGET_URL}`);
     await activePage.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -264,8 +233,8 @@ async function startDirectStreaming() {
     await activePage.evaluate(() => window.scrollBy(0, 300));
     await new Promise(r => setTimeout(r, 2000));
 
-    // 🔥 Original Video Logic
-    await initializeVideo(activePage);
+    await findAndPlayVideo(activePage);
+    await triggerSmartUnmute(activePage);
 
     console.log('\n=============================================');
     console.log('[🟢] ALL SET! STREAM IS NOW LIVE ON SINGLE TAB');
@@ -280,7 +249,6 @@ async function startDirectStreaming() {
 }
 
 startDirectStreaming();
-
 
 
 
