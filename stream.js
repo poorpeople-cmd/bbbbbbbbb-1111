@@ -1,4 +1,3 @@
-
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 // Stealth plugin is essential to bypass basic Cloudflare checks
@@ -180,7 +179,8 @@ function setupOBSConfig() {
     fs.mkdirSync(profilesDir, { recursive: true });
     fs.mkdirSync(scenesDir, { recursive: true });
 
-    const globalIniContent = `[General]\nLicenseAccepted=true\n[BasicWindow]\nShowAutoConfig=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
+    // const globalIniContent = `[General]\nLicenseAccepted=true\n[BasicWindow]\nShowAutoConfig=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
+    const globalIniContent = `[General]\nLicenseAccepted=true\nHasShownAutoConfig=true\n[BasicWindow]\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
     fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIniContent);
     
     const basicIniContent = `[General]
@@ -578,27 +578,6 @@ async function startSingleTabWatchdog() {
     }
 }
 
-
-
-// =========================================================================================
-// 🖥️ GITHUB ACTIONS XVFB WINDOW LAYER FIX
-// =========================================================================================
-function fixXvfbWindowFocus() {
-    try {
-        console.log('[🖥️] Xvfb Fix: Hiding OBS window from screen & raising Browser...');
-        // OBS window ko hide karo
-        execSync('xdotool search --class "obs" windowunmap || true');
-        // Chrome/Chromium window ko upar lao
-        execSync('xdotool search --class "chrome" windowactivate windowraise || true');
-        execSync('xdotool search --class "chromium" windowactivate windowraise || true');
-        console.log('[✅] Browser is now on Top of Xvfb screen!');
-    } catch (e) {
-        console.log('[⚠️] Window focus adjustment skipped or failed.');
-    }
-}
-
-
-
 // =========================================================================================
 // 🎬 ENGINE INITIALIZATION
 // =========================================================================================
@@ -674,7 +653,7 @@ async function startDirectStreaming() {
     attachAntiAdListeners(activePage);
     await applyPreloadFirewall(activePage);
 
-    // await activePage.bringToFront(); 
+    await activePage.bringToFront(); 
 
     // console.log(`[*] Loading URL: ${urlList[currentUrlIndex]}`);
     // await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -682,20 +661,28 @@ async function startDirectStreaming() {
     // // Simulate user interaction to bypass basic bot checks
     // try { await activePage.mouse.click(10, 10); console.log('[🖱️] Simulated physical click'); } catch(e){}
 
-    // await initializeVideo(activePage, false, true); 
-
-    await activePage.bringToFront(); 
-
     console.log(`[*] Loading URL: ${urlList[currentUrlIndex]}`);
     await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
     
-    // 👇 OBS KO PICHAY CHUPANE AUR BROWSER KO UPAR LANE WALA FUNCTION CALL 👇
-    fixXvfbWindowFocus();
-    
+    // =====================================================================
+    // 🛠️ OS LEVEL FIX: OBS KO PEECHHE CHHUPAO AUR BROWSER KO UPAR LAO
+    // =====================================================================
+    try {
+        console.log('[*] Hiding OBS Window from Xvfb display...');
+        // OBS ki window ko virtual screen se gaayab (unmap) kar do
+        exec('xdotool search --class "obs" windowunmap || true');
+        // Chrome/Puppeteer ki window ko screen par front par set kar do
+        exec('xdotool search --class "chrome" windowactivate windowraise || true');
+        exec('xdotool search --class "chromium" windowactivate windowraise || true');
+    } catch (e) {
+        console.log('[⚠️] xdotool command skipped.');
+    }
+    // =====================================================================
+
     // Simulate user interaction to bypass basic bot checks
     try { await activePage.mouse.click(10, 10); console.log('[🖱️] Simulated physical click'); } catch(e){}
 
-    await initializeVideo(activePage, false, true);
+    await initializeVideo(activePage, false, true); 
 
     if (isObsConnected) {
         console.log('\n[*] Active Video is Ready! Shifting OBS to LIVE Video (MainScene)...');
