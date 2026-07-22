@@ -620,18 +620,41 @@ async function startDirectStreaming() {
     // =====================================================================
     // 🛡️ CONTINUOUS WINDOW SHIELD (OBS INVISIBLE ENGINE)
     // =====================================================================
-    console.log('[🛡️] Starting OS-Level Window Shield to hide OBS...');
+    // console.log('[🛡️] Starting OS-Level Window Shield to hide OBS...');
+    // setInterval(() => {
+    //     try {
+    //         // OBS ki window ko virtual display se permanently unmap (hide) karo
+    //         exec('xdotool search --class "obs" windowunmap 2>/dev/null');
+    //         // Browser ko full screen kar ke top layer par lock karo
+    //         exec('xdotool search --class "chrome" windowactivate windowraise 2>/dev/null');
+    //         exec('xdotool search --class "chromium" windowactivate windowraise 2>/dev/null');
+    //     } catch (e) {
+    //         // Fail silently
+    //     }
+    // }, 2000);
+
+
+    // =====================================================================
+    // 🛡️ AGGRESSIVE CONTINUOUS WINDOW SHIELD (KILLS ALL POPUPS)
+    // =====================================================================
+    console.log('[🛡️] Starting Aggressive OS-Level Window Shield...');
     setInterval(() => {
         try {
-            // OBS ki window ko virtual display se permanently unmap (hide) karo
-            exec('xdotool search --class "obs" windowunmap 2>/dev/null');
-            // Browser ko full screen kar ke top layer par lock karo
-            exec('xdotool search --class "chrome" windowactivate windowraise 2>/dev/null');
-            exec('xdotool search --class "chromium" windowactivate windowraise 2>/dev/null');
+            // 1. Agar Auto-Config wizard ka popup khule, toh usay seedha KILL kar do
+            exec('xdotool search --name "Auto-Configuration" windowkill 2>/dev/null');
+            exec('xdotool search --name "Usage Information" windowkill 2>/dev/null');
+            
+            // 2. OBS ki jitni bhi windows (main ya extra) hain, sab ka ID nikal kar unhein screen se bahar (5000, 5000) phenk do
+            exec('for win in $(xdotool search --class "obs" 2>/dev/null); do xdotool windowmove $win 5000 5000 2>/dev/null; done');
+            
+            // 3. Browser ko lazmi 0,0 position par la kar full screen lock karo
+            exec('xdotool search --class "chrome" windowactivate windowraise windowmove 0 0 2>/dev/null');
+            exec('xdotool search --class "chromium" windowactivate windowraise windowmove 0 0 2>/dev/null');
         } catch (e) {
-            // Fail silently
+            // Fail silently to keep the console clean
         }
     }, 2000);
+    // =====================================================================
     // =====================================================================
 
     console.log('[*] Waiting for OBS to initialize before launching browser...');
