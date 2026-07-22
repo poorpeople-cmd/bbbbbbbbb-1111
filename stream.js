@@ -1,3 +1,5 @@
+
+
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 // Stealth plugin is essential to bypass basic Cloudflare checks
@@ -179,8 +181,17 @@ function setupOBSConfig() {
     fs.mkdirSync(profilesDir, { recursive: true });
     fs.mkdirSync(scenesDir, { recursive: true });
 
-    const globalIniContent = `[General]\nLicenseAccepted=true\n[BasicWindow]\nShowAutoConfig=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
-    fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIniContent);
+    // 💥 2026 FIX: Delete Safe Mode & Sentinel files to bypass Crash/Safe Mode Popup
+    try { fs.unlinkSync(path.join(obsDir, 'safe_mode')); } catch(e) {}
+    try { fs.rmSync(path.join(obsDir, '.sentinel'), { recursive: true, force: true }); } catch(e) {}
+
+    // 💥 2026 FIX: OBS 31+ uses user.ini and app.ini instead of just global.ini
+    const baseConfig = `[General]\nLicenseAccepted=true\n[BasicWindow]\nShowAutoConfig=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
+    
+    // Write to all possible config files to guarantee bypass
+    fs.writeFileSync(path.join(obsDir, 'global.ini'), baseConfig);
+    fs.writeFileSync(path.join(obsDir, 'user.ini'), baseConfig);
+    fs.writeFileSync(path.join(obsDir, 'app.ini'), baseConfig);
     
     const basicIniContent = `[General]
 Name=Untitled
@@ -580,45 +591,57 @@ async function startSingleTabWatchdog() {
 // =========================================================================================
 // 🎬 ENGINE INITIALIZATION
 // =========================================================================================
-
 async function startDirectStreaming() {
     console.log(`[*] Starting OBS Studio FIRST...`);
     setupOBSConfig();
 
-    obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray']);
+    // 🔥 2026 FIX 1: Removed --minimize-to-tray (fails in Xvfb) and added safemode flags
+    obsProcess = spawn('obs', [
+    '--startstreaming', 
+    '--disable-updater',
+    '--profile', 'Untitled',
+    '--collection', 'Untitled',
+    '--multi'
+]);
+
+
+
+    
+    
     obsProcess.stdout.on('data', (data) => console.log(`[OBS]: ${data.toString().trim()}`));
     obsProcess.stderr.on('data', (data) => {
         const msg = data.toString().trim();
         if (msg.includes('error') || msg.includes('fail')) console.log(`[OBS Error]: ${msg}`);
     });
 
+    // =====================================================================
+    // 🛡️ CONTINUOUS WINDOW SHIELD (OBS INVISIBLE ENGINE)
+    // =====================================================================
+    console.log('[🛡️] Starting OS-Level Window Shield to hide OBS...');
+    setInterval(() => {
+        try {
+            // OBS ki window ko virtual display se permanently unmap (hide) karo
+            exec('xdotool search --class "obs" windowunmap 2>/dev/null');
+            // Browser ko full screen kar ke top layer par lock karo
+            exec('xdotool search --class "chrome" windowactivate windowraise 2>/dev/null');
+            exec('xdotool search --class "chromium" windowactivate windowraise 2>/dev/null');
+        } catch (e) {
+            // Fail silently
+        }
+    }, 2000);
+    // =====================================================================
+
     console.log('[*] Waiting for OBS to initialize before launching browser...');
     await new Promise(r => setTimeout(r, 6000));
 
     let isObsConnected = false;
-    console.log('[*] Attempting to connect to OBS WebSocket (Polling Engine Active)...');
-    for (let attempt = 1; attempt <= 15; attempt++) {
-        try {
-            await Promise.race([
-                obs.connect('ws://127.0.0.1:4455', 'secret'),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
-            ]);
-            isObsConnected = true;
-            console.log('[+] OBS WebSocket Connected Successfully!');
-            break;
-        } catch (e) {
-            console.log(`[⏳] OBS Port 4455 not ready yet. Retrying (${attempt}/15)...`);
-            await new Promise(r => setTimeout(r, 2000));
-        }
-    }
+    try {
+        await obs.connect('ws://127.0.0.1:4455', 'secret');
+        isObsConnected = true;
+        console.log('[+] OBS WebSocket Connected Successfully!');
+    } catch (e) {}
 
-    if (isObsConnected) {
-        try {
-            await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' });
-            console.log('[+] Enforced WaitingScene (Loading Bar Buffer Active)');
-        } catch(e){}
-    }
-
+    // ALL ORIGINAL BROWSER FLAGS RESTORED
     let browserArgs = [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
@@ -638,17 +661,13 @@ async function startDirectStreaming() {
         '--disable-features=Translate,BlinkGenPropertyTrees,CalculateNativeWinOcclusion',
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        
-        `--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`,
-        `--load-extension=${path.join(process.cwd(), 'ublock-lite')}`
+        '--disable-renderer-backgrounding'
+        // REMOVED ublock-lite flag. ublock-lite blocks the scripts that fetch m3u8.
     ];
 
     if (PROXY_ENGINE.includes('Cloudflare')) {
         browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
-        console.log(`[*] Starting browser with EXACT viewport dimensions: ${RES_W}x${RES_H} and [CLOUDFLARE WARP] Proxy...`);
-    } else {
-        console.log(`[*] Starting browser with EXACT viewport dimensions: ${RES_W}x${RES_H} using [DIRECT GITHUB IP]...`);
+        console.log(`[*] Starting browser with [CLOUDFLARE WARP] Proxy...`);
     }
 
     browser = await puppeteer.launch({
@@ -658,17 +677,47 @@ async function startDirectStreaming() {
         args: browserArgs
     });
 
+    // POPUP KILLER
     browser.on('targetcreated', async (target) => {
         if (target.type() === 'page') {
             const newPage = await target.page();
             setTimeout(async () => {
-                if (newPage && newPage !== activePage && newPage !== backupPage) {
+                if (newPage && newPage !== activePage) {
                     console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
                     try { await newPage.close(); } catch(e) {}
                 }
             }, 500);
         }
     });
+
+    const pages = await browser.pages();
+    activePage = pages[0]; 
+    
+    await setupNetworkAdBlocker(activePage);
+    attachAntiAdListeners(activePage);
+    await applyPreloadFirewall(activePage);
+
+    await activePage.bringToFront(); 
+
+    console.log(`[*] Loading URL: ${urlList[currentUrlIndex]}`);
+    await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
+    
+    // Simulate user interaction to bypass basic bot checks
+    try { await activePage.mouse.click(10, 10); console.log('[🖱️] Simulated physical click'); } catch(e){}
+
+    await initializeVideo(activePage, false, true); 
+
+    if (isObsConnected) {
+        console.log('\n[*] Active Video is Ready! Shifting OBS to LIVE Video (MainScene)...');
+        try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
+    }
+
+    console.log(`\n==================================================`);
+    console.log(`[🎥] STREAM IS LIVE ON SINGLE TAB`);
+    console.log(`==================================================\n`);
+
+    await startSingleTabWatchdog();
+}
 
 startDirectStreaming();
 
@@ -680,10 +729,7 @@ startDirectStreaming();
 
 
 
-
-
-
-
+// done play but obs wizard haldf apper
 
 
 
