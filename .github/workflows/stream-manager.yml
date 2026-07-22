@@ -26,16 +26,17 @@ jobs:
     timeout-minutes: 360 # 6 Hours Max Limit
 
     steps:
+      # 👇 Node Deprecation fix: Updated to v4 👇
       - name: Get Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Run Super Manager Loop (Every 5 Minutes)
         env:
@@ -122,6 +123,7 @@ jobs:
                     let otherRunsPending = true;
                     let attempts = 0;
 
+                    // Cancellations for other pending streams
                     while (otherRunsPending && attempts < 6) {
                       attempts++;
                       const runsJson = execSync('gh run list --status in_progress --json databaseId,workflowName', { encoding: 'utf8' });
@@ -138,23 +140,30 @@ jobs:
                       if (otherRunsPending) await new Promise(r => setTimeout(r, 30000));
                     }
 
+                    // 👇 Fixed Deletion Logic 👇
                     if (deleteKachra) {
-                      console.log('\n[*] User selected YES for cleanup. Cleaning ALL old workflows...');
-                      const kachraJson = execSync('gh run list --limit 1000 --json databaseId', { encoding: 'utf8' });
-                      const kachraRuns = JSON.parse(kachraJson || '[]');
-                      
-                      let delCount = 0;
-                      for (const r of kachraRuns) {
-                        if (String(r.databaseId) !== String(currentRunId)) {
-                          // 👇 TABDEELI: API Call ka istemal kia gaya hai taakay bina rukawat delete ho 👇
-                          try { execSync(\`gh api -X DELETE /repos/\${process.env.GH_REPO}/actions/runs/\${r.databaseId}\`, { stdio: 'ignore' }); delCount++; } catch(e) {}
+                      console.log('\n[*] Deleting ALL old workflows (Kachra)...');
+                      try {
+                        const kachraJson = execSync('gh run list --limit 1000 --json databaseId', { encoding: 'utf8' });
+                        const kachraRuns = JSON.parse(kachraJson || '[]');
+                        
+                        let delCount = 0;
+                        for (const r of kachraRuns) {
+                          if (String(r.databaseId) !== String(currentRunId)) {
+                            try { 
+                              execSync(\`gh api -X DELETE /repos/\${process.env.GH_REPO}/actions/runs/\${r.databaseId}\`, { stdio: 'ignore' }); 
+                              delCount++; 
+                            } catch(e) {}
+                          }
                         }
+                        console.log(\`[+] Safai Mukammal! \${delCount} purane workflows delete ho gaye.\`);
+                      } catch(err) {
+                        console.log('[-] Deletion Error:', err.message);
                       }
-                      console.log(\`[+] Safai Mukammal! \${delCount} kachra workflows deleted.\`);
                     }
 
-                    console.log(\`[🛑] Manager self-destructing...\`);
-                    try { execSync(\`gh run cancel \${currentRunId}\`); } catch(e) {}
+                    console.log(\`[🛑] Manager shutting down cleanly...\`);
+                    // 👇 Self-cancel command removed to prevent the "Post job cleanup" error 👇
                     process.exit(0);
                   }
 
@@ -315,9 +324,7 @@ jobs:
               console.log('\n==================================================');
               console.log(\`[*] 5h 50m Completed at \${getPktTime()}! Triggering next Stream Manager...\`);
               try {
-                // 👇 TABDEELI: 'true' ya 'false' ki bajaye direct 'Yes' ya 'No' pass kiya gaya hai 👇
                 const nextManagerCmd = \`gh workflow run stream-manager.yml -f stop_time='\${stopTimeInput}' -f delete_kachra='\${deleteKachra ? 'Yes' : 'No'}'\`;
-                
                 execSync(nextManagerCmd, { stdio: 'inherit' });
                 console.log('[+] Handover complete! Shutting down cleanly.');
               } catch(err) {}
@@ -326,9 +333,6 @@ jobs:
 
             startLoop();
           "
-
-
-
 
 
 
