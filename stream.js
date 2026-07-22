@@ -437,7 +437,16 @@ async function main() {
     try { execSync('pkill -9 obs || true', { stdio: 'ignore' }); } catch(e) {}
 
     // 3. Force OBS to read from our custom folder & disable crash dialogs
-    obsProcess = spawn('obs', ['--startstreaming'], { detached: true, stdio: 'ignore' });
+    // 🔥 THE ULTIMATE OBS HIDE FIX: Run OBS in offscreen (headless) mode so it never pops up on screen!
+    obsProcess = spawn('obs', ['--startstreaming', '--profile', 'Untitled', '--collection', 'Untitled'], { 
+        detached: true, 
+        stdio: 'ignore',
+        env: { 
+            ...process.env, 
+            XDG_CONFIG_HOME: customConfigHome,
+            QT_QPA_PLATFORM: 'offscreen' // <--- Yeh OBS ki window ko screen par aane se rokh dega!
+        } 
+    });
     obsProcess.unref();
     
     console.log('[*] Waiting 10 seconds for OBS to fully settle in the background...');
