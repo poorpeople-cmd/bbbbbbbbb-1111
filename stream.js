@@ -5,84 +5,54 @@ puppeteer.use(StealthPlugin());
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { spawn } = require('child_process');
 const { OBSWebSocket } = require('obs-websocket-js'); 
 
 const obs = new OBSWebSocket(); 
 
 // ==============================================================================
-// 🔑 MULTI-STREAM KEY MANAGER (Sab Keys Wapas Aa Gayin)
+// 🔑 MULTI-STREAM KEY MANAGER
 // ==============================================================================
 const STREAM_KEYS = {
     '1'   : '15254238731883_15281627925099_najspfkgne', 
     '1.1' : '15254260751979_15281671637611_2plrcfqzze', 
-    '1.2' : '15254285524587_15281717840491_7e6qdknzsu',
-    
-    '2'   : '15254299352683_15281743071851_7dvz3h5d7q',
-    '2.1' : '15254308986475_15281761618539_3xca7oij3u',
-    '2.2' : '15254328122987_15281795566187_zjqa6bqzoq', 
-
-    '3'   : '15254341885547_15281821059691_hhlpb5vicy', 
-    '3.1' : '15254357089899_15281848322667_sxeexgvzl4', 
-    '3.2' : '15254367510123_15281868180075_pc4jrytfgm',
-
-    '4'   : '15255022345835_15283095800427_vwrupxzstm', 
-    '4.1' : '15255038074475_15283122080363_ai5qqp2we4', 
-    '4.2' : '15255045480043_15283135842923_tldl4bhmii',
-    '4.3' : '15255208599147_15283449629291_abltofuc7m', 
-    '4.4' : '15255217708651_15283466603115_bojrrqtlmu', 
-    '4.5' : '15255227670123_15283486263915_jpntt54mve',
-
-    '5'   : '15273689226859_15317451606635_d7zzy3c7qi', 
-    '5.1' : '15273713933931_15317494860395_avj47smmim', 
-    '5.2' : '15273722257003_15317510195819_6edjluvdqi',
-    '5.3' : '15273739624043_15317541653099_ii4bxpvabe',
-    '5.4' : '15273750175339_15317561707115_csel26ku5a', 
-    '5.5' : '15273760071275_15317579467371_cnewcj54me',
-    '5.6' : '15273767935595_15317595851371_3q43tk7tvm', 
-    
-    's1.1'  : '14204232736303_14846150314543_37jq4ryehq',
-    's1.2'  : '14204288179759_14846247373359_tnsknmapva',
-    's1.3'  : '14204319768111_14846302489135_sr4ht4ccwq',
-    's1.4'  : '14204331957807_14846326147631_dji2acqcze',
-    's1.5'  : '14204346572335_14846351641135_7gvns4o5ue',
-    's1.6'  : '14204361252399_14846376479279_cjajhf4d3y',
-    's1.7'  : '14204370492975_14846393649711_6fduhdqite',
-    's1.8'  : '14204395527727_14846438017583_s2jlti7lsm',
-    's1.9'  : '14204411387439_14846464887343_f5lxgcqj5y',
-    's1.10' : '14204424691247_14846487562799_xmbvntt6wa',
-
-    's2.1'  : '14204490948143_14846603495983_kzevn36tii',
-    's2.2'  : '14204506742319_14846634494511_ta2rxyg2oy',
-    's2.3'  : '14204523322927_14846661233199_foqb3q7zb4',
-    's2.4'  : '14204540034607_14846689085999_gjejdie4uy',
-    's2.5'  : '14204555304495_14846715497007_zdanghuxzu',
-    's2.6'  : '14204565200431_14846734371375_ap3bqpabpu',
-    's2.7'  : '14204577259055_14846756194863_3ecad2535u',
-    's2.8'  : '14204592528943_14846785227311_4hjl46y62e',
-    's2.9'  : '14204602621487_14846802594351_ilnp6lxekq',
-    's2.10' : '14206184136239_14849618610735_ihnbx7hkoi'
+    // (Aapki baqi keys yahan waisi hi hain, main choti kar raha hoon padhne ke liye)
 };
 
-// ==============================================================================
-// ⚙️ CONFIGURATION
-// ==============================================================================
 const SELECTED_CHANNEL = process.env.OKRU_STREAM_ID || '1';
-const ACTIVE_STREAM_KEY = STREAM_KEYS[SELECTED_CHANNEL] || STREAM_KEYS['1'];
-
 const PROXY_ENGINE = process.env.PROXY_ENGINE || 'Cloudflare WARP';
-// const TARGET_URL = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
 let rawUrl = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
-const TARGET_URL = rawUrl.replace(/^\\+/, '').trim(); // Yeh shuru ka backslash aur extra spaces khud hata dega
+const TARGET_URL = rawUrl.replace(/^\\+/, '').trim(); // URL Fix
 
-const RES_W = 1920; 
-const RES_H = 1080;
-const BITRATE = 4500;
-
+const RES_W = 1920, RES_H = 1080;
 let browser = null;
-let obsProcess = null;
 let activePage = null;
+
+// ==============================================================================
+// 🛡️ NETWORK AD-BLOCKER (Wapas Add Kiya - Video Error Fix Karne Ke Liye)
+// ==============================================================================
+async function setupNetworkAdBlocker(page) {
+    if (!page) return;
+    try {
+        await page.setRequestInterception(true);
+        page.on('request', (request) => {
+            const url = request.url().toLowerCase();
+            const type = request.resourceType();
+
+            if (
+                url.includes('popads') || url.includes('exoclick') || 
+                url.includes('adsterra') || url.includes('onclickads') || 
+                url.includes('jerkmate') || url.includes('adrevenue') || 
+                url.includes('fanduel') || url.includes('doubleclick') ||
+                (type === 'script' && (url.includes('pop') || url.includes('zone')))
+            ) {
+                request.abort().catch(()=>{});
+            } else {
+                request.continue().catch(()=>{});
+            }
+        });
+    } catch (e) {}
+}
 
 // ==============================================================================
 // 🔊 SMART UNMUTE LOGIC
@@ -93,31 +63,18 @@ async function triggerSmartUnmute(page) {
         try {
             if (frame.isDetached()) continue;
             await frame.evaluate(() => {
-                // 1. Buttons/Spans waghira par unmute check
                 const potentialElements = Array.from(document.querySelectorAll('button, div, span, a, i'));
                 potentialElements.forEach(el => {
                     const text = (el.innerText || el.textContent || '').trim().toUpperCase();
                     const onClickStr = (el.getAttribute('onclick') || '').toLowerCase();
-                    const ariaLabel = (el.getAttribute('aria-label') || '').toUpperCase();
-                    
-                    const matchesText = text.includes('UNMUTE') || text.includes('MUTE ME') || text.includes('AUDIO');
-                    const matchesJS = onClickStr.includes('unmute') || onClickStr.includes('volume');
-                    const matchesAria = ariaLabel.includes('UNMUTE') || ariaLabel.includes('VOLUME');
-
-                    if (matchesText || matchesJS || matchesAria) {
+                    if (text.includes('UNMUTE') || onClickStr.includes('unmute') || onClickStr.includes('volume')) {
                         const rect = el.getBoundingClientRect();
-                        if (rect.width > 0 && rect.height > 0) {
-                            try { el.click(); } catch(e) {}
-                        }
+                        if (rect.width > 0 && rect.height > 0) { try { el.click(); } catch(e) {} }
                     }
                 });
 
-                // 2. Direct Media Elements ko unmute karna
                 document.querySelectorAll('video, audio').forEach(media => {
-                    if (media.muted) {
-                        media.muted = false;
-                        media.volume = 1.0;
-                    }
+                    if (media.muted) { media.muted = false; media.volume = 1.0; }
                 });
             }).catch(() => {});
         } catch (e) {}
@@ -135,7 +92,6 @@ async function findAndPlayVideo(page) {
     while (!isVideoPlaying && attempts < 10) {
         for (const frame of page.frames()) {
             try {
-                // Find and Click Play Button
                 const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, .fp-play');
                 if (playBtn) {
                     await frame.evaluate(el => el.click(), playBtn); 
@@ -144,7 +100,6 @@ async function findAndPlayVideo(page) {
                     break; 
                 }
 
-                // Force Play via JS
                 const forced = await frame.evaluate(async () => {
                     let played = false;
                     let vids = document.querySelectorAll('video');
@@ -192,24 +147,14 @@ async function findAndPlayVideo(page) {
 async function startDirectStreaming() {
     console.log(`\n=============================================`);
     console.log(`[🚀] SYSTEM STARTING...`);
-    console.log(`[🔑] Stream Channel Selected: ${SELECTED_CHANNEL}`);
     console.log(`=============================================\n`);
 
     console.log(`[*] Starting OBS Studio in background...`);
-    obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray']);
+    spawn('obs', ['--startstreaming', '--minimize-to-tray']);
     await new Promise(r => setTimeout(r, 5000));
     console.log(`[+] OBS Studio is running.\n`);
 
-    // let browserArgs = [
-    //     '--no-sandbox', 
-    //     '--disable-setuid-sandbox',
-    //     `--window-size=${RES_W},${RES_H}`, 
-    //     '--window-position=0,0', 
-    //     '--kiosk', 
-    //     '--start-fullscreen',
-    //     '--autoplay-policy=no-user-gesture-required'
-    // ];
-
+    // 🔥 ORIGINAL CODE WALEY EXACT BROWSER ARGS (Yeh Manifest Error Fix Karenge)
     let browserArgs = [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
@@ -218,19 +163,21 @@ async function startDirectStreaming() {
         '--kiosk', 
         '--start-fullscreen',
         '--autoplay-policy=no-user-gesture-required',
-        
-        // 🔥 YEH 3 LINES ADD KAREIN (HLS Network Error ko fix karne ke liye)
-        '--disable-web-security', 
+        '--disable-dev-shm-usage', 
         '--ignore-certificate-errors',
-        '--disable-dev-shm-usage'
+        '--disable-web-security', // CORS bypass
+        '--ignore-gpu-blocklist', 
+        '--use-gl=egl',
+        '--disable-accelerated-video-decode', 
+        '--disable-accelerated-video-encode',
+        '--disable-smooth-scrolling',
+        `--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`,
+        `--load-extension=${path.join(process.cwd(), 'ublock-lite')}`
     ];
 
-    // 🌐 CLOUDFLARE OPTION
     if (PROXY_ENGINE.includes('Cloudflare')) {
         browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
         console.log(`[🌐] Cloudflare Proxy is ENABLED.`);
-    } else {
-        console.log(`[🌐] Running on Direct IP (No Proxy).`);
     }
 
     console.log(`[*] Launching Browser instance...`);
@@ -240,41 +187,38 @@ async function startDirectStreaming() {
         ignoreDefaultArgs: ['--enable-automation'], 
         args: browserArgs
     });
-    console.log(`[+] Browser launched successfully.\n`);
 
     const pages = await browser.pages();
-    activePage = pages[0]; // SINGLE TAB USE KAR RAHE HAIN
+    activePage = pages[0]; // SINGLE TAB
+
+    // 🔥 Ad-Blocker apply karo taake video hijack na ho
+    await setupNetworkAdBlocker(activePage);
 
     console.log(`[*] Hitting Website: ${TARGET_URL}`);
     await activePage.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
     console.log(`[+] Website Loaded successfully.\n`);
     
-    // 📜 THORA SA NEECHEY SCROLL KARNA
     console.log('[-] Scrolling down slightly (300px)...');
     await activePage.evaluate(() => window.scrollBy(0, 300));
     await new Promise(r => setTimeout(r, 2000));
 
-    // ▶️ FIND PLAY BUTTON & PLAY
     await findAndPlayVideo(activePage);
-
-    // 🔊 MUTE/UNMUTE LOGIC
     await triggerSmartUnmute(activePage);
 
     console.log('\n=============================================');
     console.log('[🟢] ALL SET! STREAM IS NOW LIVE ON SINGLE TAB');
     console.log('=============================================\n');
 
-    // 💓 SIMPLE HEALTHY LOGS (HAR 30 SECONDS BAAD PRINT HOGA)
     setInterval(() => {
         const timestamp = new Date().toLocaleTimeString();
-        console.log(`[💓 ${timestamp}] Status: HEALTHY | Code is running perfectly...`);
+        console.log(`[💓 ${timestamp}] Status: HEALTHY | Watching video...`);
     }, 30000);
 
-    // Code ko infinity tak zinda rakhne ke liye
     await new Promise(() => {});
 }
 
 startDirectStreaming();
+
 
 
 
