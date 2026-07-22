@@ -589,8 +589,9 @@ async function startDirectStreaming() {
         '--startstreaming', 
         '--disable-updater',
         '--disable-missing-files-check',
-        '--multi'
+        '--multi',
         // '--safemode'
+        '--portable'
        
     ]);
 
