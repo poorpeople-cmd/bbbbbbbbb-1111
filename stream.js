@@ -594,18 +594,6 @@ async function startDirectStreaming() {
        
     ]);
 
-    // 🛡️ WIZARD KILLER: OBS ka auto-config popup aate hi usko bypass/close kar dega
-    setTimeout(() => {
-        try {
-            console.log('[🛡️] Bypassing OBS Auto-Configuration Wizard...');
-            // Enter press karega ya popup windows ko close/click karega
-            exec('xdotool search --class "obs" windowactivate key Return Return Return 2>/dev/null');
-        } catch (e) {}
-    }, 4000); // OBS khulne ke 4 seconds baad yeh chal padega
-
-
-
-
 
 
     
