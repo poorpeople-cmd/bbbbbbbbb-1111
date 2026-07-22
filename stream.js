@@ -590,7 +590,8 @@ async function startDirectStreaming() {
         '--disable-updater',
         '--disable-missing-files-check',
         '--multi',
-        '--safemode'
+        // '--safemode'
+        '--portable'
     ]);
     
     obsProcess.stdout.on('data', (data) => console.log(`[OBS]: ${data.toString().trim()}`));
