@@ -72,7 +72,9 @@ const SELECTED_CHANNEL = process.env.OKRU_STREAM_ID || '1';
 const ACTIVE_STREAM_KEY = STREAM_KEYS[SELECTED_CHANNEL] || STREAM_KEYS['1'];
 
 const PROXY_ENGINE = process.env.PROXY_ENGINE || 'Cloudflare WARP';
-const TARGET_URL = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
+// const TARGET_URL = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
+let rawUrl = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
+const TARGET_URL = rawUrl.replace(/^\\+/, '').trim(); // Yeh shuru ka backslash aur extra spaces khud hata dega
 
 const RES_W = 1920; 
 const RES_H = 1080;
