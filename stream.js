@@ -602,16 +602,38 @@ async function startDirectStreaming() {
     console.log(`[*] Starting OBS Studio FIRST...`);
     setupOBSConfig();
 
-    // 🔥 2026 FIX: Added aggressive CLI arguments to block any updaters, crash dialogs, or missing file checks
+    // 🔥 2026 FIX 1: Removed --minimize-to-tray (fails in Xvfb) and added safemode flags
     obsProcess = spawn('obs', [
         '--startstreaming', 
-        '--minimize-to-tray',
         '--disable-updater',
         '--disable-missing-files-check',
         '--multi',
-        '--safemode' 
+        '--safemode'
     ]);
     
+    obsProcess.stdout.on('data', (data) => console.log(`[OBS]: ${data.toString().trim()}`));
+    obsProcess.stderr.on('data', (data) => {
+        const msg = data.toString().trim();
+        if (msg.includes('error') || msg.includes('fail')) console.log(`[OBS Error]: ${msg}`);
+    });
+
+    // =====================================================================
+    // 🛡️ CONTINUOUS WINDOW SHIELD (OBS INVISIBLE ENGINE)
+    // =====================================================================
+    console.log('[🛡️] Starting OS-Level Window Shield to hide OBS...');
+    setInterval(() => {
+        try {
+            // OBS ki window ko virtual display se permanently unmap (hide) karo
+            exec('xdotool search --class "obs" windowunmap 2>/dev/null');
+            // Browser ko full screen kar ke top layer par lock karo
+            exec('xdotool search --class "chrome" windowactivate windowraise 2>/dev/null');
+            exec('xdotool search --class "chromium" windowactivate windowraise 2>/dev/null');
+        } catch (e) {
+            // Fail silently
+        }
+    }, 2000);
+    // =====================================================================
+
     console.log('[*] Waiting for OBS to initialize before launching browser...');
     await new Promise(r => setTimeout(r, 6000));
 
