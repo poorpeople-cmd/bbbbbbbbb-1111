@@ -184,7 +184,19 @@ function setupOBSConfig() {
     fs.mkdirSync(scenesDir,   { recursive: true });
 
     // 🔥 THE FIX: Added [BasicWindow] ShowAutoConfig=false back to brutally kill the wizard.
-    const globalIniContent = `[General]\nLicenseAccepted=true\n[BasicWindow]\nShowAutoConfig=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
+    const globalIniContent = `[General]
+LicenseAccepted=true
+FirstRun=false
+
+[BasicWindow]
+ShowAutoConfig=false
+Warned=true
+
+[OBSWebSocket]
+ServerEnabled=true
+ServerPort=4455
+ServerPassword=secret
+`;
     fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIniContent);
 
     const basicIniContent = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\n`;
@@ -573,11 +585,11 @@ async function startDirectStreaming() {
     try { execSync('pkill -9 obs || true', { stdio: 'ignore' }); } catch(e) {}
 
     obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray'], { detached: true, stdio: 'ignore' });
+    obsProcess.unref();
+    console.log('[*] Waiting 10 seconds for OBS to fully settle in the background...');
+    await new Promise(r => setTimeout(r, 10000));
 
     
-    
-    console.log('[*] Waiting for OBS to initialize before launching browser...');
-    await new Promise(r => setTimeout(r, 6000));
 
     let isObsConnected = false;
     try {
