@@ -1,6 +1,4 @@
 
-
-
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -1033,7 +1031,7 @@ async function main() {
         executablePath: process.env.PUPPETEER_EXEC_PATH || undefined,
         args: [
             '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-            '--disable-web-security', '--disable-features=IsolateOrigins,site-per-process',
+            '--disable-blink-features=AutomationControlled',
             '--autoplay-policy=no-user-gesture-required', '--no-first-run',
             '--no-default-browser-check', '--disable-infobars', '--disable-notifications',
             '--disable-popup-blocking', '--disable-background-timer-throttling',
@@ -1047,20 +1045,6 @@ async function main() {
         timeout: 60000
     });
     console.log('[+] Browser launched!');
-
-        // ====================================================================
-    // --- 🌍 PROXY LOCATION CHECKER (NEW CODE PASTE HERE) ---
-    try {
-        console.log('[*] Checking Cloudflare Proxy Location...');
-        const ipPage = await browser.newPage();
-        await ipPage.goto('https://ipinfo.io/json', { waitUntil: 'domcontentloaded', timeout: 15000 });
-        const ipData = await ipPage.evaluate(() => JSON.parse(document.body.innerText));
-        console.log(`[🌍] PROXY CONNECTED: IP -> ${ipData.ip} | Country -> ${ipData.country} | City -> ${ipData.city}`);
-        await ipPage.close();
-    } catch (e) {
-        console.log('[⚠️] Proxy location check failed or timed out.');
-    }
-    // ====================================================================
 
     // 5. Open pages
     console.log('[5/5] Loading stream pages...');
@@ -1123,7 +1107,6 @@ main().catch(async (err) => {
     await new Promise(r => setTimeout(r, 10000));
     main().catch(e => console.error(`[💥] Restart failed: ${e.message}`));
 });
-
 
 
 
