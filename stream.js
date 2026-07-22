@@ -173,25 +173,22 @@ async function applyPreloadFirewall(page) {
     }
 }
 
+// Global variable for isolated config
+const ISOLATED_CONFIG_DIR = path.join(os.tmpdir(), 'obs_isolated_config');
+
 function setupOBSConfig() {
-    const obsDir = path.join(os.homedir(), '.config', 'obs-studio');
+    // 💥 MAGIC BULLET: Hum server ke temp folder mein ek naya fake environment bana rahe hain
+    const obsDir = path.join(ISOLATED_CONFIG_DIR, 'obs-studio');
     const profilesDir = path.join(obsDir, 'basic', 'profiles', 'Untitled');
     const scenesDir = path.join(obsDir, 'basic', 'scenes');
 
     fs.mkdirSync(profilesDir, { recursive: true });
     fs.mkdirSync(scenesDir, { recursive: true });
 
-    // 💥 2026 FIX: Delete Safe Mode & Sentinel files to bypass Crash/Safe Mode Popup
-    try { fs.unlinkSync(path.join(obsDir, 'safe_mode')); } catch(e) {}
-    try { fs.rmSync(path.join(obsDir, '.sentinel'), { recursive: true, force: true }); } catch(e) {}
-
-    // 💥 2026 FIX: OBS 31+ uses user.ini and app.ini instead of just global.ini
-    const baseConfig = `[General]\nLicenseAccepted=true\n[BasicWindow]\nShowAutoConfig=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
+    // Wizard Disable Commands
+    const globalIniContent = `[General]\nLicenseAccepted=true\n[BasicWindow]\nShowAutoConfig=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
     
-    // Write to all possible config files to guarantee bypass
-    fs.writeFileSync(path.join(obsDir, 'global.ini'), baseConfig);
-    fs.writeFileSync(path.join(obsDir, 'user.ini'), baseConfig);
-    fs.writeFileSync(path.join(obsDir, 'app.ini'), baseConfig);
+    fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIniContent);
     
     const basicIniContent = `[General]
 Name=Untitled
@@ -232,6 +229,8 @@ x264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0
         ]
     };
     fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify(sceneJson, null, 2));
+    
+    console.log(`[+] OBS Isolated Config generated at: ${ISOLATED_CONFIG_DIR}`);
 }
 
 function attachAntiAdListeners(page) {
@@ -592,22 +591,22 @@ async function startSingleTabWatchdog() {
 // 🎬 ENGINE INITIALIZATION
 // =========================================================================================
 async function startDirectStreaming() {
-    console.log(`[*] Starting OBS Studio FIRST...`);
+console.log(`[*] Starting OBS Studio FIRST...`);
     setupOBSConfig();
 
-    // 🔥 2026 FIX 1: Removed --minimize-to-tray (fails in Xvfb) and added safemode flags
+    // 💥 2026 XDG FORCED OVERRIDE: OBS is path ke ilawa aur koi folder nahi dekh payega
     obsProcess = spawn('obs', [
-    '--startstreaming', 
-    '--disable-updater',
-    '--profile', 'Untitled',
-    '--collection', 'Untitled',
-    '--multi'
-]);
+        '--startstreaming', 
+        '--disable-updater',
+        '--disable-missing-files-check',
+        '--multi'
+    ], {
+        env: {
+            ...process.env,
+            XDG_CONFIG_HOME: ISOLATED_CONFIG_DIR // OBS ki gardan pakar ke usko yehi path diya hai
+        }
+    });
 
-
-
-    
-    
     obsProcess.stdout.on('data', (data) => console.log(`[OBS]: ${data.toString().trim()}`));
     obsProcess.stderr.on('data', (data) => {
         const msg = data.toString().trim();
@@ -615,21 +614,19 @@ async function startDirectStreaming() {
     });
 
     // =====================================================================
-    // 🛡️ CONTINUOUS WINDOW SHIELD (OBS INVISIBLE ENGINE)
+    // 🛡️ CONTINUOUS WINDOW SHIELD
     // =====================================================================
     console.log('[🛡️] Starting OS-Level Window Shield to hide OBS...');
     setInterval(() => {
         try {
-            // OBS ki window ko virtual display se permanently unmap (hide) karo
+            // Fail-safe aggressive kills
+            exec('xdotool search --name "Auto-Configuration" windowkill 2>/dev/null');
+            exec('xdotool search --name "Usage Information" windowkill 2>/dev/null');
             exec('xdotool search --class "obs" windowunmap 2>/dev/null');
-            // Browser ko full screen kar ke top layer par lock karo
             exec('xdotool search --class "chrome" windowactivate windowraise 2>/dev/null');
             exec('xdotool search --class "chromium" windowactivate windowraise 2>/dev/null');
-        } catch (e) {
-            // Fail silently
-        }
+        } catch (e) {}
     }, 2000);
-    // =====================================================================
 
     console.log('[*] Waiting for OBS to initialize before launching browser...');
     await new Promise(r => setTimeout(r, 6000));
