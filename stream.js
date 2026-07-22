@@ -1,4 +1,3 @@
-
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -21,13 +20,9 @@ process.on('unhandledRejection', (reason) => {
     if (msg && msg.includes('Protocol error')) {} 
     else { console.log(`[⚠️] IGNORED UNHANDLED REJECTION: ${msg}`); }
 });
-// =========================================================================================
 
 const obs = new OBSWebSocket(); 
 
-// =========================================================================================
-// ⏱️ FORCE AUTO-REFRESH TIME
-// =========================================================================================
 const FORCE_REFRESH_MINUTES = 40; 
 const FORCE_REFRESH_MS      = FORCE_REFRESH_MINUTES * 60 * 1000;
 
@@ -36,9 +31,6 @@ const NO_REFRESH_DOMAINS = [
     'website-vercel-helper-d-jaja-3-2.vercel.app', 'websitestream.netlify.app'
 ];
 
-// =========================================================================================
-// 🚀 STREAM KEYS
-// =========================================================================================
 const STREAM_KEYS = {
     '1'   : '15254238731883_15281627925099_najspfkgne', 
     '1.1' : '15254260751979_15281671637611_2plrcfqzze', 
@@ -76,10 +68,6 @@ let browser = null, obsProcess = null, activePage = null, backupPage = null;
 
 const FROZEN_THRESHOLD_REAL_MS = 8000;   
 const FROZEN_THRESHOLD_HLS_MS  = 15000;  
-
-if (!fs.existsSync('./screenshots')) fs.mkdirSync('./screenshots');
-let pendingScreenshots = [];
-let uploadCycleCount   = 0;
 
 // =========================================================================================
 // 📡 DIAGNOSTICS & AD-BLOCKER
@@ -138,45 +126,58 @@ async function applyPreloadFirewall(page) {
 }
 
 // =========================================================================================
-// ⚙️ EXACT FIX: DUAL OBS CONFIG (Standard + Snap)
+// ⚙️ THE ULTIMATE OBS CONFIG FIX (Forced Local Path via XDG_CONFIG_HOME)
 // =========================================================================================
+// Yeh variable define karta hai ke OBS ka saara data hamari current directory mein hi banay.
+const customConfigHome = path.join(process.cwd(), 'custom_obs_config');
+
 function setupOBSConfig() {
-    // Check both standard linux path and snap path to ensure config sticks
-    const obsPaths = [
-        path.join(os.homedir(), '.config', 'obs-studio'),
-        path.join(os.homedir(), 'snap', 'obs-studio', 'current', '.config', 'obs-studio')
-    ];
+    try {
+        const obsDir      = path.join(customConfigHome, 'obs-studio');
+        const profilesDir = path.join(obsDir, 'basic', 'profiles', 'Untitled');
+        const scenesDir   = path.join(obsDir, 'basic', 'scenes');
+        
+        fs.mkdirSync(profilesDir, { recursive: true });
+        fs.mkdirSync(scenesDir,   { recursive: true });
 
-    obsPaths.forEach(obsDir => {
-        try {
-            const profilesDir = path.join(obsDir, 'basic', 'profiles', 'Untitled');
-            const scenesDir   = path.join(obsDir, 'basic', 'scenes');
-            fs.mkdirSync(profilesDir, { recursive: true });
-            fs.mkdirSync(scenesDir,   { recursive: true });
+        // FirstRun=false aur ConfigFirstRun=false lazmi hain
+        const globalIniContent = `[General]
+LicenseAccepted=true
+FirstRun=false
+ConfigFirstRun=false
+SafeMode=false
 
-            // 🔥 FirstRun=false kills the Setup Wizard permanently
-            const globalIniContent = `[General]\nLicenseAccepted=true\nFirstRun=false\n\n[BasicWindow]\nShowAutoConfig=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
-            fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIniContent);
+[BasicWindow]
+ShowAutoConfig=false
+Warned=true
 
-            const basicIniContent = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\n`;
-            fs.writeFileSync(path.join(profilesDir, 'basic.ini'), basicIniContent);
+[OBSWebSocket]
+ServerEnabled=true
+ServerPort=4455
+ServerPassword=secret
+`;
+        fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIniContent);
 
-            fs.writeFileSync(path.join(profilesDir, 'service.json'), JSON.stringify({
-                settings: { server: 'rtmp://vsu.okcdn.ru/input/', key: ACTIVE_STREAM_KEY }, type: 'rtmp_custom'
-            }, null, 2));
+        const basicIniContent = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\n`;
+        fs.writeFileSync(path.join(profilesDir, 'basic.ini'), basicIniContent);
 
-            fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify({
-                current_scene: 'MainScene', current_program_scene: 'MainScene', name: 'Untitled',
-                scene_order: [{ name: 'MainScene' }],
-                sources: [
-                    { id: 'xshm_input', name: 'Screen', settings: { show_cursor: false } },
-                    { id: 'pulse_output_capture', name: 'Audio', settings: {} },
-                    { id: 'scene', name: 'MainScene', settings: { items: [{ name: 'Screen', id: 1, visible: true }, { name: 'Audio', id: 2, visible: true }] } }
-                ]
-            }, null, 2));
-        } catch (e) {} // Ignore if the directory (like snap) doesn't exist on this server
-    });
-    console.log('[⚙️] OBS configs successfully written (Wizard Disabled).');
+        fs.writeFileSync(path.join(profilesDir, 'service.json'), JSON.stringify({
+            settings: { server: 'rtmp://vsu.okcdn.ru/input/', key: ACTIVE_STREAM_KEY }, type: 'rtmp_custom'
+        }, null, 2));
+
+        fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify({
+            current_scene: 'MainScene', current_program_scene: 'MainScene', name: 'Untitled',
+            scene_order: [{ name: 'MainScene' }],
+            sources: [
+                { id: 'xshm_input', name: 'Screen', settings: { show_cursor: false } },
+                { id: 'pulse_output_capture', name: 'Audio', settings: {} },
+                { id: 'scene', name: 'MainScene', settings: { items: [{ name: 'Screen', id: 1, visible: true }, { name: 'Audio', id: 2, visible: true }] } }
+            ]
+        }, null, 2));
+        console.log(`[⚙️] OBS configs successfully written in LOCAL directory: ${obsDir}`);
+    } catch (e) {
+        console.log(`[⚠️] Error writing OBS config: ${e.message}`);
+    }
 }
 
 // =========================================================================================
@@ -252,14 +253,12 @@ async function initializeVideo(page, startMuted, isActivePage) {
         }
         if (!targetFrame) targetFrame = page.mainFrame();
 
-        // 🔥 THE FAKE ERROR KILLER
         await page.evaluate(() => {
             setInterval(() => {
                 try {
                     document.documentElement.style.setProperty('background-color', 'black', 'important');
                     document.body.style.setProperty('background-color', 'black', 'important');
 
-                    // Delete the fake error UI overlay wrapper 
                     document.querySelectorAll('div, p, span').forEach(el => {
                         if(el.innerText && (el.innerText.toLowerCase().includes('could not play video') || el.innerText.toLowerCase().includes('manifestloaderror'))) {
                             el.style.setProperty('display', 'none', 'important');
@@ -292,7 +291,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
         await targetFrame.evaluate((muted) => {
             setInterval(() => {
                 try {
-                    // Hide any player specific error UI
                     const style = document.createElement('style');
                     style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, .jw-error, .jw-error-msg, .vjs-error-display { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
                     document.head.appendChild(style);
@@ -302,7 +300,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     
                     const realVideo = videos.find(v => v.clientWidth > 100 && v.clientHeight > 100) || videos[0];
                     if (realVideo) {
-                        // Maximize REAL video forcefully to max z-index
                         ['position:fixed','top:0','left:0','width:100vw','height:100vh','z-index:2147483647','object-fit:contain','opacity:1','display:block'].forEach(s => {
                             const [k, v] = s.split(':');
                             realVideo.style.setProperty(k, v, 'important');
@@ -414,12 +411,21 @@ async function startWatchdog() {
 // =========================================================================================
 async function main() {
     console.log(`\n[🚀] SMART STREAM ENGINE STARTING...`);
+    
+    // 1. Likho custom folder mein config
     setupOBSConfig();
 
+    // 2. Pehle se atke hue OBS processes ko qatal karo
     try { execSync('pkill -9 obs || true', { stdio: 'ignore' }); } catch(e) {}
 
-    obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray'], { detached: true, stdio: 'ignore' });
+    // 3. Force OBS to read from our custom folder & disable crash dialogs
+    obsProcess = spawn('obs', ['--startstreaming', '--disable-shutdown-check', '--minimize-to-tray'], { 
+        detached: true, 
+        stdio: 'ignore',
+        env: { ...process.env, XDG_CONFIG_HOME: customConfigHome } // 🔥 THE MAGIC FIX
+    });
     obsProcess.unref();
+    
     console.log('[*] Waiting 10 seconds for OBS to fully settle in the background...');
     await new Promise(r => setTimeout(r, 10000));
 
@@ -430,14 +436,14 @@ async function main() {
         console.log('[⚠️] OBS WS Connection failed, running standalone.');
     }
 
-    // 🔥 KIOSK MODE: Forces Chrome to cover 100% of the screen, hiding OBS entirely!
+    // 🔥 KIOSK MODE
     let browserArgs = [
         '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
         '--disable-blink-features=AutomationControlled',
         '--autoplay-policy=no-user-gesture-required', '--no-first-run',
         '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows',
         `--window-size=${RES_W},${RES_H}`, '--window-position=0,0',
-        '--kiosk', // <--- THE MAGIC BULLET
+        '--kiosk', 
         '--disable-web-security', '--ignore-certificate-errors'
     ];
 
@@ -491,8 +497,6 @@ main().catch(async (err) => {
     try { if (obsProcess) obsProcess.kill(); } catch(e) {}
     setTimeout(() => main(), 10000);
 });
-
-
 
 
 
