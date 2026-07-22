@@ -200,6 +200,16 @@ async function startDirectStreaming() {
     await new Promise(r => setTimeout(r, 5000));
     console.log(`[+] OBS Studio is running.\n`);
 
+    // let browserArgs = [
+    //     '--no-sandbox', 
+    //     '--disable-setuid-sandbox',
+    //     `--window-size=${RES_W},${RES_H}`, 
+    //     '--window-position=0,0', 
+    //     '--kiosk', 
+    //     '--start-fullscreen',
+    //     '--autoplay-policy=no-user-gesture-required'
+    // ];
+
     let browserArgs = [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
@@ -207,7 +217,12 @@ async function startDirectStreaming() {
         '--window-position=0,0', 
         '--kiosk', 
         '--start-fullscreen',
-        '--autoplay-policy=no-user-gesture-required'
+        '--autoplay-policy=no-user-gesture-required',
+        
+        // 🔥 YEH 3 LINES ADD KAREIN (HLS Network Error ko fix karne ke liye)
+        '--disable-web-security', 
+        '--ignore-certificate-errors',
+        '--disable-dev-shm-usage'
     ];
 
     // 🌐 CLOUDFLARE OPTION
