@@ -598,11 +598,179 @@ async function startSingleTabWatchdog() {
 // =========================================================================================
 // 🎬 ENGINE INITIALIZATION
 // =========================================================================================
+// async function startDirectStreaming() {
+//     console.log(`[*] Starting OBS Studio FIRST...`);
+//     setupOBSConfig();
+
+//     // 🔥 2026 FIX 1: Removed --minimize-to-tray (fails in Xvfb) and added safemode flags
+//     obsProcess = spawn('obs', [
+//         '--startstreaming', 
+//         '--disable-updater',
+//         '--disable-missing-files-check',
+//         '--multi',
+//         '--safemode'
+//     ]);
+    
+//     obsProcess.stdout.on('data', (data) => console.log(`[OBS]: ${data.toString().trim()}`));
+//     obsProcess.stderr.on('data', (data) => {
+//         const msg = data.toString().trim();
+//         if (msg.includes('error') || msg.includes('fail')) console.log(`[OBS Error]: ${msg}`);
+//     });
+
+//     // =====================================================================
+//     // 🛡️ CONTINUOUS WINDOW SHIELD (OBS INVISIBLE ENGINE)
+//     // =====================================================================
+//     // console.log('[🛡️] Starting OS-Level Window Shield to hide OBS...');
+//     // setInterval(() => {
+//     //     try {
+//     //         // OBS ki window ko virtual display se permanently unmap (hide) karo
+//     //         exec('xdotool search --class "obs" windowunmap 2>/dev/null');
+//     //         // Browser ko full screen kar ke top layer par lock karo
+//     //         exec('xdotool search --class "chrome" windowactivate windowraise 2>/dev/null');
+//     //         exec('xdotool search --class "chromium" windowactivate windowraise 2>/dev/null');
+//     //     } catch (e) {
+//     //         // Fail silently
+//     //     }
+//     // }, 2000);
+
+
+//     // =====================================================================
+//     // 🛡️ AGGRESSIVE CONTINUOUS WINDOW SHIELD (KILLS ALL POPUPS)
+//     // =====================================================================
+//     console.log('[🛡️] Starting Aggressive OS-Level Window Shield...');
+//     setInterval(() => {
+//         try {
+//             // 1. Agar Auto-Config wizard ka popup khule, toh usay seedha KILL kar do
+//             exec('xdotool search --name "Auto-Configuration" windowkill 2>/dev/null');
+//             exec('xdotool search --name "Usage Information" windowkill 2>/dev/null');
+            
+//             // 2. OBS ki jitni bhi windows (main ya extra) hain, sab ka ID nikal kar unhein screen se bahar (5000, 5000) phenk do
+//             exec('for win in $(xdotool search --class "obs" 2>/dev/null); do xdotool windowmove $win 5000 5000 2>/dev/null; done');
+            
+//             // 3. Browser ko lazmi 0,0 position par la kar full screen lock karo
+//             exec('xdotool search --class "chrome" windowactivate windowraise windowmove 0 0 2>/dev/null');
+//             exec('xdotool search --class "chromium" windowactivate windowraise windowmove 0 0 2>/dev/null');
+//         } catch (e) {
+//             // Fail silently to keep the console clean
+//         }
+//     }, 2000);
+//     // =====================================================================
+//     // =====================================================================
+
+//     console.log('[*] Waiting for OBS to initialize before launching browser...');
+//     await new Promise(r => setTimeout(r, 6000));
+
+//     let isObsConnected = false;
+//     try {
+//         await obs.connect('ws://127.0.0.1:4455', 'secret');
+//         isObsConnected = true;
+//         console.log('[+] OBS WebSocket Connected Successfully!');
+//     } catch (e) {}
+
+//     // ALL ORIGINAL BROWSER FLAGS RESTORED
+//     let browserArgs = [
+//         '--no-sandbox', 
+//         '--disable-setuid-sandbox',
+//         `--window-size=${RES_W},${RES_H}`, 
+//         '--window-position=0,0', 
+//         '--kiosk', 
+//         '--start-fullscreen',
+//         '--autoplay-policy=no-user-gesture-required',
+//         '--disable-dev-shm-usage', 
+//         '--ignore-certificate-errors',
+//         '--disable-web-security',
+//         '--ignore-gpu-blocklist', 
+//         '--use-gl=egl',
+//         '--disable-accelerated-video-decode', 
+//         '--disable-accelerated-video-encode',
+//         '--disable-smooth-scrolling',
+//         '--disable-features=Translate,BlinkGenPropertyTrees,CalculateNativeWinOcclusion',
+//         '--disable-background-timer-throttling',
+//         '--disable-backgrounding-occluded-windows',
+//         '--disable-renderer-backgrounding'
+//         // REMOVED ublock-lite flag. ublock-lite blocks the scripts that fetch m3u8.
+//     ];
+
+//     if (PROXY_ENGINE.includes('Cloudflare')) {
+//         browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
+//         console.log(`[*] Starting browser with [CLOUDFLARE WARP] Proxy...`);
+//     }
+
+//     browser = await puppeteer.launch({
+//         headless: false, 
+//         defaultViewport: { width: RES_W, height: RES_H },
+//         ignoreDefaultArgs: ['--enable-automation'], 
+//         args: browserArgs
+//     });
+
+//     // POPUP KILLER
+//     browser.on('targetcreated', async (target) => {
+//         if (target.type() === 'page') {
+//             const newPage = await target.page();
+//             setTimeout(async () => {
+//                 if (newPage && newPage !== activePage) {
+//                     console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
+//                     try { await newPage.close(); } catch(e) {}
+//                 }
+//             }, 500);
+//         }
+//     });
+
+//     const pages = await browser.pages();
+//     activePage = pages[0]; 
+    
+//     await setupNetworkAdBlocker(activePage);
+//     attachAntiAdListeners(activePage);
+//     await applyPreloadFirewall(activePage);
+
+//     await activePage.bringToFront(); 
+
+//     // console.log(`[*] Loading URL: ${urlList[currentUrlIndex]}`);
+//     // await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
+    
+//     // // Simulate user interaction to bypass basic bot checks
+//     // try { await activePage.mouse.click(10, 10); console.log('[🖱️] Simulated physical click'); } catch(e){}
+
+//     console.log(`[*] Loading URL: ${urlList[currentUrlIndex]}`);
+//     await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
+    
+//     // =====================================================================
+//     // 🛠️ OS LEVEL FIX: OBS KO PEECHHE CHHUPAO AUR BROWSER KO UPAR LAO
+//     // =====================================================================
+//     try {
+//         console.log('[*] Hiding OBS Window from Xvfb display...');
+//         // OBS ki window ko virtual screen se gaayab (unmap) kar do
+//         exec('xdotool search --class "obs" windowunmap || true');
+//         // Chrome/Puppeteer ki window ko screen par front par set kar do
+//         exec('xdotool search --class "chrome" windowactivate windowraise || true');
+//         exec('xdotool search --class "chromium" windowactivate windowraise || true');
+//     } catch (e) {
+//         console.log('[⚠️] xdotool command skipped.');
+//     }
+//     // =====================================================================
+
+//     // Simulate user interaction to bypass basic bot checks
+//     try { await activePage.mouse.click(10, 10); console.log('[🖱️] Simulated physical click'); } catch(e){}
+
+//     await initializeVideo(activePage, false, true); 
+
+//     if (isObsConnected) {
+//         console.log('\n[*] Active Video is Ready! Shifting OBS to LIVE Video (MainScene)...');
+//         try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
+//     }
+
+//     console.log(`\n==================================================`);
+//     console.log(`[🎥] STREAM IS LIVE ON SINGLE TAB`);
+//     console.log(`==================================================\n`);
+
+//     await startSingleTabWatchdog();
+// }
+
 async function startDirectStreaming() {
     console.log(`[*] Starting OBS Studio FIRST...`);
     setupOBSConfig();
 
-    // 🔥 2026 FIX 1: Removed --minimize-to-tray (fails in Xvfb) and added safemode flags
+    // 🔥 1. SAFE OBS LAUNCH (No minimize-to-tray to prevent Xvfb crashes)
     obsProcess = spawn('obs', [
         '--startstreaming', 
         '--disable-updater',
@@ -610,7 +778,6 @@ async function startDirectStreaming() {
         '--multi',
         '--safemode'
     ]);
-    
     obsProcess.stdout.on('data', (data) => console.log(`[OBS]: ${data.toString().trim()}`));
     obsProcess.stderr.on('data', (data) => {
         const msg = data.toString().trim();
@@ -618,56 +785,51 @@ async function startDirectStreaming() {
     });
 
     // =====================================================================
-    // 🛡️ CONTINUOUS WINDOW SHIELD (OBS INVISIBLE ENGINE)
-    // =====================================================================
-    // console.log('[🛡️] Starting OS-Level Window Shield to hide OBS...');
-    // setInterval(() => {
-    //     try {
-    //         // OBS ki window ko virtual display se permanently unmap (hide) karo
-    //         exec('xdotool search --class "obs" windowunmap 2>/dev/null');
-    //         // Browser ko full screen kar ke top layer par lock karo
-    //         exec('xdotool search --class "chrome" windowactivate windowraise 2>/dev/null');
-    //         exec('xdotool search --class "chromium" windowactivate windowraise 2>/dev/null');
-    //     } catch (e) {
-    //         // Fail silently
-    //     }
-    // }, 2000);
-
-
-    // =====================================================================
-    // 🛡️ AGGRESSIVE CONTINUOUS WINDOW SHIELD (KILLS ALL POPUPS)
+    // 🛡️ 2. AGGRESSIVE CONTINUOUS WINDOW SHIELD (KILLS ALL POPUPS)
     // =====================================================================
     console.log('[🛡️] Starting Aggressive OS-Level Window Shield...');
     setInterval(() => {
         try {
-            // 1. Agar Auto-Config wizard ka popup khule, toh usay seedha KILL kar do
+            // Kill any OBS wizard popups
             exec('xdotool search --name "Auto-Configuration" windowkill 2>/dev/null');
             exec('xdotool search --name "Usage Information" windowkill 2>/dev/null');
-            
-            // 2. OBS ki jitni bhi windows (main ya extra) hain, sab ka ID nikal kar unhein screen se bahar (5000, 5000) phenk do
+            // Hide OBS main windows far away from the stream frame
             exec('for win in $(xdotool search --class "obs" 2>/dev/null); do xdotool windowmove $win 5000 5000 2>/dev/null; done');
-            
-            // 3. Browser ko lazmi 0,0 position par la kar full screen lock karo
+            // Keep Chrome securely locked on the main screen
             exec('xdotool search --class "chrome" windowactivate windowraise windowmove 0 0 2>/dev/null');
             exec('xdotool search --class "chromium" windowactivate windowraise windowmove 0 0 2>/dev/null');
-        } catch (e) {
-            // Fail silently to keep the console clean
-        }
+        } catch (e) {}
     }, 2000);
-    // =====================================================================
     // =====================================================================
 
     console.log('[*] Waiting for OBS to initialize before launching browser...');
     await new Promise(r => setTimeout(r, 6000));
 
     let isObsConnected = false;
-    try {
-        await obs.connect('ws://127.0.0.1:4455', 'secret');
-        isObsConnected = true;
-        console.log('[+] OBS WebSocket Connected Successfully!');
-    } catch (e) {}
+    console.log('[*] Attempting to connect to OBS WebSocket (Polling Engine Active)...');
+    for (let attempt = 1; attempt <= 15; attempt++) {
+        try {
+            await Promise.race([
+                obs.connect('ws://127.0.0.1:4455', 'secret'),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+            ]);
+            isObsConnected = true;
+            console.log('[+] OBS WebSocket Connected Successfully!');
+            break;
+        } catch (e) {
+            console.log(`[⏳] OBS Port 4455 not ready yet. Retrying (${attempt}/15)...`);
+            await new Promise(r => setTimeout(r, 2000));
+        }
+    }
 
-    // ALL ORIGINAL BROWSER FLAGS RESTORED
+    if (isObsConnected) {
+        try {
+            await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' });
+            console.log('[+] Enforced WaitingScene (Loading Bar Buffer Active)');
+        } catch(e){}
+    }
+
+    // 🔥 3. RESTORED ANTI-BOT & UBLOCK LITE FLAGS
     let browserArgs = [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
@@ -684,16 +846,20 @@ async function startDirectStreaming() {
         '--disable-accelerated-video-decode', 
         '--disable-accelerated-video-encode',
         '--disable-smooth-scrolling',
-        '--disable-features=Translate,BlinkGenPropertyTrees,CalculateNativeWinOcclusion',
+        '--disable-features=Translate,BlinkGenPropertyTrees,CalculateNativeWinOcclusion,IsolateOrigins,site-per-process',
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
-        // REMOVED ublock-lite flag. ublock-lite blocks the scripts that fetch m3u8.
+        '--disable-renderer-backgrounding',
+        // CRITICAL FOR CRICKET STREAM TO WORK:
+        `--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`,
+        `--load-extension=${path.join(process.cwd(), 'ublock-lite')}`
     ];
 
     if (PROXY_ENGINE.includes('Cloudflare')) {
         browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
-        console.log(`[*] Starting browser with [CLOUDFLARE WARP] Proxy...`);
+        console.log(`[*] Starting browser with EXACT viewport dimensions: ${RES_W}x${RES_H} and [CLOUDFLARE WARP] Proxy...`);
+    } else {
+        console.log(`[*] Starting browser with EXACT viewport dimensions: ${RES_W}x${RES_H} using [DIRECT GITHUB IP]...`);
     }
 
     browser = await puppeteer.launch({
@@ -703,12 +869,11 @@ async function startDirectStreaming() {
         args: browserArgs
     });
 
-    // POPUP KILLER
     browser.on('targetcreated', async (target) => {
         if (target.type() === 'page') {
             const newPage = await target.page();
             setTimeout(async () => {
-                if (newPage && newPage !== activePage) {
+                if (newPage && newPage !== activePage && newPage !== backupPage) {
                     console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
                     try { await newPage.close(); } catch(e) {}
                 }
@@ -718,53 +883,58 @@ async function startDirectStreaming() {
 
     const pages = await browser.pages();
     activePage = pages[0]; 
+    backupPage = await browser.newPage();
     
+    // 🔥 4. REAL BROWSER FINGERPRINT INJECTION (Bypasses Manifest Block)
+    const realUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+    await activePage.setUserAgent(realUserAgent);
+    await backupPage.setUserAgent(realUserAgent);
+
     await setupNetworkAdBlocker(activePage);
+    await setupNetworkAdBlocker(backupPage);
+
     attachAntiAdListeners(activePage);
+    attachAntiAdListeners(backupPage);
+
     await applyPreloadFirewall(activePage);
+    await applyPreloadFirewall(backupPage);
 
     await activePage.bringToFront(); 
 
-    // console.log(`[*] Loading URL: ${urlList[currentUrlIndex]}`);
-    // await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
-    
-    // // Simulate user interaction to bypass basic bot checks
-    // try { await activePage.mouse.click(10, 10); console.log('[🖱️] Simulated physical click'); } catch(e){}
-
-    console.log(`[*] Loading URL: ${urlList[currentUrlIndex]}`);
+    console.log(`[*] STEP 1: Loading Server [${currentUrlIndex}] on Active Page: ${urlList[currentUrlIndex]}`);
     await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
     
-    // =====================================================================
-    // 🛠️ OS LEVEL FIX: OBS KO PEECHHE CHHUPAO AUR BROWSER KO UPAR LAO
-    // =====================================================================
-    try {
-        console.log('[*] Hiding OBS Window from Xvfb display...');
-        // OBS ki window ko virtual screen se gaayab (unmap) kar do
-        exec('xdotool search --class "obs" windowunmap || true');
-        // Chrome/Puppeteer ki window ko screen par front par set kar do
-        exec('xdotool search --class "chrome" windowactivate windowraise || true');
-        exec('xdotool search --class "chromium" windowactivate windowraise || true');
-    } catch (e) {
-        console.log('[⚠️] xdotool command skipped.');
-    }
-    // =====================================================================
-
-    // Simulate user interaction to bypass basic bot checks
-    try { await activePage.mouse.click(10, 10); console.log('[🖱️] Simulated physical click'); } catch(e){}
-
+    await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
+    
     await initializeVideo(activePage, false, true); 
+    await hideLoadingUI(activePage); 
 
     if (isObsConnected) {
-        console.log('\n[*] Active Video is Ready! Shifting OBS to LIVE Video (MainScene)...');
+        console.log('\n[*] Active Video is Ready! Shifting OBS from Animated Buffer to LIVE Video (MainScene)...');
         try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
     }
 
+    console.log(`[*] STEP 2: Silently preparing Server [${backupUrlIndex}] on Backup Page: ${urlList[backupUrlIndex]}`);
+    backupPage.goto(urlList[backupUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    
+    await activePage.bringToFront();
+    try { await activePage.mouse.click(10, 10); } catch(e){} 
+    await hideLoadingUI(activePage);
+
     console.log(`\n==================================================`);
-    console.log(`[🎥] STREAM IS LIVE ON SINGLE TAB`);
+    console.log(`[🎥] INITIAL CAPTURE STATUS: Ready to Broadcast`);
+    console.log(`==================================================`);
+    console.log(`[📺] CURRENT ACTIVE LIVE : Server [${currentUrlIndex}] -> ${urlList[currentUrlIndex]}`);
+    console.log(`[🔊] LIVE AUDIO STATUS   : ON (Unmuted)`);
+    console.log(`--------------------------------------------------`);
+    console.log(`[🛡️] NEXT BACKUP QUEUE   : Server [${backupUrlIndex}] -> ${urlList[backupUrlIndex]}`);
+    console.log(`[🔇] BACKUP AUDIO STATUS : MUTED (Background)`);
     console.log(`==================================================\n`);
 
-    await startSingleTabWatchdog();
+    console.log('[*] Everything Setup! Dual-Tab Monitoring is Active.');
+    await startWatchdog();
 }
+
 
 startDirectStreaming();
 
