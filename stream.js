@@ -688,7 +688,8 @@ async function startDirectStreaming() {
     }
 
     browser = await puppeteer.launch({
-        product: 'firefox', // This commands Puppeteer to utilize the Firefox engine
+        product: 'firefox',
+        executablePath: '/usr/bin/firefox', // 👈 Yeh nayi line add karni hai
         headless: false, 
         defaultViewport: { width: RES_W, height: RES_H },
         ignoreDefaultArgs: ['--enable-automation'], 
