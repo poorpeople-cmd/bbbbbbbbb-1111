@@ -1,35 +1,51 @@
-
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { spawn } = require('child_process');
 const { OBSWebSocket } = require('obs-websocket-js'); 
 
 const obs = new OBSWebSocket(); 
 
 // ==============================================================================
-// 🔑 MULTI-STREAM KEY MANAGER
+// 🛡️ CRASH PREVENTION SHIELD (Original Wala)
+// ==============================================================================
+process.on('uncaughtException', (err) => {
+    if (!err.message.includes('Requesting main frame too early')) {
+        console.log(`[⚠️] IGNORED UNCAUGHT EXCEPTION: ${err.message}`);
+    }
+});
+process.on('unhandledRejection', (reason, promise) => {
+    let msg = reason && reason.message ? reason.message : reason;
+    if (!msg.includes('Protocol error')) {
+        console.log(`[⚠️] IGNORED UNHANDLED REJECTION: ${msg}`);
+    }
+});
+
+// ==============================================================================
+// 🔑 CONFIG & STREAM KEYS
 // ==============================================================================
 const STREAM_KEYS = {
     '1'   : '15254238731883_15281627925099_najspfkgne', 
     '1.1' : '15254260751979_15281671637611_2plrcfqzze', 
-    // (Aapki baqi keys yahan waisi hi hain, main choti kar raha hoon padhne ke liye)
+    // Baqi keys wahi hain...
 };
 
 const SELECTED_CHANNEL = process.env.OKRU_STREAM_ID || '1';
+const ACTIVE_STREAM_KEY = STREAM_KEYS[SELECTED_CHANNEL] || STREAM_KEYS['1'];
+
 const PROXY_ENGINE = process.env.PROXY_ENGINE || 'Cloudflare WARP';
 let rawUrl = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
 const TARGET_URL = rawUrl.replace(/^\\+/, '').trim(); // URL Fix
 
-const RES_W = 1920, RES_H = 1080;
-let browser = null;
-let activePage = null;
+const RES_W = 1920, RES_H = 1080, BITRATE = 4500;
+let browser = null, obsProcess = null, activePage = null;
 
 // ==============================================================================
-// 🛡️ NETWORK AD-BLOCKER (Wapas Add Kiya - Video Error Fix Karne Ke Liye)
+// 🛡️ ORIGINAL NETWORK AD-BLOCKER
 // ==============================================================================
 async function setupNetworkAdBlocker(page) {
     if (!page) return;
@@ -39,12 +55,19 @@ async function setupNetworkAdBlocker(page) {
             const url = request.url().toLowerCase();
             const type = request.resourceType();
 
+            if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+                const adKeywords = ['popads', 'exoclick', 'adsterra', 'onclickads', 'jerkmate', 'adrevenue', 'fanduel', 'bet', 'casino'];
+                if (adKeywords.some(keyword => url.includes(keyword))) {
+                    request.abort().catch(()=>{});
+                    return;
+                }
+            }
+
             if (
-                url.includes('popads') || url.includes('exoclick') || 
-                url.includes('adsterra') || url.includes('onclickads') || 
-                url.includes('jerkmate') || url.includes('adrevenue') || 
+                url.includes('popads') || url.includes('exoclick') || url.includes('adsterra') || 
+                url.includes('onclickads') || url.includes('jerkmate') || url.includes('adrevenue') || 
                 url.includes('fanduel') || url.includes('doubleclick') ||
-                (type === 'script' && (url.includes('pop') || url.includes('zone')))
+                (type === 'script' && (url.includes('analytics') || url.includes('tracking') || url.includes('ad-delivery') || url.includes('pop') || url.includes('zone')))
             ) {
                 request.abort().catch(()=>{});
             } else {
@@ -55,10 +78,38 @@ async function setupNetworkAdBlocker(page) {
 }
 
 // ==============================================================================
-// 🔊 SMART UNMUTE LOGIC
+// 🛡️ ORIGINAL PRELOAD FIREWALL (Anti-Popup & Anti-Dialog)
+// ==============================================================================
+async function applyPreloadFirewall(page) {
+    if (!page) return;
+    try {
+        await page.evaluateOnNewDocument(() => {
+            window.alert = function() {};
+            window.confirm = function() { return true; };
+            window.prompt = function() { return null; };
+            window.open = function() { return null; };
+            
+            Object.defineProperty(window, 'onbeforeunload', {
+                configurable: true, get: function() { return null; }, set: function() { return null; }
+            });
+
+            document.addEventListener('click', (e) => {
+                const target = e.target;
+                if (target && (target.tagName === 'A' || target.closest('a'))) {
+                    const link = target.tagName === 'A' ? target : target.closest('a');
+                    if (link.href && !link.href.includes(window.location.hostname) && !link.href.includes('javascript')) {
+                        e.preventDefault(); e.stopPropagation(); return false;
+                    }
+                }
+            }, true);
+        });
+    } catch (e) {}
+}
+
+// ==============================================================================
+// 🔊 ORIGINAL SMART UNMUTE
 // ==============================================================================
 async function triggerSmartUnmute(page) {
-    console.log('[🔊] Applying Smart Unmute & Audio Logic...');
     for (const frame of page.frames()) {
         try {
             if (frame.isDetached()) continue;
@@ -67,7 +118,7 @@ async function triggerSmartUnmute(page) {
                 potentialElements.forEach(el => {
                     const text = (el.innerText || el.textContent || '').trim().toUpperCase();
                     const onClickStr = (el.getAttribute('onclick') || '').toLowerCase();
-                    if (text.includes('UNMUTE') || onClickStr.includes('unmute') || onClickStr.includes('volume')) {
+                    if (text.includes('UNMUTE') || text.includes('AUDIO') || onClickStr.includes('unmute') || onClickStr.includes('volume')) {
                         const rect = el.getBoundingClientRect();
                         if (rect.width > 0 && rect.height > 0) { try { el.click(); } catch(e) {} }
                     }
@@ -82,63 +133,76 @@ async function triggerSmartUnmute(page) {
 }
 
 // ==============================================================================
-// ▶️ VIDEO PLAY AUR FULLSCREEN LOGIC
+// ▶️ ORIGINAL VIDEO INITIALIZATION & IFRAME SCORING
 // ==============================================================================
-async function findAndPlayVideo(page) {
-    console.log('[🔍] Searching for Video Player & Play Button in the page...');
+async function initializeVideo(page) {
+    console.log('[*] Scanning for Video Player and IFrames...');
+    
+    // 1. Play Button Logic
     let isVideoPlaying = false; 
     let attempts = 0;
-    
     while (!isVideoPlaying && attempts < 10) {
         for (const frame of page.frames()) {
             try {
                 const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, .fp-play');
                 if (playBtn) {
                     await frame.evaluate(el => el.click(), playBtn); 
-                    console.log('[▶️] Found Play Button! Clicked successfully.');
-                    isVideoPlaying = true;
-                    break; 
+                    isVideoPlaying = true; break; 
                 }
-
                 const forced = await frame.evaluate(async () => {
                     let played = false;
-                    let vids = document.querySelectorAll('video');
-                    for(let v of vids) {
-                        if (v.clientWidth > 50) { 
-                            v.muted = false; v.volume = 1.0; 
-                            try { v.play(); played = true; } catch(e) {}
-                        }
-                    }
+                    document.querySelectorAll('video').forEach(v => {
+                        if (v.clientWidth > 50) { v.muted = false; v.volume = 1.0; try { v.play(); played = true; } catch(e){} }
+                    });
                     return played;
                 });
-
-                if (forced) {
-                    console.log('[⚡] Video Force Played via JavaScript!');
-                    isVideoPlaying = true;
-                    break;
-                }
+                if (forced) { isVideoPlaying = true; break; }
             } catch (err) {}
         }
         if (!isVideoPlaying) await new Promise(r => setTimeout(r, 2000));
         attempts++;
     }
 
-    console.log('[📺] Making Video Fullscreen for OBS Capture...');
+    // 2. Iframe Isolation (Yeh original code ki jaan thi, jo main ne nikal di thi)
     await page.evaluate(() => {
         setInterval(() => {
-            const vids = document.querySelectorAll('video');
-            if(vids.length > 0) {
-                let mainVideo = vids[0];
-                mainVideo.style.setProperty('position', 'fixed', 'important');
-                mainVideo.style.setProperty('top', '0px', 'important');
-                mainVideo.style.setProperty('left', '0px', 'important');
-                mainVideo.style.setProperty('width', '100vw', 'important');
-                mainVideo.style.setProperty('height', '100vh', 'important');
-                mainVideo.style.setProperty('z-index', '999999', 'important'); 
-                mainVideo.style.setProperty('background-color', 'black', 'important');
-            }
-        }, 1000);
-    });
+            try {
+                document.documentElement.style.setProperty('background-color', 'black', 'important');
+                document.body.style.setProperty('background-color', 'black', 'important');
+                document.body.style.setProperty('overflow', 'hidden', 'important');
+
+                let iframes = Array.from(document.querySelectorAll('iframe'));
+                let mainIframe = null; let maxScore = -1;
+
+                iframes.forEach(ifr => {
+                    let area = ifr.clientWidth * ifr.clientHeight;
+                    if (area < 5000) return;
+                    let score = area;
+                    if (ifr.hasAttribute('allowfullscreen')) score += 10000000; 
+                    if (score > maxScore) { maxScore = score; mainIframe = ifr; }
+                });
+
+                if (mainIframe) {
+                    iframes.forEach(ifr => {
+                        if (ifr !== mainIframe) {
+                            ifr.style.setProperty('display', 'none', 'important');
+                        }
+                    });
+                    mainIframe.style.setProperty('position', 'fixed', 'important');
+                    mainIframe.style.setProperty('top', '0px', 'important');
+                    mainIframe.style.setProperty('left', '0px', 'important');
+                    mainIframe.style.setProperty('width', '100vw', 'important');
+                    mainIframe.style.setProperty('height', '100vh', 'important');
+                    mainIframe.style.setProperty('z-index', '2147483645', 'important'); 
+                }
+
+                const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads';
+                document.querySelectorAll(junkClasses).forEach(el => { try { el.remove(); } catch(e){} });
+            } catch (err) {}
+        }, 1000); 
+    }).catch(() => {});
+
+    await triggerSmartUnmute(page);
 }
 
 // ==============================================================================
@@ -149,12 +213,10 @@ async function startDirectStreaming() {
     console.log(`[🚀] SYSTEM STARTING...`);
     console.log(`=============================================\n`);
 
-    console.log(`[*] Starting OBS Studio in background...`);
     spawn('obs', ['--startstreaming', '--minimize-to-tray']);
     await new Promise(r => setTimeout(r, 5000));
     console.log(`[+] OBS Studio is running.\n`);
 
-    // 🔥 ORIGINAL CODE WALEY EXACT BROWSER ARGS (Yeh Manifest Error Fix Karenge)
     let browserArgs = [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
@@ -165,7 +227,7 @@ async function startDirectStreaming() {
         '--autoplay-policy=no-user-gesture-required',
         '--disable-dev-shm-usage', 
         '--ignore-certificate-errors',
-        '--disable-web-security', // CORS bypass
+        '--disable-web-security',
         '--ignore-gpu-blocklist', 
         '--use-gl=egl',
         '--disable-accelerated-video-decode', 
@@ -177,10 +239,8 @@ async function startDirectStreaming() {
 
     if (PROXY_ENGINE.includes('Cloudflare')) {
         browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
-        console.log(`[🌐] Cloudflare Proxy is ENABLED.`);
     }
 
-    console.log(`[*] Launching Browser instance...`);
     browser = await puppeteer.launch({
         headless: false, 
         defaultViewport: { width: RES_W, height: RES_H },
@@ -189,21 +249,23 @@ async function startDirectStreaming() {
     });
 
     const pages = await browser.pages();
-    activePage = pages[0]; // SINGLE TAB
+    activePage = pages[0]; 
 
-    // 🔥 Ad-Blocker apply karo taake video hijack na ho
+    // 🔥 Original protections
     await setupNetworkAdBlocker(activePage);
+    await applyPreloadFirewall(activePage);
+
+    activePage.on('dialog', async dialog => { try { await dialog.dismiss(); } catch(e){} });
 
     console.log(`[*] Hitting Website: ${TARGET_URL}`);
     await activePage.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    console.log(`[+] Website Loaded successfully.\n`);
     
     console.log('[-] Scrolling down slightly (300px)...');
     await activePage.evaluate(() => window.scrollBy(0, 300));
     await new Promise(r => setTimeout(r, 2000));
 
-    await findAndPlayVideo(activePage);
-    await triggerSmartUnmute(activePage);
+    // 🔥 Original Video Logic
+    await initializeVideo(activePage);
 
     console.log('\n=============================================');
     console.log('[🟢] ALL SET! STREAM IS NOW LIVE ON SINGLE TAB');
@@ -211,14 +273,13 @@ async function startDirectStreaming() {
 
     setInterval(() => {
         const timestamp = new Date().toLocaleTimeString();
-        console.log(`[💓 ${timestamp}] Status: HEALTHY | Watching video...`);
+        console.log(`[💓 ${timestamp}] Status: HEALTHY | Script running smoothly...`);
     }, 30000);
 
     await new Promise(() => {});
 }
 
 startDirectStreaming();
-
 
 
 
