@@ -1,7 +1,6 @@
 
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-// Stealth plugin is essential to bypass basic Cloudflare checks
 puppeteer.use(StealthPlugin());
 
 const fs = require('fs');
@@ -14,481 +13,313 @@ const { OBSWebSocket } = require('obs-websocket-js');
 // 🛡️ GLOBAL CRASH PREVENTION SHIELD
 // =========================================================================================
 process.on('uncaughtException', (err) => {
-    if (err.message && err.message.includes('Requesting main frame too early')) {
-        console.log(`[🛡️] SYSTEM SHIELD: Ignored stealth plugin background frame error.`);
-    } else {
-        console.log(`[⚠️] IGNORED UNCAUGHT EXCEPTION: ${err.message}`);
-    }
+    if (err.message && err.message.includes('Requesting main frame too early')) {} 
+    else { console.log(`[⚠️] IGNORED UNCAUGHT EXCEPTION: ${err.message}`); }
 });
-
-process.on('unhandledRejection', (reason, promise) => {
-    let msg = reason && reason.message ? reason.message : reason;
-    if (msg && msg.includes('Protocol error')) {
-        console.log(`[🛡️] SYSTEM SHIELD: Ignored detached frame protocol error.`);
-    } else {
-        console.log(`[⚠️] IGNORED UNHANDLED REJECTION: ${msg}`);
-    }
+process.on('unhandledRejection', (reason) => {
+    const msg = reason && reason.message ? reason.message : reason;
+    if (msg && msg.includes('Protocol error')) {} 
+    else { console.log(`[⚠️] IGNORED UNHANDLED REJECTION: ${msg}`); }
 });
 // =========================================================================================
 
 const obs = new OBSWebSocket(); 
 
 // =========================================================================================
-// ⏱️ BIG VARIABLE: FORCE AUTO-REFRESH TIME (IN MINUTES)
+// ⏱️ FORCE AUTO-REFRESH TIME
 // =========================================================================================
 const FORCE_REFRESH_MINUTES = 40; 
-const FORCE_REFRESH_MS = FORCE_REFRESH_MINUTES * 60 * 1000;
+const FORCE_REFRESH_MS      = FORCE_REFRESH_MINUTES * 60 * 1000;
 
-// =========================================================================================
-// 🛡️ NO-REFRESH WHITELIST (CONTINUOUS PLAY DOMAINS)
-// =========================================================================================
 const NO_REFRESH_DOMAINS = [
-    'youtube.com',
-    'facebook.com',
-    'streamed.pk',
-    'cricstreams.', 
-    'website-vercel-helper-d-jaja-3-2.vercel.app',
-    'websitestream.netlify.app'
+    'youtube.com', 'facebook.com', 'streamed.pk', 'cricstreams.', 
+    'website-vercel-helper-d-jaja-3-2.vercel.app', 'websitestream.netlify.app'
 ];
 
-// 🚀 Multi-Stream Key Manager (Original keys restored)
+// =========================================================================================
+// 🚀 STREAM KEYS
+// =========================================================================================
 const STREAM_KEYS = {
     '1'   : '15254238731883_15281627925099_najspfkgne', 
     '1.1' : '15254260751979_15281671637611_2plrcfqzze', 
     '1.2' : '15254285524587_15281717840491_7e6qdknzsu',
-    // Keeping it concise here, but assume all keys from your code are loaded.
-    '2'   : '15254299352683_15281743071851_7dvz3h5d7q'
+    '2'   : '15254299352683_15281743071851_7dvz3h5d7q',
+    '2.1' : '15254308986475_15281761618539_3xca7oij3u',
+    '2.2' : '15254328122987_15281795566187_zjqa6bqzoq', 
+    '3'   : '15254341885547_15281821059691_hhlpb5vicy', 
+    '3.1' : '15254357089899_15281848322667_sxeexgvzl4', 
+    '3.2' : '15254367510123_15281868180075_pc4jrytfgm'
 };
 
 const selectedQuality = process.env.STREAM_QUALITY || 'Original (1080p Max)';
 let RES_W = 1920, RES_H = 1080, BITRATE = 5000;
-
-if (selectedQuality === '360p') { RES_W = 640; RES_H = 360; BITRATE = 800; }
-else if (selectedQuality === '480p') { RES_W = 854; RES_H = 480; BITRATE = 1500; }
-else if (selectedQuality === '720p') { RES_W = 1280; RES_H = 720; BITRATE = 3000; }
+if      (selectedQuality === '360p')  { RES_W = 640;  RES_H = 360;  BITRATE = 800;  }
+else if (selectedQuality === '480p')  { RES_W = 854;  RES_H = 480;  BITRATE = 1500; }
+else if (selectedQuality === '720p')  { RES_W = 1280; RES_H = 720;  BITRATE = 3000; }
 else if (selectedQuality === '1080p') { RES_W = 1920; RES_H = 1080; BITRATE = 4500; }
-else { RES_W = 1920; RES_H = 1080; BITRATE = 6000; }
+else                                  { RES_W = 1920; RES_H = 1080; BITRATE = 6000; }
 
-console.log(`[🚀] Smart Engine Locked to: ${RES_W}x${RES_H} @ ${BITRATE}kbps`);
-
-// Fix for URL handling to prevent ProtocolError
 let rawUrls = (process.env.TARGET_URLS || '').trim();
-let urlList = rawUrls !== '' 
-    ? rawUrls.split(',').map(u => u.trim().replace(/^\\+/, '').startsWith('http') ? u.trim().replace(/^\\+/, '') : 'https://' + u.trim().replace(/^\\+/, '')) 
+let urlList = rawUrls !== ''
+    ? rawUrls.split(',').map(u => u.trim().replace(/^\\+/, '').startsWith('http') ? u.trim().replace(/^\\+/, '') : 'https://' + u.trim().replace(/^\\+/, ''))
     : ['https://dadocric.st/player.php?id=starsp3&v=m'];
 
 let currentUrlIndex = 0;
+let backupUrlIndex  = urlList.length > 1 ? 1 : 0;
 
-const SELECTED_CHANNEL = process.env.OKRU_STREAM_ID || '1';
-const SERVER_SELECTION = process.env.SERVER_SELECTION || 'None'; 
-const PROXY_ENGINE = process.env.PROXY_ENGINE || 'Cloudflare WARP (Recommended)';
-
+const SELECTED_CHANNEL  = process.env.OKRU_STREAM_ID  || '1';
+const SERVER_SELECTION  = process.env.SERVER_SELECTION || 'None';
+const PROXY_ENGINE      = process.env.PROXY_ENGINE      || 'Cloudflare WARP (Recommended)';
 const ACTIVE_STREAM_KEY = STREAM_KEYS[SELECTED_CHANNEL] || STREAM_KEYS['1'];
 
-let browser = null;
-let obsProcess = null;
-let activePage = null;
+let browser = null, obsProcess = null, activePage = null, backupPage = null;
+
+const FROZEN_THRESHOLD_REAL_MS = 8000;   
+const FROZEN_THRESHOLD_HLS_MS  = 15000;  
+
+if (!fs.existsSync('./screenshots')) fs.mkdirSync('./screenshots');
+let pendingScreenshots = [];
+let uploadCycleCount   = 0;
 
 // =========================================================================================
-// 🛡️ ADVANCED NETWORK INTELLIGENCE & NAVIGATION SHIELD (Original)
+// 📡 DIAGNOSTICS & AD-BLOCKER
 // =========================================================================================
+function setupNetworkDiagnostics(page, pageName) {
+    if (!page) return;
+    page.on("console", msg => {
+        const type = msg.type(), text = msg.text(), textLower = text.toLowerCase();
+        if (type === 'error' || type === 'warning' || textLower.includes('manifest') || textLower.includes('hls') || textLower.includes('network')) {
+            console.log(`[💻] ${pageName.toUpperCase()} CONSOLE: ${text}`);
+        }
+    });
+    page.on("requestfailed", req => {
+        const url = req.url(), errText = req.failure() ? req.failure().errorText : 'UNKNOWN_ERROR';
+        if (url.includes('.m3u8') || url.includes('.ts') || url.includes('.mpd')) {
+            console.log(`[❌] ${pageName.toUpperCase()} MEDIA REQ FAILED: ${errText} -> ${url.substring(0, 150)}`);
+        }
+    });
+    page.on("response", async (res) => {
+        const url = res.url(), status = res.status();
+        if (url.includes('.m3u8') || url.includes('.ts') || url.includes('.mpd')) {
+            console.log(`[📡] ${pageName.toUpperCase()} MEDIA RES: ${status >= 400 ? '❌' : '✅'} ${status} -> ${url.substring(0, 150)}`);
+        }
+    });
+}
+
 async function setupNetworkAdBlocker(page) {
     if (!page) return;
     try {
         await page.setRequestInterception(true);
         page.on('request', (request) => {
-            const url = request.url().toLowerCase();
-            const type = request.resourceType();
-
-            // 🚫 SHIELD: Same-Tab Hostile Redirect Hijacking Block
+            const url  = request.url().toLowerCase(), type = request.resourceType();
             if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
-                const targetUrl = request.url().toLowerCase();
-                const adKeywords = ['popads', 'exoclick', 'adsterra', 'onclickads', 'jerkmate', 'adrevenue', 'fanduel', 'bet', 'casino'];
-                const isMaliciousAd = adKeywords.some(keyword => targetUrl.includes(keyword));
-
-                if (isMaliciousAd) {
-                    console.log(`[🛡️] NAVIGATION SHIELD: Blocked malicious ad redirection to -> ${targetUrl.substring(0, 70)}...`);
-                    request.abort().catch(()=>{});
-                    return;
+                if (['fanduel','bet','casino','adrevenue'].some(k => url.includes(k))) {
+                    request.abort().catch(() => {}); return;
                 }
             }
-
-            // Strict Ad Infrastructure Block list
-            if (
-                url.includes('popads') || 
-                url.includes('exoclick') || 
-                url.includes('adsterra') || 
-                url.includes('onclickads') || 
-                url.includes('jerkmate') ||
-                url.includes('adrevenue') ||
-                url.includes('fanduel') ||
-                url.includes('doubleclick') ||
-                (type === 'script' && (url.includes('analytics') || url.includes('tracking') || url.includes('ad-delivery') || url.includes('pop') || url.includes('zone')))
-            ) {
-                request.abort().catch(()=>{});
-            } else {
-                request.continue().catch(()=>{});
-            }
+            if (url.includes('doubleclick') || (type === 'script' && (url.includes('analytics') || url.includes('tracking') || url.includes('zone')))) {
+                request.abort().catch(() => {});
+            } else { request.continue().catch(() => {}); }
         });
-    } catch (e) { console.log('[⚠️] Request interception setup failed.'); }
+    } catch (e) {}
 }
 
 async function applyPreloadFirewall(page) {
     if (!page) return;
     try {
         await page.evaluateOnNewDocument(() => {
-            // Permanent root execution block for popup alerts & confirms
-            window.alert = function() {};
-            window.confirm = function() { return true; };
-            window.prompt = function() { return null; };
-            window.open = function() { return null; };
-            
-            // 🚫 ANTI-DIALOG FIX: Neutralize onbeforeunload modal box popup completely
-            Object.defineProperty(window, 'onbeforeunload', {
-                configurable: true,
-                get: function() { return null; },
-                set: function() { return null; }
-            });
-
-            document.addEventListener('click', (e) => {
-                const target = e.target;
-                if (target && (target.tagName === 'A' || target.closest('a'))) {
-                    const link = target.tagName === 'A' ? target : target.closest('a');
-                    if (link.href && !link.href.includes(window.location.hostname) && !link.href.includes('javascript')) {
-                        console.log("[🛡️] RE-DIRECT SHIELD: Blocked navigation to external ad domain.");
-                        e.preventDefault();
-                        e.stopPropagation();
-                        return false;
-                    }
-                }
-            }, true);
-
+            window.alert = window.confirm = window.prompt = window.open = function() { return null; };
+            Object.defineProperty(window, 'onbeforeunload', { configurable: true, get: () => null, set: () => null });
             const style = document.createElement('style');
-            style.textContent = `html, body { background-color: #000000 !important; overflow: hidden !important; }`;
+            style.textContent = `html, body { background-color: #000 !important; overflow: hidden !important; }`;
             document.documentElement.appendChild(style);
         });
-    } catch (e) {
-        console.log(`[🛡️] SYSTEM SHIELD: Preload firewall safe injection caught an error.`);
-    }
+    } catch (e) {}
 }
 
 // =========================================================================================
-// ⚙️ EXACT FIX: OBS CONFIG (Kills Auto-Config Wizard & Forces Background)
+// ⚙️ EXACT FIX: DUAL OBS CONFIG (Standard + Snap)
 // =========================================================================================
 function setupOBSConfig() {
-    const obsDir      = path.join(os.homedir(), '.config', 'obs-studio');
-    const profilesDir = path.join(obsDir, 'basic', 'profiles', 'Untitled');
-    const scenesDir   = path.join(obsDir, 'basic', 'scenes');
-    
-    fs.mkdirSync(profilesDir, { recursive: true });
-    fs.mkdirSync(scenesDir,   { recursive: true });
+    // Check both standard linux path and snap path to ensure config sticks
+    const obsPaths = [
+        path.join(os.homedir(), '.config', 'obs-studio'),
+        path.join(os.homedir(), 'snap', 'obs-studio', 'current', '.config', 'obs-studio')
+    ];
 
-    // 🔥 THE FIX: Added [BasicWindow] ShowAutoConfig=false back to brutally kill the wizard.
-    const globalIniContent = `[General]
-LicenseAccepted=true
-FirstRun=false
+    obsPaths.forEach(obsDir => {
+        try {
+            const profilesDir = path.join(obsDir, 'basic', 'profiles', 'Untitled');
+            const scenesDir   = path.join(obsDir, 'basic', 'scenes');
+            fs.mkdirSync(profilesDir, { recursive: true });
+            fs.mkdirSync(scenesDir,   { recursive: true });
 
-[BasicWindow]
-ShowAutoConfig=false
-Warned=true
+            // 🔥 FirstRun=false kills the Setup Wizard permanently
+            const globalIniContent = `[General]\nLicenseAccepted=true\nFirstRun=false\n\n[BasicWindow]\nShowAutoConfig=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
+            fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIniContent);
 
-[OBSWebSocket]
-ServerEnabled=true
-ServerPort=4455
-ServerPassword=secret
-`;
-    fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIniContent);
+            const basicIniContent = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\n`;
+            fs.writeFileSync(path.join(profilesDir, 'basic.ini'), basicIniContent);
 
-    const basicIniContent = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\n`;
-    fs.writeFileSync(path.join(profilesDir, 'basic.ini'), basicIniContent);
+            fs.writeFileSync(path.join(profilesDir, 'service.json'), JSON.stringify({
+                settings: { server: 'rtmp://vsu.okcdn.ru/input/', key: ACTIVE_STREAM_KEY }, type: 'rtmp_custom'
+            }, null, 2));
 
-    fs.writeFileSync(path.join(profilesDir, 'service.json'), JSON.stringify({
-        settings: { server: 'rtmp://vsu.okcdn.ru/input/', key: ACTIVE_STREAM_KEY },
-        type: 'rtmp_custom'
-    }, null, 2));
-
-    fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify({
-        current_scene: 'MainScene', current_program_scene: 'MainScene', name: 'Untitled',
-        scene_order: [{ name: 'MainScene' }],
-        sources: [
-            { id: 'xshm_input',            name: 'Screen', settings: { show_cursor: false } },
-            { id: 'pulse_output_capture', name: 'Audio',  settings: {} },
-            { id: 'scene', name: 'MainScene',    settings: { items: [{ name: 'Screen', id: 1, visible: true }, { name: 'Audio', id: 2, visible: true }] } }
-        ]
-    }, null, 2));
-    
-    console.log('[⚙️] OBS config written: Wizard disabled.');
-}
-
-function attachAntiAdListeners(page) {
-    page.on('dialog', async dialog => {
-        try { await dialog.dismiss(); } catch(e){}
+            fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify({
+                current_scene: 'MainScene', current_program_scene: 'MainScene', name: 'Untitled',
+                scene_order: [{ name: 'MainScene' }],
+                sources: [
+                    { id: 'xshm_input', name: 'Screen', settings: { show_cursor: false } },
+                    { id: 'pulse_output_capture', name: 'Audio', settings: {} },
+                    { id: 'scene', name: 'MainScene', settings: { items: [{ name: 'Screen', id: 1, visible: true }, { name: 'Audio', id: 2, visible: true }] } }
+                ]
+            }, null, 2));
+        } catch (e) {} // Ignore if the directory (like snap) doesn't exist on this server
     });
+    console.log('[⚙️] OBS configs successfully written (Wizard Disabled).');
 }
 
 // =========================================================================================
-// 🔊 2026 INTELLIGENT FUZZY UNMUTE ENGINE (Original)
+// 🔊 SMART UNMUTE & VIDEO ENGINE
 // =========================================================================================
 async function triggerSmartUnmute(page) {
-    console.log('[🔊] Applying Smart Unmute Logic...');
     for (const frame of page.frames()) {
         try {
             if (frame.isDetached()) continue;
-
             await frame.evaluate(() => {
-                // 1. Scan all interactive elements
-                const potentialElements = Array.from(document.querySelectorAll('button, div, span, a, i'));
-                
-                potentialElements.forEach(el => {
-                    const text = (el.innerText || el.textContent || '').trim().toUpperCase();
-                    const onClickStr = (el.getAttribute('onclick') || '').toLowerCase();
-                    const ariaLabel = (el.getAttribute('aria-label') || '').toUpperCase();
-                    
-                    const matchesText = text.includes('UNMUTE') || text.includes('MUTE ME') || text.includes('STREAM UNMUTE') || text.includes('AUDIO');
-                    const matchesJS = onClickStr.includes('unmute') || onClickStr.includes('volume') || onClickStr.includes('audio');
-                    const matchesAria = ariaLabel.includes('UNMUTE') || ariaLabel.includes('VOLUME');
-
-                    if (matchesText || matchesJS || matchesAria) {
-                        const rect = el.getBoundingClientRect();
-                        const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none';
-
-                        if (isVisible) {
-                            try { el.click(); } catch(e) {}
-                            try { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e) {}
-                        }
+                Array.from(document.querySelectorAll('button, div, span, a, i')).forEach(el => {
+                    const text = (el.innerText || '').trim().toUpperCase();
+                    const onclick = (el.getAttribute('onclick') || '').toLowerCase();
+                    if (text.includes('UNMUTE') || text.includes('AUDIO') || onclick.includes('unmute') || onclick.includes('volume')) {
+                        const r = el.getBoundingClientRect();
+                        if (r.width > 0 && r.height > 0) { try { el.click(); } catch(e) {} }
                     }
                 });
-
-                // 2. Bruteforce Browser Native Media Layer
-                document.querySelectorAll('video, audio').forEach(media => {
-                    if (media.muted) {
-                        media.muted = false;
-                        media.volume = 1.0;
-                    }
-                });
+                document.querySelectorAll('video, audio').forEach(m => { if (m.muted) { m.muted = false; m.volume = 1.0; } });
             }).catch(() => {});
         } catch (e) {}
     }
 }
-// =========================================================================================
 
 async function initializeVideo(page, startMuted, isActivePage) {
     try {
-        console.log('[*] Checking if Video is Autoplaying or Needs a Play Button...');
-        let isVideoPlaying = false; 
-        let attempts = 0;
-        
-        while (!isVideoPlaying && attempts < 15) {
+        console.log('[*] Enforcing Video Playback...');
+        let playing = false, tries = 0;
+        while (!playing && tries < 15) {
             for (const frame of page.frames()) {
                 try {
                     const autoPlayed = await frame.evaluate(() => {
-                        let playing = false;
+                        let p = false;
                         document.querySelectorAll('video').forEach(v => {
-                            if (v.clientWidth > 50 && !v.paused && v.currentTime > 0) {
-                                v.muted = false; 
-                                v.volume = 1.0;
-                                playing = true;
-                            }
+                            if (v.clientWidth > 50 && !v.paused && v.currentTime > 0) { v.muted = false; v.volume = 1.0; p = true; }
                         });
-                        return playing;
+                        return p;
                     });
+                    if (autoPlayed) { playing = true; break; }
 
-                    if (autoPlayed) {
-                        isVideoPlaying = true;
-                        break;
-                    }
+                    const btn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, .fp-play');
+                    if (btn) { await frame.evaluate(el => el.click(), btn); playing = true; break; }
 
-                    const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, [class*="unmute"], .fp-play');
-                    if (playBtn) {
-                        const isVisible = await frame.evaluate(el => {
-                            const style = window.getComputedStyle(el);
-                            return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-                        }, playBtn);
-
-                        if (isVisible) {
-                            await frame.evaluate(el => el.click(), playBtn); 
-                            await new Promise(r => setTimeout(r, 3000)); 
-                            isVideoPlaying = true;
-                            break; 
-                        }
-                    }
-
-                    if (!isVideoPlaying && attempts > 5) {
+                    if (!playing && tries > 5) {
                         const forced = await frame.evaluate(async () => {
-                            let played = false;
-                            let vids = document.querySelectorAll('video');
-                            for(let v of vids) {
-                                if (v.clientWidth > 50) { 
-                                    v.muted = false; v.volume = 1.0; 
-                                    try { v.click(); } catch(e){}
-                                    try {
-                                        let p = v.play();
-                                        if (p !== undefined) p.catch(()=>{});
-                                        played = true;
-                                    } catch(e) {}
+                            let done = false;
+                            for (const v of document.querySelectorAll('video')) {
+                                if (v.clientWidth > 50) {
+                                    v.muted = false; v.volume = 1.0;
+                                    try { v.click(); } catch(e) {}
+                                    try { const p = v.play(); if (p) p.catch(() => {}); done = true; } catch(e) {}
                                 }
                             }
-                            return played;
+                            return done;
                         });
-
-                        if (forced) {
-                            isVideoPlaying = true;
-                            break;
-                        }
+                        if (forced) { playing = true; break; }
                     }
                 } catch (err) {}
             }
-            if (!isVideoPlaying) await new Promise(r => setTimeout(r, 2000));
-            attempts++;
+            if (!playing) await new Promise(r => setTimeout(r, 2000));
+            tries++;
         }
 
-        console.log('[*] Scanning for Exact Real Video Player...');
         let targetFrame = null;
         for (const frame of page.frames()) {
             try {
-                const isRealLiveStream = await frame.evaluate(() => {
-                    const vid = document.querySelector('video');
-                    return vid && vid.clientWidth > 50 && vid.clientHeight > 50;
+                const isReal = await frame.evaluate(() => {
+                    const v = document.querySelector('video');
+                    return v && v.clientWidth > 50 && v.clientHeight > 50;
                 });
-                if (isRealLiveStream) { 
-                    targetFrame = frame; 
-                    console.log(`[+] Smart Scanner locked onto video frame!`);
-                    break; 
-                }
-            } catch (e) { }
+                if (isReal) { targetFrame = frame; break; }
+            } catch (e) {}
         }
+        if (!targetFrame) targetFrame = page.mainFrame();
 
+        // 🔥 THE FAKE ERROR KILLER
         await page.evaluate(() => {
             setInterval(() => {
                 try {
                     document.documentElement.style.setProperty('background-color', 'black', 'important');
                     document.body.style.setProperty('background-color', 'black', 'important');
-                    document.body.style.setProperty('overflow', 'hidden', 'important');
-                    document.documentElement.style.setProperty('overflow', 'hidden', 'important');
 
-                    let iframes = Array.from(document.querySelectorAll('iframe'));
-                    let mainIframe = null; let maxScore = -1;
-
-                    // 1. ADVANCED GEOMETRIC SCORING
-                    iframes.forEach(ifr => {
-                        let width = ifr.clientWidth;
-                        let height = ifr.clientHeight;
-                        let area = width * height;
-
-                        if (area < 5000) return;
-
-                        let score = area;
-                        
-                        if (ifr.hasAttribute('allowfullscreen') || 
-                            ifr.hasAttribute('webkitallowfullscreen') || 
-                            ifr.hasAttribute('mozallowfullscreen')) {
-                            score += 10000000; 
-                        }
-                        
-                        if (height > width) {
-                            score = -1; 
-                        }
-
-                        if (score > maxScore) {
-                            maxScore = score;
-                            mainIframe = ifr;
+                    // Delete the fake error UI overlay wrapper 
+                    document.querySelectorAll('div, p, span').forEach(el => {
+                        if(el.innerText && (el.innerText.toLowerCase().includes('could not play video') || el.innerText.toLowerCase().includes('manifestloaderror'))) {
+                            el.style.setProperty('display', 'none', 'important');
+                            el.remove();
                         }
                     });
 
-                    if (!mainIframe && iframes.length > 0) {
-                        mainIframe = iframes.find(ifr => 
-                            ifr.getAttribute('allowfullscreen') !== null || 
-                            (ifr.src && (ifr.src.includes('player') || ifr.src.includes('embed') || ifr.src.includes('stream') || ifr.src.includes('watch')))
-                        );
-                    }
-
+                    const iframes = Array.from(document.querySelectorAll('iframe'));
+                    let mainIframe = null, maxScore = -1;
+                    iframes.forEach(ifr => {
+                        const area = ifr.clientWidth * ifr.clientHeight;
+                        if (area < 5000) return;
+                        let score = area;
+                        if (ifr.hasAttribute('allowfullscreen')) score += 10000000;
+                        if (score > maxScore) { maxScore = score; mainIframe = ifr; }
+                    });
                     if (mainIframe) {
                         iframes.forEach(ifr => {
-                            if (ifr !== mainIframe) {
-                                ifr.style.setProperty('display', 'none', 'important');
-                                ifr.style.setProperty('opacity', '0', 'important');
-                                ifr.style.setProperty('z-index', '-9999', 'important');
-                            }
+                            if (ifr !== mainIframe) ifr.style.setProperty('display', 'none', 'important');
                         });
-
-                        mainIframe.style.setProperty('position', 'fixed', 'important');
-                        mainIframe.style.setProperty('top', '0px', 'important');
-                        mainIframe.style.setProperty('left', '0px', 'important');
-                        mainIframe.style.setProperty('width', '100vw', 'important');
-                        mainIframe.style.setProperty('height', '100vh', 'important');
-                        mainIframe.style.setProperty('z-index', '2147483645', 'important'); 
-                        mainIframe.style.setProperty('background-color', 'black', 'important');
-                        mainIframe.style.setProperty('border', 'none', 'important');
-                        mainIframe.style.setProperty('opacity', '1', 'important');
-                        mainIframe.style.setProperty('display', 'block', 'important');
-                        mainIframe.style.setProperty('visibility', 'visible', 'important');
+                        ['position:fixed','top:0','left:0','width:100vw','height:100vh','z-index:2147483645','border:none'].forEach(s => {
+                            const [k, v] = s.split(':');
+                            mainIframe.style.setProperty(k, v, 'important');
+                        });
                     }
-
-                    const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"], [id*="notification"]';
-                    document.querySelectorAll(junkClasses).forEach(el => { 
-                        try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
-                    });
-
                 } catch (err) {}
-            }, 500); 
+            }, 500);
         }).catch(() => {});
 
-        // THE MAGIC: Isolating and expanding the actual <video> element.
-        if (targetFrame) {
-            await targetFrame.evaluate((muteVideo) => {
-                setInterval(() => {
-                    try {
-                        const style = document.createElement('style');
-                        style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
-                        document.head.appendChild(style);
+        await targetFrame.evaluate((muted) => {
+            setInterval(() => {
+                try {
+                    // Hide any player specific error UI
+                    const style = document.createElement('style');
+                    style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, .jw-error, .jw-error-msg, .vjs-error-display { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
+                    document.head.appendChild(style);
 
-                        const mediaElements = document.querySelectorAll('video, audio');
-                        const videos = Array.from(document.querySelectorAll('video'));
-                        let realVideo = null;
-
-                        mediaElements.forEach(media => { 
-                            media.muted = muteVideo; 
-                            media.volume = muteVideo ? 0.0 : 1.0; 
+                    const videos = Array.from(document.querySelectorAll('video'));
+                    document.querySelectorAll('video, audio').forEach(m => { m.muted = muted; m.volume = muted ? 0 : 1.0; });
+                    
+                    const realVideo = videos.find(v => v.clientWidth > 100 && v.clientHeight > 100) || videos[0];
+                    if (realVideo) {
+                        // Maximize REAL video forcefully to max z-index
+                        ['position:fixed','top:0','left:0','width:100vw','height:100vh','z-index:2147483647','object-fit:contain','opacity:1','display:block'].forEach(s => {
+                            const [k, v] = s.split(':');
+                            realVideo.style.setProperty(k, v, 'important');
                         });
+                    }
+                } catch(err) {}
+            }, 500);
+        }, startMuted).catch(() => {});
 
-                        if (!muteVideo) {
-                            document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
-                        }
-
-                        for (const v of videos) {
-                            if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; }
-                        }
-
-                        if (!realVideo && videos.length > 0) {
-                            realVideo = videos[0];
-                        }
-
-                        if (realVideo) { 
-                            realVideo.style.setProperty('position', 'fixed', 'important');
-                            realVideo.style.setProperty('top', '0px', 'important');
-                            realVideo.style.setProperty('left', '0px', 'important');
-                            realVideo.style.setProperty('width', '100vw', 'important');
-                            realVideo.style.setProperty('height', '100vh', 'important');
-                            realVideo.style.setProperty('z-index', '2147483646', 'important'); 
-                            realVideo.style.setProperty('background-color', 'black', 'important');
-                            realVideo.style.setProperty('object-fit', 'contain', 'important');
-                            realVideo.style.setProperty('opacity', '1', 'important');
-                            realVideo.style.setProperty('visibility', 'visible', 'important');
-                            realVideo.style.setProperty('display', 'block', 'important');
-                        }
-                    } catch(err) {}
-                }, 500); 
-            }, startMuted).catch(() => {});
-        }
-
-    } catch (e) { }
+    } catch (e) {}
 
     await triggerSmartUnmute(page);
     await new Promise(r => setTimeout(r, 1000));
 }
 
 // =========================================================================================
-// 🔄 WATCHDOG: Re-added to handle manifestError via reload
+// 🔄 WATCHDOG
 // =========================================================================================
 async function checkPageStatus(page) {
     if (!page) return { status: 'DEAD' };
@@ -498,36 +329,18 @@ async function checkPageStatus(page) {
                 if (frame.isDetached()) continue;
                 const result = await Promise.race([
                     frame.evaluate(() => {
-                        const bodyText = document.body ? document.body.innerText.toLowerCase() : "";
-                        
-                        // Detecting manifest load error
-                        if (
-                            bodyText.includes("stream error") || 
-                            bodyText.includes("manifestloaderror") || 
-                            bodyText.includes("not found") || 
-                            bodyText.includes("domain is blocked") ||
-                            bodyText.includes("error: forbidden") ||
-                            (bodyText.includes("cloudflare") && bodyText.includes("blocked"))
-                        ) {
-                            return { status: 'CRITICAL_ERROR' };
-                        }
-                        
                         const videos = Array.from(document.querySelectorAll('video'));
-                        let targetV = null;
-
-                        for (const v of videos) {
-                            if (v.clientWidth > 0 && v.clientWidth < 100) continue;
-                            if ((v.src && v.src.startsWith('blob:')) || v.matches('.jw-video, .plyr__video, .vjs-tech')) {
-                                targetV = v; break;
-                            }
-                        }
-                        
-                        if (!targetV && videos.length > 0) {
-                            targetV = videos.sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
-                        }
+                        let targetV = videos.find(v => (v.src && v.src.startsWith('blob:')) || v.matches('.jw-video,.plyr__video,.vjs-tech')) || videos[0];
                         
                         if (targetV && !targetV.ended && targetV.currentTime > 0) {
-                            return { status: 'HEALTHY', currentTime: targetV.currentTime };
+                            let frames = 0;
+                            if (targetV.getVideoPlaybackQuality) frames = targetV.getVideoPlaybackQuality().totalVideoFrames;
+                            return { status: 'HEALTHY', currentTime: targetV.currentTime, decodedFrames: frames };
+                        }
+                        
+                        const bodyText = document.body ? document.body.innerText.toLowerCase() : '';
+                        if (bodyText.includes('stream error') || bodyText.includes('error: forbidden')) {
+                            return { status: 'CRITICAL_ERROR' };
                         }
                         return { status: 'DEAD' };
                     }),
@@ -540,48 +353,69 @@ async function checkPageStatus(page) {
     return { status: 'DEAD' };
 }
 
-async function startSingleTabWatchdog() {
-    let watchdogTicks = 0;
-    
-    while (true) {
-        if (!browser || !browser.isConnected()) throw new Error("Browser closed.");
+async function performHotSwap(reason) {
+    console.log(`\n[🔄] TRIGGERING RECOVERY/SWAP -> Reason: ${reason}`);
+    try {
+        await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await new Promise(r => setTimeout(r, 3000));
+        await initializeVideo(activePage, false, true);
+        console.log(`[✅] Recovery successful!`);
+    } catch (err) { console.log(`[⚠️] Swap error: ${err.message}`); }
+}
 
+async function startWatchdog() {
+    let lastActiveTime = -1, lastDecodedFrames = -1, frozenCheckTimestamp = Date.now();
+    let watchdogTicks = 0, isWarmupPhase = true, currentStreamStartTime = Date.now();
+
+    while (true) {
+        if (!browser || !browser.isConnected()) throw new Error('Browser closed.');
         let activeStatus = await checkPageStatus(activePage);
 
-        watchdogTicks++;
-        if (watchdogTicks === 1 || watchdogTicks % 9 === 0) {
-            console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Single-Tab Monitoring`);
-        }
-
-        // If manifest error occurs, perform a fresh reload on the same tab
-        if (activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'FROZEN') {
-            console.log(`\n==================================================`);
-            console.log(`[!] ❌ WATCHDOG DETECTED ISSUE: ${activeStatus.status}. Manifest Error possible.`);
-            console.log(`[🔄] Auto-Reloading the page to acquire fresh M3U8 token...`);
-            console.log(`==================================================`);
-            
-            try {
-                await activePage.goto('about:blank').catch(()=>{});
-                await applyPreloadFirewall(activePage);
-                await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
-                await initializeVideo(activePage, false, true);
-            } catch(e) {
-                console.log(`[⏳] Refresh handled safely.`);
+        if (activeStatus.status === 'HEALTHY' && !isWarmupPhase) {
+            if ((Date.now() - currentStreamStartTime) > FORCE_REFRESH_MS) {
+                activeStatus.status = 'FORCE_REFRESH';
             }
         }
 
-        await new Promise(r => setTimeout(r, 10000)); 
+        if (activeStatus.status === 'HEALTHY') {
+            isWarmupPhase = false;
+            await triggerSmartUnmute(activePage);
+
+            if ((activeStatus.currentTime === lastActiveTime) || (activeStatus.decodedFrames === lastDecodedFrames && activeStatus.decodedFrames > 0)) {
+                if (Date.now() - frozenCheckTimestamp > FROZEN_THRESHOLD_REAL_MS) {
+                    activeStatus.status = 'FROZEN';
+                }
+            } else {
+                lastActiveTime = activeStatus.currentTime;
+                lastDecodedFrames = activeStatus.decodedFrames;
+                frozenCheckTimestamp = Date.now();
+            }
+        }
+
+        watchdogTicks++;
+        if (watchdogTicks % 90 === 0) {
+            console.log(`[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
+        }
+
+        if (['FROZEN', 'CRITICAL_ERROR', 'DEAD', 'FORCE_REFRESH'].includes(activeStatus.status)) {
+            if (isWarmupPhase && (Date.now() - currentStreamStartTime < 15000)) {
+                await new Promise(r => setTimeout(r, 2000)); continue;
+            }
+            await performHotSwap(activeStatus.status);
+            lastActiveTime = -1; frozenCheckTimestamp = Date.now(); currentStreamStartTime = Date.now();
+        }
+
+        await new Promise(r => setTimeout(r, 2000));
     }
 }
 
 // =========================================================================================
-// 🎬 ENGINE INITIALIZATION
+// 🚀 MAIN
 // =========================================================================================
-async function startDirectStreaming() {
+async function main() {
     console.log(`\n[🚀] SMART STREAM ENGINE STARTING...`);
     setupOBSConfig();
 
-    // 🔥 THE FIX: Kill any leftover OBS processes that might be holding the screen
     try { execSync('pkill -9 obs || true', { stdio: 'ignore' }); } catch(e) {}
 
     obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray'], { detached: true, stdio: 'ignore' });
@@ -589,94 +423,74 @@ async function startDirectStreaming() {
     console.log('[*] Waiting 10 seconds for OBS to fully settle in the background...');
     await new Promise(r => setTimeout(r, 10000));
 
-    
-
-    let isObsConnected = false;
     try {
         await obs.connect('ws://127.0.0.1:4455', 'secret');
-        isObsConnected = true;
         console.log('[+] OBS WebSocket Connected Successfully!');
-    } catch (e) {}
+    } catch (e) {
+        console.log('[⚠️] OBS WS Connection failed, running standalone.');
+    }
 
-    // ALL ORIGINAL BROWSER FLAGS RESTORED
+    // 🔥 KIOSK MODE: Forces Chrome to cover 100% of the screen, hiding OBS entirely!
     let browserArgs = [
-        '--no-sandbox', 
-        '--disable-setuid-sandbox',
-        `--window-size=${RES_W},${RES_H}`, 
-        '--window-position=0,0', 
-        '--kiosk', 
-        '--start-fullscreen',
-        '--autoplay-policy=no-user-gesture-required',
-        '--disable-dev-shm-usage', 
-        '--ignore-certificate-errors',
-        '--disable-web-security',
-        '--ignore-gpu-blocklist', 
-        '--use-gl=egl',
-        '--disable-accelerated-video-decode', 
-        '--disable-accelerated-video-encode',
-        '--disable-smooth-scrolling',
-        '--disable-features=Translate,BlinkGenPropertyTrees,CalculateNativeWinOcclusion',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
-        // REMOVED ublock-lite flag. ublock-lite blocks the scripts that fetch m3u8.
+        '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+        '--disable-blink-features=AutomationControlled',
+        '--autoplay-policy=no-user-gesture-required', '--no-first-run',
+        '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows',
+        `--window-size=${RES_W},${RES_H}`, '--window-position=0,0',
+        '--kiosk', // <--- THE MAGIC BULLET
+        '--disable-web-security', '--ignore-certificate-errors'
     ];
 
     if (PROXY_ENGINE.includes('Cloudflare')) {
         browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
-        console.log(`[*] Starting browser with [CLOUDFLARE WARP] Proxy...`);
     }
 
     browser = await puppeteer.launch({
-        headless: false, 
+        headless: false,
         defaultViewport: { width: RES_W, height: RES_H },
-        ignoreDefaultArgs: ['--enable-automation'], 
+        ignoreDefaultArgs: ['--enable-automation'],
         args: browserArgs
     });
 
-    // POPUP KILLER
+    // 🛡️ POPUP KILLER
     browser.on('targetcreated', async (target) => {
         if (target.type() === 'page') {
-            const newPage = await target.page();
-            setTimeout(async () => {
+            try {
+                const newPage = await target.page();
                 if (newPage && newPage !== activePage) {
-                    console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
-                    try { await newPage.close(); } catch(e) {}
+                    await newPage.close().catch(() => {});
                 }
-            }, 500);
+            } catch (e) {}
         }
     });
 
     const pages = await browser.pages();
-    activePage = pages[0]; 
-    
+    activePage = pages[0];
+
+    await applyPreloadFirewall(activePage);
     await setupNetworkAdBlocker(activePage);
     attachAntiAdListeners(activePage);
-    await applyPreloadFirewall(activePage);
+    setupNetworkDiagnostics(activePage, 'Active');
 
-    await activePage.bringToFront(); 
+    const activeUrl = urlList[currentUrlIndex];
+    console.log(`[*] Loading URL: ${activeUrl}`);
 
-    console.log(`[*] Loading URL: ${urlList[currentUrlIndex]}`);
-    await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
-    
-    // Simulate user interaction to bypass basic bot checks
-    try { await activePage.mouse.click(10, 10); console.log('[🖱️] Simulated physical click'); } catch(e){}
+    try { await activePage.goto(activeUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }); } catch (e) {}
 
-    await initializeVideo(activePage, false, true); 
+    try { await activePage.mouse.click(10, 10); } catch(e) {}
 
-    if (isObsConnected) {
-        console.log('\n[*] Active Video is Ready! Shifting OBS to LIVE Video (MainScene)...');
-        try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
-    }
+    await initializeVideo(activePage, false, true);
 
-    console.log(`\n==================================================`);
-    console.log(`[🎥] STREAM IS LIVE ON SINGLE TAB`);
-    console.log(`==================================================\n`);
-
-    await startSingleTabWatchdog();
+    console.log(`\n[🟢] ALL SET! STREAM IS LIVE ON FULLSCREEN TABS\n`);
+    await startWatchdog();
 }
 
-startDirectStreaming();
+main().catch(async (err) => {
+    console.error(`\n[💥] FATAL ERROR: ${err.message}`);
+    try { if (browser) await browser.close(); } catch(e) {}
+    try { if (obsProcess) obsProcess.kill(); } catch(e) {}
+    setTimeout(() => main(), 10000);
+});
 
 
 
