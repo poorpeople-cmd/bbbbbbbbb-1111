@@ -48,7 +48,6 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Naya Tariqa: Pura JavaScript code file mein likha ja raha hai taakay Quotes ka error na aye
           cat << 'EOF' > super_manager.js
           const fs = require('fs');
           const { execSync } = require('child_process');
@@ -58,7 +57,10 @@ jobs:
           const startMs = Date.now();
           const currentRunId = process.env.GITHUB_RUN_ID;
           const stopTimeInput = (process.env.STOP_TIME || '3:00 AM').trim();
-          const deleteKachra = (process.env.DELETE_KACHRA || 'Yes').trim().toLowerCase() === 'yes';
+          
+          // Tabdeeli: Ab default hamesha 'Yes' rahega jab tak ke strictly 'No' na kaha jaye
+          const rawDeleteInput = (process.env.DELETE_KACHRA || 'Yes').trim().toLowerCase();
+          const deleteKachra = rawDeleteInput !== 'no'; 
 
           function getPktTime(offsetMs = 0) {
             return new Date(Date.now() + offsetMs).toLocaleString('en-US', { 
@@ -330,7 +332,6 @@ jobs:
           EOF
           
           node super_manager.js
-
 
 
 
