@@ -171,6 +171,7 @@ async function applyPreloadFirewall(page) {
     }
 }
 
+
 function setupOBSConfig() {
     const obsDir = path.join(os.homedir(), '.config', 'obs-studio');
     const profilesDir = path.join(obsDir, 'basic', 'profiles', 'Untitled');
@@ -179,8 +180,21 @@ function setupOBSConfig() {
     fs.mkdirSync(profilesDir, { recursive: true });
     fs.mkdirSync(scenesDir, { recursive: true });
 
-    // const globalIniContent = `[General]\nLicenseAccepted=true\n[BasicWindow]\nShowAutoConfig=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
-    const globalIniContent = `[General]\nLicenseAccepted=true\nHasShownAutoConfig=true\n[BasicWindow]\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
+    // 🔥 2026 FIX: Added HasShownAutoConfig=true and FirstRun=false to completely kill the wizard at the config level
+    const globalIniContent = `[General]
+LicenseAccepted=true
+HasShownAutoConfig=true
+FirstRun=false
+
+[BasicWindow]
+ShowAutoConfig=false
+Warned=true
+
+[OBSWebSocket]
+ServerEnabled=true
+ServerPort=4455
+ServerPassword=secret
+`;
     fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIniContent);
     
     const basicIniContent = `[General]
@@ -581,11 +595,22 @@ async function startSingleTabWatchdog() {
 // =========================================================================================
 // 🎬 ENGINE INITIALIZATION
 // =========================================================================================
+// =========================================================================================
+// 🎬 ENGINE INITIALIZATION
+// =========================================================================================
 async function startDirectStreaming() {
     console.log(`[*] Starting OBS Studio FIRST...`);
     setupOBSConfig();
 
-    obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray']);
+    // 🔥 2026 FIX: Added aggressive CLI arguments to block any updaters, crash dialogs, or missing file checks
+    obsProcess = spawn('obs', [
+        '--startstreaming', 
+        '--minimize-to-tray',
+        '--disable-updater',
+        '--disable-missing-files-check',
+        '--multi',
+        '--safemode' 
+    ]);
     
     console.log('[*] Waiting for OBS to initialize before launching browser...');
     await new Promise(r => setTimeout(r, 6000));
