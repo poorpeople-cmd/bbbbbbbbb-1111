@@ -1,5 +1,5 @@
 
-name: Always-On Stream Manager (All-In-One Control)
+name: 24/7 Master Stream Scheduler
 
 on:
   workflow_dispatch:
