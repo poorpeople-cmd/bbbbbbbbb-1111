@@ -1,3 +1,43 @@
+
+
+
+# Aap ne jo code aur image_e816db.png share ki hai, usay dekh kar in dono (stream-manager.yml aur main.yml) ka maqsad aur aapas ka talluq bilkul wazeh (clear) ho jata hai.
+
+# Asaan alfaz mein: stream-manager.yml ek "Master (Manager)" hai, aur main.yml uska "Worker (Mazdoor)" hai.
+
+# Yahan in dono ka completely alag maqsad hai aur yeh dono mil kar aapki 24/7 streaming automation banate hain:
+
+# 1. stream-manager.yml Ka Asal Maqsad (The Controller)
+# Yeh script khud koi video, OBS, ya stream nahi chalati. Iska kaam sirf "Management" aur "Monitoring" hai. Iske bunyadi maqasid yeh hain:
+
+# 24/7 Nigrani (Loop): Yeh script lagatar chalti rehti hai. Har 5 minute baad yeh check karti hai ke kya koi naya kaam karna hai. GitHub Actions ki 6 ghante ki limit hoti hai, is liye yeh 5 ghante 50 minute baad khud ko dobara trigger kar leti hai (gh workflow run stream-manager.yml) taake system kabhi band na ho.
+
+# Auto-Scheduling (streams.csv): Yeh file aapke streams.csv ko parhti hai. Jab kisi match ya stream ka waqt (Time) qareeb aata hai, toh yeh script automatically main.yml ko parameters (URL, Channel, Quality) bhej kar start kar deti hai.
+
+# Auto-Cancellation (cancel.csv): Agar kisi stream ka waqt khatam ho gaya hai, toh yeh manager active main.yml workflows ko dhoond kar unhein gh run cancel command ke zariye kill/band kar deta hai.
+
+# Kachra Safai (Storage Management): GitHub par purane workflows ka kachra jama na ho jaye, is liye yeh purane completed workflows ko delete karta rehta hai.
+
+# 2. main.yml Ke Sath Iska Talluq (The Relationship)
+# Aapke stream-manager.yml ke code mein yeh line sab se ahem hai:
+
+# JavaScript
+# const cmd = `gh workflow run main.yml -f target_urls="${formattedUrls}" -f okru_stream_channel="${channel}" -f stream_quality="${quality}" -f server_selection="${server}" -f custom_duration="${duration}"`;
+# execSync(cmd, { stdio: 'inherit' });
+# Talluq yeh hai:
+
+# Manager Command Deta Hai: stream-manager.yml waqt par nazar rakhta hai. Jaise hi stream ka waqt hota hai, woh oopar di gayi command chala kar main.yml ko jagata hai aur batata hai ke "Yeh lo URL aur yeh lo Channel ID, jaldi se OBS start karo."
+
+# Main Workflow Kaam Karta Hai: main.yml (jo aap ne pehle share kiya tha jismein Node.js, Xvfb, Pulseaudio, Cloudflare WARP install ho rahe thay) asal mein woh script hai jo video ko capture karke stream karti hai.
+
+# Mukhtasir Khulasa (Summary):
+# Agar stream-manager.yml nahi hoga, toh aapko har stream khud apne hathon se (manually) button daba kar start aur stop karni parhegi. stream-manager.yml aapka ek virtual assistant hai jo din raat jaag kar aapke schedule (CSV files) ke mutabiq main.yml ko khud chalata aur band karta hai.
+
+
+
+
+
+
 name: Always-On Stream Manager (All-In-One Control)
 
 on:
