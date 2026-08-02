@@ -527,6 +527,18 @@ async function triggerSmartUnmute(page) {
             if (frame.isDetached()) continue;
 
             await frame.evaluate(() => {
+                let isMuted = false;
+                document.querySelectorAll('video, audio').forEach(media => {
+                    // Check if actually muted
+                    if (media.muted || media.volume < 0.1) isMuted = true;
+                    // Force properties anyway
+                    media.muted = false;
+                    media.volume = 1.0;
+                });
+
+                // 🛑 AGAR AWAZ PEHLE SE KHULI HAI, TO KOI BUTTON CLICK MAT KARO! (Yeh Toggle rok dega)
+                if (!isMuted) return;
+
                 // 1. Scan all interactive elements
                 const potentialElements = Array.from(document.querySelectorAll('button, div, span, a, i'));
                 
@@ -535,7 +547,6 @@ async function triggerSmartUnmute(page) {
                     const onClickStr = (el.getAttribute('onclick') || '').toLowerCase();
                     const ariaLabel = (el.getAttribute('aria-label') || '').toUpperCase();
                     
-                    // Fuzzy match checking
                     const matchesText = text.includes('UNMUTE') || text.includes('MUTE ME') || text.includes('STREAM UNMUTE') || text.includes('AUDIO');
                     const matchesJS = onClickStr.includes('unmute') || onClickStr.includes('volume') || onClickStr.includes('audio');
                     const matchesAria = ariaLabel.includes('UNMUTE') || ariaLabel.includes('VOLUME');
@@ -545,18 +556,9 @@ async function triggerSmartUnmute(page) {
                         const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none';
 
                         if (isVisible) {
-                            console.log(`[🔊 ENGINE]: Dynamically triggered click on element with text: "${text || 'JS Action'}"`);
                             try { el.click(); } catch(e) {}
                             try { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e) {}
                         }
-                    }
-                });
-
-                // 2. Bruteforce Browser Native Media Layer
-                document.querySelectorAll('video, audio').forEach(media => {
-                    if (media.muted) {
-                        media.muted = false;
-                        media.volume = 1.0;
                     }
                 });
             }).catch(() => {});
@@ -793,7 +795,11 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     });
 
                     if (!muteVideo) {
-                        document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
+                        let actualMuted = false;
+                        document.querySelectorAll('video, audio').forEach(m => { if(m.muted || m.volume < 0.1) actualMuted = true; });
+                        if (actualMuted) {
+                            document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
+                        }
                     }
 
                     for (const v of videos) {
@@ -1004,8 +1010,15 @@ async function startWatchdog() {
                     try {
                         if (!frame.isDetached()) {
                             frame.evaluate(() => { 
-                                document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
-                                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
+                                let isMuted = false;
+                                document.querySelectorAll('video, audio').forEach(m => { 
+                                    if(m.muted || m.volume < 0.1) isMuted = true;
+                                    m.muted = false; 
+                                    m.volume = 1.0; 
+                                }); 
+                                if (isMuted) {
+                                    document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
+                                }
                             }).catch(()=>{});
                         }
                     } catch(e) {}
