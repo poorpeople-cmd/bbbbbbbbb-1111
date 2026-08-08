@@ -162,6 +162,9 @@ async function createBrowserInstance(browserArgs) {
 // =========================================================================================
 // 🛡️ ADVANCED NETWORK INTELLIGENCE & NAVIGATION SHIELD (UPDATED WITH SNIFFER)
 // =========================================================================================
+// =========================================================================================
+// 🛡️ ADVANCED NETWORK INTELLIGENCE & NAVIGATION SHIELD (AUTO-RETRY SNIFFER)
+// =========================================================================================
 async function setupNetworkAdBlocker(page) {
     if (!page) return;
     try {
@@ -171,47 +174,48 @@ async function setupNetworkAdBlocker(page) {
             const type = request.resourceType();
 
             // ===================================================================
-            // 🎯 NEW FEATURE: M3U8 NETWORK SNIFFER & COMMAND EXECUTOR
+            // 🎯 NEW FEATURE: AUTO-TESTING M3U8 LOOP (BAR BAR TRY KAREGA)
             // ===================================================================
             if (url.includes('.m3u8') && !url.includes('ad-delivery')) {
-                // Taake baar baar same link print na ho, hum isay ek dafa flag kar denge
-                if (!page._m3u8Logged) {
-                    page._m3u8Logged = true; 
-                    const headers = request.headers();
-                    const realUrl = request.url(); // Original Case URL
+                // Agar pehle se koi command chal rahi hai, toh naye link ko ignore karo
+                if (!page._isTestingM3u8) {
+                    page._isTestingM3u8 = true; // Lock laga diya taake ek waqt mein ek test ho
                     
+                    const headers = request.headers();
+                    const realUrl = request.url(); 
                     const referer = headers['referer'] || 'N/A';
                     const origin = headers['origin'] || 'N/A';
                     const userAgent = headers['user-agent'] || 'N/A';
-                    const cookie = headers['cookie'] || '';
 
                     console.log('\n==================================================');
-                    console.log(`[🎯] BINGO! LIVE NETWORK STREAM INTERCEPTED!`);
-                    console.log(`==================================================`);
-                    console.log(`[🔗] M3U8 URL : ${realUrl.substring(0, 80)}...`);
-                    console.log(`[🕵️] Referer  : ${referer}`);
-                    console.log(`[🌍] Origin   : ${origin}`);
-                    console.log(`[🤖] User-Agent: ${userAgent}`);
-                    if (cookie) console.log(`[🍪] Cookie   : (Captured Successfully)`);
+                    console.log(`[🎯] NEW M3U8 CATCH KIYA! TESTING SHURU...`);
+                    console.log(`[🔗] URL : ${realUrl.substring(0, 70)}...`);
                     
-                    // 💻 STREAMLINK COMMAND GENERATOR
+                    // 💻 STREAMLINK COMMAND
                     const streamlinkCmd = `streamlink --http-header "Referer=${referer}" --http-header "Origin=${origin}" --http-header "User-Agent=${userAgent}" "${realUrl}" best`;
                     
-                    console.log(`\n[💻] AUTO-GENERATED COMMAND:\n${streamlinkCmd}`);
-                    console.log('==================================================\n');
-
-                    // 🚀 (OPTIONAL) AND PHER ISS COMMAND KO RUN KAR DO:
-                    // Agar aap chahte hain k Node.js khud yeh command terminal mein chala de,
-                    // toh neechay wali 3 lines ko uncomment kar dein.
-                    
-                    /*
-                    console.log(`[⚙️] BACKGROUND MEIN COMMAND RUN HO RAHI HAI...`);
-                    exec(streamlinkCmd, (error, stdout, stderr) => {
-                        if (error) { console.log(`[❌] Command Failed: ${error.message}`); return; }
-                        if (stderr) { console.log(`[⚠️] Command Output: ${stderr}`); }
-                        console.log(`[✅] Command Executed Successfully: \n${stdout}`);
+                    // Command ko background mein chalayen
+                    const childProcess = exec(streamlinkCmd, (error, stdout, stderr) => {
+                        // Jab process fail ho jaye ya 403 error ki wajah se band ho jaye
+                        if (error) {
+                            console.log(`[❌] COMMAND FAILED YA LINK EXPIRE HO GAYA!`);
+                            console.log(`[🔄] Lock hata raha hoon. Bot background se NAYA M3U8 pakar kar dobara try karega...`);
+                            
+                            // 👇 YAHAN LOCK HATA DIYA: Taake agla m3u8 pakar kar try ho!
+                            page._isTestingM3u8 = false; 
+                        }
                     });
-                    */
+
+                    // Live logs read karne ke liye
+                    childProcess.stderr.on('data', (data) => {
+                        const msg = data.toString().toLowerCase();
+                        
+                        if (msg.includes('403') || msg.includes('error') || msg.includes('forbidden') || msg.includes('failed')) {
+                            console.log(`[⚠️] Error Aya: ${data.toString().trim()}`);
+                        } else if (msg.includes('found matching plugin') || msg.includes('opening stream')) {
+                            console.log(`[✅] SUCCESS! Link sahey hai aur streamlink ne feed pakar li hai!`);
+                        }
+                    });
                 }
             }
             // ===================================================================
