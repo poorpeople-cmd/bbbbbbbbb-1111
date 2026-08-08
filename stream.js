@@ -779,12 +779,20 @@ async function initializeVideo(page, startMuted, isActivePage) {
         }).catch(() => {});
 
         await targetFrame.evaluate((muteVideo) => {
-            setInterval(() => {
+            // 👇 FIX: Purane kisi bhi interval ko kill karo taake overlap na ho!
+            if (window.audioEnforcerInterval) {
+                clearInterval(window.audioEnforcerInterval);
+            }
+
+            // Naye interval ko variable mein save karo
+            window.audioEnforcerInterval = setInterval(() => {
                 try {
                     const style = document.createElement('style');
-                    // style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
-                    style.innerHTML = `.jw-controls, .jw-ui, .jw-preview, .jw-overlays, .jw-poster, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; }`;
-                    document.head.appendChild(style);
+                    style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
+                    if (!document.head.querySelector('style[data-ui-hide]')) {
+                        style.setAttribute('data-ui-hide', 'true');
+                        document.head.appendChild(style);
+                    }
 
                     const mediaElements = document.querySelectorAll('video, audio');
                     const videos = Array.from(document.querySelectorAll('video'));
@@ -799,6 +807,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         let actualMuted = false;
                         document.querySelectorAll('video, audio').forEach(m => { if(m.muted || m.volume < 0.1) actualMuted = true; });
                         if (actualMuted) {
+                            // Clicks sirf tab karein jab zaroorat ho, bar bar spam na karein
                             document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
                         }
                     }
@@ -1017,9 +1026,9 @@ async function startWatchdog() {
                                     m.muted = false; 
                                     m.volume = 1.0; 
                                 }); 
-                                if (isMuted) {
-                                    document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
-                                }
+                                // if (isMuted) {
+                                //     document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
+                                // }
                             }).catch(()=>{});
                         }
                     } catch(e) {}
@@ -1238,7 +1247,6 @@ async function startDirectStreaming() {
         } catch(e){}
     }
 
-
     let browserArgs = [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
@@ -1252,7 +1260,8 @@ async function startDirectStreaming() {
         '--disable-web-security',
         '--ignore-gpu-blocklist', 
         '--use-gl=egl',
-        // YAHAN SE DISABLE ACCELERATION WALI LINES HATA DI GAYI HAIN
+        '--disable-accelerated-video-decode', 
+        '--disable-accelerated-video-encode',
         '--disable-smooth-scrolling',
         '--disable-features=Translate,BlinkGenPropertyTrees,CalculateNativeWinOcclusion',
         '--disable-background-timer-throttling',
@@ -1424,6 +1433,7 @@ if (exactDurationMs) {
 }
 
 mainLoop();
+
 
 
 
