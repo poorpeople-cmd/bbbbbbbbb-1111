@@ -1,6 +1,6 @@
-name: M3U8 Link Tester (Cloudflare WARP)
+name: FFmpeg M3U8 Stream Capture (WARP Proxy)
 
-run-name: "Testing M3U8 - ${{ github.actor }}"
+run-name: "FFmpeg Capture - ${{ github.actor }}"
 
 on:
   workflow_dispatch:
@@ -15,17 +15,19 @@ permissions:
   actions: write 
 
 jobs:
-  test-m3u8:
+  ffmpeg-capture:
     runs-on: ubuntu-latest
     timeout-minutes: 10 
 
     steps:
       - name: Get Code
         uses: actions/checkout@v3
-
-      # 🔥 Cloudflare WARP Setup (From Previous Code)
-      - name: Install & Connect Cloudflare WARP
+        
+      - name: Install FFmpeg & Cloudflare WARP
         run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
           sudo apt-get update && sudo apt-get install -y cloudflare-warp
@@ -37,23 +39,24 @@ jobs:
           sleep 5
           echo "[+] Cloudflare WARP Proxy Shield is UP on Port 40000"
 
-      - name: Fetch & Analyze M3U8 Data (via WARP Proxy)
+      - name: Fetch Stream using FFmpeg
         run: |
-          echo "========================================" > debug_info.txt
-          echo "M3U8 TESTING PIPELINE (WARP PROXY)" >> debug_info.txt
-          echo "========================================" >> debug_info.txt
-          echo "Provided URL: ${{ github.event.inputs.m3u8_url }}" >> debug_info.txt
-          echo "Time: $(date)" >> debug_info.txt
-          echo -e "\n[*] Fetching network response via Cloudflare WARP...\n" >> debug_info.txt
+          echo "========================================" > ffmpeg_logs.txt
+          echo "FFMPEG M3U8 STREAM CAPTURE" >> ffmpeg_logs.txt
+          echo "========================================" >> ffmpeg_logs.txt
+          echo "Provided URL: ${{ github.event.inputs.m3u8_url }}" >> ffmpeg_logs.txt
+          echo "Time: $(date)" >> ffmpeg_logs.txt
+          echo -e "\n[*] Starting FFmpeg capture (15 seconds)...\n" >> ffmpeg_logs.txt
           
-          # [FIXED]: Added -x socks5h://127.0.0.1:40000 to route through Cloudflare WARP
-          curl -s -v -x socks5h://127.0.0.1:40000 \
-            -H "Referer: https://hamis.romponalis.st/" \
-            -H "Origin: https://hamis.romponalis.st" \
-            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36" \
-            "${{ github.event.inputs.m3u8_url }}" -o fetched_stream.m3u8 >> debug_info.txt 2>&1
+          # FFmpeg command with SOCKS5 proxy and strict headers
+          # Note: FFmpeg requires \r\n to separate multiple headers
+          ffmpeg -v debug \
+            -http_proxy socks5://127.0.0.1:40000 \
+            -headers "Referer: https://hamis.romponalis.st/"$'\r\n'"Origin: https://hamis.romponalis.st"$'\r\n'"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36" \
+            -i "${{ github.event.inputs.m3u8_url }}" \
+            -c copy -t 15 captured_stream.ts >> ffmpeg_logs.txt 2>&1 || true
           
-          echo "[+] Fetch execution completed."
+          echo "[+] FFmpeg execution completed."
 
       - name: Upload Results to GitHub Release
         if: always()
@@ -61,19 +64,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "[*] Preparing to upload data to GitHub Release..."
-          gh release view m3u8-test-logs || gh release create m3u8-test-logs -t "M3U8 Test Logs" -n "Downloaded data and network logs for m3u8 link testing."
-          gh release upload m3u8-test-logs debug_info.txt --clobber
+          gh release view ffmpeg-test-logs || gh release create ffmpeg-test-logs -t "FFmpeg Test Logs" -n "Downloaded data and network logs for FFmpeg stream testing."
+          gh release upload ffmpeg-test-logs ffmpeg_logs.txt --clobber
           
-          if [ -s fetched_stream.m3u8 ]; then
-            echo "[*] Playlist file found. Uploading..."
-            gh release upload m3u8-test-logs fetched_stream.m3u8 --clobber
+          if [ -s captured_stream.ts ]; then
+            echo "[*] Video file successfully captured. Uploading..."
+            gh release upload ffmpeg-test-logs captured_stream.ts --clobber
           else
-            echo "[!] Playlist file is empty or failed to download."
+            echo "[!] Video file is empty. Stream was blocked or failed to download."
           fi
-          
-          echo "[+] Upload process finished successfully!"
-
-
 
 
 
