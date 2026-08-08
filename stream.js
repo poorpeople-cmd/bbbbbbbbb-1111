@@ -1179,7 +1179,7 @@ backupBrowserName = brokenName;
                 try {
                     await backupPage.goto('about:blank').catch(()=>{});
                     await applyPreloadFirewall(backupPage);
-                    backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                    await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
 
                     // 👇 YEH NAYI LINE ADD KAREIN: Naye Active tab ka focus secure karein
                     if (activePage) await activePage.bringToFront().catch(()=>{});
