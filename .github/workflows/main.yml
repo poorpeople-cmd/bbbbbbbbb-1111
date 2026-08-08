@@ -32,8 +32,12 @@ jobs:
           echo "Time: $(date)" >> debug_info.txt
           echo -e "\n[*] Fetching network response...\n" >> debug_info.txt
           
-          # curl use kar ke m3u8 file download kar rahe hain aur network logs save kar rahe hain
-          curl -s -v "${{ github.event.inputs.m3u8_url }}" -o fetched_stream.m3u8 >> debug_info.txt 2>&1
+          # [FIXED]: Added strict headers to bypass 403 Forbidden blocks
+          curl -s -v \
+            -H "Referer: https://hamis.romponalis.st/" \
+            -H "Origin: https://hamis.romponalis.st" \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36" \
+            "${{ github.event.inputs.m3u8_url }}" -o fetched_stream.m3u8 >> debug_info.txt 2>&1
           
           echo "[+] Fetch execution completed."
 
