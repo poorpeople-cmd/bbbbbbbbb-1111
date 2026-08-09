@@ -16980,6 +16980,10 @@ async function startWatchdog() {
 
 // =====================================
 
+
+
+// ======================================
+
 // --------------------------------------------------------------------
             // ⚡ SCENARIO A: INSTANT SEAMLESS HOT-SWAP (BACKUP IS ALREADY HEALTHY)
             // --------------------------------------------------------------------
@@ -17016,45 +17020,140 @@ async function startWatchdog() {
                 backupUrlIndex = getSafeBackupIndex(currentUrlIndex, previousActiveIndex, urlList);
                 backupUrlStr = urlList[backupUrlIndex].url;
 
+                // 4. 🛠️ INSTANT AUDIO FIX: Background tab mute tha, isko foran unmute karein swap hotay hi!
+                for (const frame of activePage.frames()) {
+                    try {
+                        if (!frame.isDetached()) {
+                            await frame.evaluate(() => { 
+                                window.isStreamMuted = false;
+                                document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
+                                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
+                            });
+                        }
+                    } catch(e) {}
+                }
+
+                // 5. State Reset (Keep isWarmupPhase FALSE because stream is already healthy)
                 lastActiveTime = -1; 
                 lastDecodedFrames = -1;
                 frozenCheckTimestamp = Date.now();
                 isRecoveryUIShown = false; 
 
-                // streamSetupTime = Date.now(); 
-                // currentStreamStartTime = Date.now();
-                // isWarmupPhase = false; // Video pehle se ready hai
                 streamSetupTime = Date.now(); 
                 currentStreamStartTime = Date.now();
-                isWarmupPhase = true; // IMPORTANT: Hot-swap k doran lag/timeout se bachne k liye grace period
+                isWarmupPhase = false; 
                 
-                // 🚀 FIX: Lock background watchdog immediately BEFORE async rebuilding
-                // Yeh single line us double-execution bug ko hamesha ke liye rok degi!
-                backupWarmupTime = Date.now(); 
+                // Extra buffer time for background checks to avoid conflicts
+                backupWarmupTime = Date.now() + 5000; 
 
-                // 4. SMOOTH UI REMOVAL: Background stream is already full-screened by CSS. 
-                // We just wait 1.5 seconds for the foreground render paint to stabilize before removing overlay.
+                // 6. SMOOTH UI REMOVAL: Wait 1.5s for render paint to stabilize
                 await new Promise(r => setTimeout(r, 1500));
                 try { await hideLoadingUI(activePage); } catch(e) {}
 
                 console.log(`[📺] NEW ACTIVE STREAM : Server [${currentUrlIndex}] -> ${activeUrlStr}`);
-                console.log(`[🔊] LIVE AUDIO STATUS : ON (Seamlessly Promoted)`);
+                console.log(`[🔊] LIVE AUDIO STATUS : ON (Seamlessly Promoted & Unmuted)`);
                 console.log(`--------------------------------------------------`);
                 console.log(`[🛡️] NEXT BACKUP QUEUE : Server [${backupUrlIndex}] -> ${backupUrlStr}`);
                 console.log(`==================================================\n`);
 
-                // 5. Old broken tab ko silently background mein rebuild karein (No Blocking)
-                (async () => {
+                // 7. 🛠️ CPU BOTTLENECK FIX: Heavy background rebuilding ko 3 seconds delay karein
+                // Taa k watchdog ka immediate next active check timeout na ho aur "DEAD" issue na aye.
+                setTimeout(async () => {
                     try {
+                        console.log(`[⏳] Starting background buffer rebuilding safely...`);
                         await backupPage.goto('about:blank').catch(()=>{});
                         await applyPreloadFirewall(backupPage);
                         await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
                         await initializeVideo(backupPage, true, false);
                     } catch (e) {
-                        console.log(`[⏳] Background buffer navigation handled safely.`);
+                        console.log(`[⚠️] Background buffer navigation handled safely.`);
                     }
-                })();
-            } 
+                }, 3000); 
+            }
+
+
+
+// --------------------------------------------------------------------
+            // ⚡ SCENARIO A: INSTANT SEAMLESS HOT-SWAP (BACKUP IS ALREADY HEALTHY)
+            // --------------------------------------------------------------------
+            // if (backupStatus.status === 'HEALTHY' && !isProactiveRefresh) {
+                
+            //     console.log('\n==================================================');
+            //     console.log('[⚡] BACKUP STREAM ALREADY HEALTHY');
+            //     console.log('[⚡] SHOWING TRANSITION UI & PROMOTING INSTANTLY');
+            //     console.log('==================================================');
+
+            //     // 1. Visually ek smooth "RECONNECTING" UI lagayein
+            //     await showLoadingUI(backupPage, "RECONNECTING", "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
+
+            //     // 2. Tab ko screen par layein
+            //     try { await backupPage.bringToFront(); } catch (e) {}
+
+            //     // 3. Objects swap karein (Chrome 2 ab Chrome 1 ban gaya)
+            //     let brokenPage = activePage; 
+            //     activePage = backupPage; 
+            //     backupPage = brokenPage;
+
+            //     let brokenBrowser = activeBrowser; 
+            //     activeBrowser = backupBrowser; 
+            //     backupBrowser = brokenBrowser;
+
+            //     let brokenName = activeBrowserName;
+            //     activeBrowserName = backupBrowserName;
+            //     backupBrowserName = brokenName;
+
+            //     let previousActiveIndex = currentUrlIndex;
+            //     currentUrlIndex = backupUrlIndex;
+            //     activeUrlStr = urlList[currentUrlIndex].url; 
+                
+            //     backupUrlIndex = getSafeBackupIndex(currentUrlIndex, previousActiveIndex, urlList);
+            //     backupUrlStr = urlList[backupUrlIndex].url;
+
+            //     lastActiveTime = -1; 
+            //     lastDecodedFrames = -1;
+            //     frozenCheckTimestamp = Date.now();
+            //     isRecoveryUIShown = false; 
+
+            //     // streamSetupTime = Date.now(); 
+            //     // currentStreamStartTime = Date.now();
+            //     // isWarmupPhase = false; // Video pehle se ready hai
+            //     streamSetupTime = Date.now(); 
+            //     currentStreamStartTime = Date.now();
+            //     isWarmupPhase = true; // IMPORTANT: Hot-swap k doran lag/timeout se bachne k liye grace period
+                
+            //     // 🚀 FIX: Lock background watchdog immediately BEFORE async rebuilding
+            //     // Yeh single line us double-execution bug ko hamesha ke liye rok degi!
+            //     backupWarmupTime = Date.now(); 
+
+            //     // 4. SMOOTH UI REMOVAL: Background stream is already full-screened by CSS. 
+            //     // We just wait 1.5 seconds for the foreground render paint to stabilize before removing overlay.
+            //     await new Promise(r => setTimeout(r, 1500));
+            //     try { await hideLoadingUI(activePage); } catch(e) {}
+
+            //     console.log(`[📺] NEW ACTIVE STREAM : Server [${currentUrlIndex}] -> ${activeUrlStr}`);
+            //     console.log(`[🔊] LIVE AUDIO STATUS : ON (Seamlessly Promoted)`);
+            //     console.log(`--------------------------------------------------`);
+            //     console.log(`[🛡️] NEXT BACKUP QUEUE : Server [${backupUrlIndex}] -> ${backupUrlStr}`);
+            //     console.log(`==================================================\n`);
+
+            //     // 5. Old broken tab ko silently background mein rebuild karein (No Blocking)
+            //     (async () => {
+            //         try {
+            //             await backupPage.goto('about:blank').catch(()=>{});
+            //             await applyPreloadFirewall(backupPage);
+            //             await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+            //             await initializeVideo(backupPage, true, false);
+            //         } catch (e) {
+            //             console.log(`[⏳] Background buffer navigation handled safely.`);
+            //         }
+            //     })();
+            // } 
+
+
+// ====================================
+
+
+
             // --------------------------------------------------------------------
             // 🔄 SCENARIO B: PROACTIVE REFRESH OR FORCED RECONNECTION
             // --------------------------------------------------------------------
