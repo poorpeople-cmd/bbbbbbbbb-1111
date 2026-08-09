@@ -120,20 +120,19 @@ async function extractM3U8(targetUrl) {
 // =========================================================================================
 async function startFFmpegStream(streamData) {
     return new Promise((resolve) => {
-        console.log(`\n==================================================`);
-        console.log(`[🚀] FFMPEG PASSTHROUGH ENGINE STARTED`);
-        console.log(`[⚡] Streaming with 1:1 original quality & minimal CPU!`);
-        console.log(`==================================================`);
+        console.log(`\n[🚀] FFMPEG PASSTHROUGH (Proxy Mode Active)`);
 
         const rtmpUrl = `rtmp://vsu.okcdn.ru/input/${ACTIVE_STREAM_KEY}`;
         
-        const ffmpegArgs = [
-            '-re', // Read input stream natively
+        let ffmpegArgs = [
+            '-re',
+            // Pass proxy to FFmpeg so IP matches Puppeteer token
+            '-http_proxy', 'http://127.0.0.1:40000', 
             '-user_agent', streamData.userAgent,
-            '-headers', `Referer: ${streamData.referer}\r\n`,
+            '-headers', `Referer: ${streamData.referer}\r\nOrigin: https://dlhd.pk\r\n`,
             '-i', streamData.url,
-            '-c:v', 'copy', // 🔥 The Magic: Copies the video bit-by-bit without re-encoding
-            '-c:a', 'aac',  // Transcode audio to guarantee OK.RU compatibility
+            '-c:v', 'copy',
+            '-c:a', 'aac',
             '-b:a', '128k',
             '-f', 'flv', 
             rtmpUrl
