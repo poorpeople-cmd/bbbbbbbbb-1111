@@ -2777,11 +2777,17 @@ async function checkPageStatus(page) {
 }
 
 async function startWatchdog() {
+    // 🧠 ACTIVE TAB MEMORY
     let lastActiveTime = -1;
     let lastDecodedFrames = -1; 
     let frozenCheckTimestamp = Date.now();
-    let watchdogTicks = 0;
     
+    // 🧠 BACKUP TAB MEMORY (Background Freeze Detection)
+    let lastBackupTime = -1;
+    let lastBackupDecodedFrames = -1;
+    let backupFrozenCheckTimestamp = Date.now();
+
+    let watchdogTicks = 0;
     let streamSetupTime = Date.now(); 
     let isWarmupPhase = true; 
     let backupWarmupTime = Date.now(); 
@@ -2793,13 +2799,10 @@ async function startWatchdog() {
     let currentStreamStartTime = Date.now();
     let isRecoveryUIShown = false;
     
-    // 🔐 THE REBUILD LOCK (MUTEX) - Prevents Context Destruction & Fatal Errors
+    // 🔐 THE REBUILD LOCK (MUTEX)
     let isBackupRebuilding = false; 
 
     while (true) {
-        // =====================================================================================
-        // 🛡️ NEVER THROW JUST BECAUSE ONE CHROME DISCONNECTED
-        // =====================================================================================
         const activeBrowserAlive = activeBrowser && activeBrowser.isConnected();
         const backupBrowserAlive = backupBrowser && backupBrowser.isConnected();
 
@@ -2831,6 +2834,8 @@ async function startWatchdog() {
             backupUrlStr = urlList[backupUrlIndex].url;
 
             lastActiveTime = -1; lastDecodedFrames = -1; frozenCheckTimestamp = Date.now();
+            lastBackupTime = -1; lastBackupDecodedFrames = -1; backupFrozenCheckTimestamp = Date.now(); 
+            
             streamSetupTime = Date.now(); currentStreamStartTime = Date.now();
             isWarmupPhase = true; backupWarmupTime = Date.now(); isRecoveryUIShown = false;
 
@@ -2839,13 +2844,13 @@ async function startWatchdog() {
 
             try {
                 await createFreshBackupBrowser();
-                isBackupRebuilding = true; // 🔒 LOCK ON
+                isBackupRebuilding = true; 
                 await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
                 await initializeVideo(backupPage, true, false);
             } catch (e) {
                 console.log(`[⚠️] Backup recreation failed: ${e.message}`);
             } finally {
-                isBackupRebuilding = false; // 🔓 LOCK OFF
+                isBackupRebuilding = false; 
             }
             continue;
         }
@@ -2864,15 +2869,16 @@ async function startWatchdog() {
 
                 await createFreshBackupBrowser();
                 
-                isBackupRebuilding = true; // 🔒 LOCK ON
+                isBackupRebuilding = true; 
                 await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
                 await initializeVideo(backupPage, true, false);
                 
                 backupWarmupTime = Date.now();
+                lastBackupTime = -1; lastBackupDecodedFrames = -1; backupFrozenCheckTimestamp = Date.now(); 
             } catch (e) {
                 console.log(`[⚠️] Backup recovery failed: ${e.message}`);
             } finally {
-                isBackupRebuilding = false; // 🔓 LOCK OFF
+                isBackupRebuilding = false; 
             }
         }
 
@@ -2893,25 +2899,26 @@ async function startWatchdog() {
 
                 await createFreshActiveBrowser();
                 await activePage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-                await showLoadingUI(activePage, "SEARCHING SERVER", "Finding a stable stream connection <span class='stream-blink'>...</span>");
+                await showLoadingUI(activePage, "SEARCHING SERVER", "Finding a stable stream connection...");
                 await initializeVideo(activePage, false, true);
                 await hideLoadingUI(activePage);
 
                 try {
                     await createFreshBackupBrowser();
-                    isBackupRebuilding = true; // 🔒 LOCK ON
+                    isBackupRebuilding = true; 
                     await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
                     await initializeVideo(backupPage, true, false);
                 } catch (backupError) {
                     console.log(`[⚠️] Backup failed: ${backupError.message}`);
                 } finally {
-                    isBackupRebuilding = false; // 🔓 LOCK OFF
+                    isBackupRebuilding = false; 
                 }
 
                 try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
 
                 streamSetupTime = Date.now(); currentStreamStartTime = Date.now(); backupWarmupTime = Date.now();
                 frozenCheckTimestamp = Date.now(); lastActiveTime = -1; lastDecodedFrames = -1;
+                lastBackupTime = -1; lastBackupDecodedFrames = -1; backupFrozenCheckTimestamp = Date.now();
                 isWarmupPhase = true; isRecoveryUIShown = false;
 
             } catch (e) {
@@ -2926,16 +2933,32 @@ async function startWatchdog() {
         let backupStatus = { status: 'UNKNOWN' };
 
         // =====================================================================
-        // 🛡️ HANDS-OFF BACKGROUND SHIELD & MONITORING
+        // 🛡️ HANDS-OFF BACKGROUND SHIELD & MONITORING (UPDATED WITH FREEZE DETECTION)
         // =====================================================================
         if (isBackupRebuilding) {
-            // Agar lock laga hai toh backup ko touch nahi karna
+            // Rebuilding, do nothing
         } else {
             if (!isWarmupPhase && (Date.now() - backupWarmupTime > 30000)) { 
                 backupStatus = await checkPageStatus(backupPage);
                 
+                // 🚀 THE FIX: Background Tab Freeze Detection
+                if (backupStatus.status === 'HEALTHY') {
+                    let isBackupTimeStuck = (backupStatus.currentTime === lastBackupTime);
+                    let isBackupFrameStuck = (backupStatus.decodedFrames === lastBackupDecodedFrames && backupStatus.decodedFrames > 0);
+
+                    if (isBackupTimeStuck || isBackupFrameStuck) {
+                        if (Date.now() - backupFrozenCheckTimestamp > activeHangThresholdMs) { 
+                            backupStatus.status = 'FROZEN'; // Force to FROZEN if stuck
+                        }
+                    } else {
+                        lastBackupTime = backupStatus.currentTime;
+                        lastBackupDecodedFrames = backupStatus.decodedFrames;
+                        backupFrozenCheckTimestamp = Date.now();
+                    }
+                }
+
                 if (backupStatus.status === 'DEAD' || backupStatus.status === 'CRITICAL_ERROR' || backupStatus.status === 'FROZEN') {
-                    console.log(`\n[⚠️] BACKGROUND SHIELD: Backup Server [${backupUrlIndex}] failed silently.`);
+                    console.log(`\n[⚠️] BACKGROUND SHIELD: Backup Server [${backupUrlIndex}] failed silently (Status: ${backupStatus.status}).`);
                     
                     backupUrlIndex = getSafeBackupIndex(currentUrlIndex, backupUrlIndex, urlList);
                     backupUrlStr = urlList[backupUrlIndex].url;
@@ -2953,6 +2976,7 @@ async function startWatchdog() {
                     } finally {
                         isBackupRebuilding = false; // 🔓 LOCK OFF
                         backupWarmupTime = Date.now();
+                        lastBackupTime = -1; lastBackupDecodedFrames = -1; backupFrozenCheckTimestamp = Date.now(); 
                     }
                 }
             }
@@ -2968,7 +2992,7 @@ async function startWatchdog() {
             }
         }
 
-        // Active Tab Audio Watchdog Fix (Stop Audio War)
+        // Active Tab Audio Watchdog Fix
         if (activeStatus.status === 'HEALTHY') {
             await hideLoadingUI(activePage); 
             isWarmupPhase = false; 
@@ -3030,9 +3054,8 @@ async function startWatchdog() {
 
         watchdogTicks++;
 
-        // ✅ Corrected Heartbeat Log
         if (watchdogTicks === 1 || watchdogTicks % 90 === 0) {
-            let logBackupStatus = await checkPageStatus(backupPage);
+            let logBackupStatus = backupStatus.status !== 'UNKNOWN' ? backupStatus : await checkPageStatus(backupPage);
             let nextAfterBackupIndex = getSafeBackupIndex(currentUrlIndex, backupUrlIndex, urlList);
             let nextAfterBackupUrl = urlList[nextAfterBackupIndex].url;
             
@@ -3072,9 +3095,6 @@ async function startWatchdog() {
             
             console.log(`[*] Checking Backup Tab status before switching...`);
             
-            // --------------------------------------------------------------------
-            // ⚡ SCENARIO A: INSTANT SEAMLESS HOT-SWAP
-            // --------------------------------------------------------------------
             if (backupStatus.status === 'HEALTHY' && !isProactiveRefresh && !isBackupRebuilding) {
                 
                 console.log('\n==================================================');
@@ -3115,6 +3135,7 @@ async function startWatchdog() {
                 }
 
                 lastActiveTime = -1; lastDecodedFrames = -1; frozenCheckTimestamp = Date.now();
+                lastBackupTime = -1; lastBackupDecodedFrames = -1; backupFrozenCheckTimestamp = Date.now(); 
                 isRecoveryUIShown = false; streamSetupTime = Date.now(); currentStreamStartTime = Date.now();
                 isWarmupPhase = false; backupWarmupTime = Date.now() + 5000; 
 
@@ -3125,7 +3146,7 @@ async function startWatchdog() {
                 
                 setTimeout(async () => {
                     if (isBackupRebuilding) return; 
-                    isBackupRebuilding = true; // 🔒 LOCK ON
+                    isBackupRebuilding = true; 
                     try {
                         console.log(`[⏳] Starting background buffer rebuilding safely with MUTEX lock...`);
                         await backupPage.goto('about:blank').catch(()=>{});
@@ -3135,15 +3156,13 @@ async function startWatchdog() {
                     } catch (e) {
                         console.log(`[❌] Background buffer rebuild failed: ${e.message}`);
                     } finally {
-                        isBackupRebuilding = false; // 🔓 LOCK OFF
+                        isBackupRebuilding = false; 
                         backupWarmupTime = Date.now();
+                        lastBackupTime = -1; lastBackupDecodedFrames = -1; backupFrozenCheckTimestamp = Date.now(); 
                     }
                 }, 3000); 
             }
 
-            // --------------------------------------------------------------------
-            // 🔄 SCENARIO B: PROACTIVE REFRESH OR FORCED RECONNECTION
-            // --------------------------------------------------------------------
             else if (isProactiveRefresh || (backupStatus.status === 'HEALTHY' && isProactiveRefresh)) {
                 
                 for (const frame of activePage.frames()) {
@@ -3163,6 +3182,7 @@ async function startWatchdog() {
                 let brokenName = activeBrowserName; activeBrowserName = backupBrowserName; backupBrowserName = brokenName;
                 
                 lastActiveTime = -1; frozenCheckTimestamp = Date.now(); isRecoveryUIShown = false; 
+                lastBackupTime = -1; lastBackupDecodedFrames = -1; backupFrozenCheckTimestamp = Date.now(); 
 
                 let previousActiveIndex = currentUrlIndex;
                 currentUrlIndex = backupUrlIndex;
@@ -3173,7 +3193,7 @@ async function startWatchdog() {
 
                 console.log(`[🔄] PROACTIVE REFRESH EXECUTED SUCCESSFULLY`);
 
-                isBackupRebuilding = true; // 🔒 LOCK ON
+                isBackupRebuilding = true; 
                 try {
                     await backupPage.goto('about:blank').catch(()=>{});
                     await applyPreloadFirewall(backupPage);
@@ -3182,18 +3202,19 @@ async function startWatchdog() {
                 } catch (e) {
                     console.log(`[⚠️] Proactive Refresh rebuild failed: ${e.message}`);
                 } finally {
-                    isBackupRebuilding = false; // 🔓 LOCK OFF
+                    isBackupRebuilding = false; 
                     backupWarmupTime = Date.now();
+                    lastBackupTime = -1; lastBackupDecodedFrames = -1; backupFrozenCheckTimestamp = Date.now(); 
                 }
                 
                 streamSetupTime = Date.now(); isWarmupPhase = true; currentStreamStartTime = Date.now();
             }
 
-// --------------------------------------------------------------------
+            // --------------------------------------------------------------------
             // ❌ SCENARIO C: BOTH TABS FAILED
             // --------------------------------------------------------------------
             else {
-                // 🚀 SMART POLLING FIX: Wait dynamically up to 10s for the backup to finish rebuilding
+                // 🚀 SMART POLLING FIX (GARAGE RULE): Wait dynamically up to 10s for the backup to finish rebuilding
                 if (isBackupRebuilding) {
                     console.log(`\n[⏳] HOLDING FIRE: Active is DEAD, but Backup is currently rebuilding...`);
                     console.log(`[*] Initiating smart polling (Max 10s wait) for backup recovery...`);
@@ -3201,13 +3222,12 @@ async function startWatchdog() {
                     let backupRecovered = false;
                     let waitAttempts = 0;
                     
-                    while (waitAttempts < 10) { // 10 attempts * 1000ms = 10 seconds max
-                        // Agar lock khul gaya hai, toh check karo ke kya backup healthy hua?
+                    while (waitAttempts < 10) { 
                         if (!isBackupRebuilding) {
                             let verifyStatus = await checkPageStatus(backupPage);
                             if (verifyStatus.status === 'HEALTHY') {
                                 backupRecovered = true;
-                                break; // Foran loop tor do, wait khatam!
+                                break; 
                             }
                         }
                         await new Promise(r => setTimeout(r, 1000));
@@ -3216,7 +3236,7 @@ async function startWatchdog() {
 
                     if (backupRecovered) {
                         console.log(`[✅] BACKUP SURVIVED THE REBUILD! Watchdog will promote it in the next cycle.`);
-                        continue; // Skip Scenario C, let the next loop cycle promote it seamlessly
+                        continue; 
                     } else {
                         console.log(`[❌] BACKUP REBUILD FAILED OR TIMED OUT. Proceeding to total engine wipe.`);
                     }
@@ -3248,17 +3268,18 @@ async function startWatchdog() {
                     await hideLoadingUI(activePage);
                 } catch(e) {}
 
-                isBackupRebuilding = true; // 🔒 LOCK ON
+                isBackupRebuilding = true; 
                 try {
                     await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
                     await initializeVideo(backupPage, true, false); 
                 } catch(e) {
                 } finally {
-                    isBackupRebuilding = false; // 🔓 LOCK OFF
+                    isBackupRebuilding = false; 
                 }
 
                 streamSetupTime = Date.now(); isWarmupPhase = true; currentStreamStartTime = Date.now();
                 backupWarmupTime = Date.now(); lastActiveTime = -1; frozenCheckTimestamp = Date.now();
+                lastBackupTime = -1; lastBackupDecodedFrames = -1; backupFrozenCheckTimestamp = Date.now();
                 isRecoveryUIShown = false;
 
                 try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
@@ -3268,6 +3289,8 @@ async function startWatchdog() {
         await new Promise(r => setTimeout(r, 2000)); 
     }
 }
+
+
 
 async function startDirectStreaming() {
     activeBrowserName = "CHROME 1";
