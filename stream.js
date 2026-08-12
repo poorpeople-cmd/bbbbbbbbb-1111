@@ -2776,6 +2776,16 @@ async function checkPageStatus(page) {
     return { status: 'DEAD' };
 }
 
+
+
+
+
+
+
+
+
+
+
 async function startWatchdog() {
     // 🧠 ACTIVE TAB MEMORY
     let lastActiveTime = -1;
@@ -2933,7 +2943,7 @@ async function startWatchdog() {
         let backupStatus = { status: 'UNKNOWN' };
 
         // =====================================================================
-        // 🛡️ HANDS-OFF BACKGROUND SHIELD & MONITORING (UPDATED WITH FREEZE DETECTION)
+        // 🛡️ HANDS-OFF BACKGROUND SHIELD & MONITORING
         // =====================================================================
         if (isBackupRebuilding) {
             // Rebuilding, do nothing
@@ -2941,14 +2951,13 @@ async function startWatchdog() {
             if (!isWarmupPhase && (Date.now() - backupWarmupTime > 30000)) { 
                 backupStatus = await checkPageStatus(backupPage);
                 
-                // 🚀 THE FIX: Background Tab Freeze Detection
                 if (backupStatus.status === 'HEALTHY') {
                     let isBackupTimeStuck = (backupStatus.currentTime === lastBackupTime);
                     let isBackupFrameStuck = (backupStatus.decodedFrames === lastBackupDecodedFrames && backupStatus.decodedFrames > 0);
 
                     if (isBackupTimeStuck || isBackupFrameStuck) {
                         if (Date.now() - backupFrozenCheckTimestamp > activeHangThresholdMs) { 
-                            backupStatus.status = 'FROZEN'; // Force to FROZEN if stuck
+                            backupStatus.status = 'FROZEN'; 
                         }
                     } else {
                         lastBackupTime = backupStatus.currentTime;
@@ -2965,7 +2974,7 @@ async function startWatchdog() {
                     
                     console.log(`[*] Shifting Backup Chrome to NEXT link -> Server [${backupUrlIndex}]`);
                     
-                    isBackupRebuilding = true; // 🔒 LOCK ON
+                    isBackupRebuilding = true; 
                     try {
                         await backupPage.goto('about:blank').catch(()=>{});
                         await applyPreloadFirewall(backupPage);
@@ -2974,7 +2983,7 @@ async function startWatchdog() {
                     } catch(e) {
                         console.log(`[❌] Background Shield Rebuild failed: ${e.message}`);
                     } finally {
-                        isBackupRebuilding = false; // 🔓 LOCK OFF
+                        isBackupRebuilding = false; 
                         backupWarmupTime = Date.now();
                         lastBackupTime = -1; lastBackupDecodedFrames = -1; backupFrozenCheckTimestamp = Date.now(); 
                     }
@@ -3069,10 +3078,6 @@ async function startWatchdog() {
             console.log(`==================================================\n`);
         }
 
-        if (watchdogTicks % 120 === 0) {
-            await takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
-        }
-
         // =========================================================================================
         // 🔄 2. ACTIVE TAB HOT-SWAP SHIELD 
         // =========================================================================================
@@ -3090,7 +3095,6 @@ async function startWatchdog() {
                 console.log(`\n==================================================`);
                 console.log(`[!] ❌ WATCHDOG DETECTED ISSUE: ${activeStatus.status}`);
                 console.log(`==================================================`);
-                await takeAndBatchScreenshot(activePage, `error-${activeStatus.status.toLowerCase()}`);
             }
             
             console.log(`[*] Checking Backup Tab status before switching...`);
@@ -3214,7 +3218,6 @@ async function startWatchdog() {
             // ❌ SCENARIO C: BOTH TABS FAILED
             // --------------------------------------------------------------------
             else {
-                // 🚀 SMART POLLING FIX (GARAGE RULE): Wait dynamically up to 10s for the backup to finish rebuilding
                 if (isBackupRebuilding) {
                     console.log(`\n[⏳] HOLDING FIRE: Active is DEAD, but Backup is currently rebuilding...`);
                     console.log(`[*] Initiating smart polling (Max 10s wait) for backup recovery...`);
@@ -3289,6 +3292,21 @@ async function startWatchdog() {
         await new Promise(r => setTimeout(r, 2000)); 
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
