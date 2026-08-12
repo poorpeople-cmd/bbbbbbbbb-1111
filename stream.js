@@ -3029,18 +3029,37 @@ async function startWatchdog() {
 
         watchdogTicks++;
 
+        // if (watchdogTicks === 1 || watchdogTicks % 90 === 0) {
+        //     let logBackupStatus = await checkPageStatus(backupPage);
+        //     let nextAfterBackupIndex = getSafeBackupIndex(currentUrlIndex, backupUrlIndex, urlList);
+        //     let nextAfterBackupUrl = urlList[nextAfterBackupIndex].url;
+            
+        //     // console.log(`\n==================================================`);
+        //     // // console.log(`[💓] ACTIVE HEARTBEAT (${activeBrowserName}): Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'} (Limit: ${activeHangThresholdMs/1000}s)`);
+        //     // console.log(`[💓] ACTIVE HEARTBEAT (${activeBrowserName}): Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'} | Frames: ${activeStatus.decodedFrames}`);
+        //     // console.log(`[▶️] CURRENTLY LIVE              : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
+        //     // console.log(`--------------------------------------------------`);
+        //     // console.log(`[🖤] BACKUP HEARTBEAT (${backupBrowserName}): Status is ${logBackupStatus.status} | Video Time: ${logBackupStatus.currentTime ? logBackupStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
+        //     // console.log(`[🔄] RUNNING IN BACKGROUND       : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
+        //     // console.log(`[⏭️] NEXT QUEUE (AFTER BACKUP)  : Server [${nextAfterBackupIndex}] -> ${nextAfterBackupUrl}`);
+        //     // console.log(`==================================================\n`);
+
+
+            
+        // }
+
+
         if (watchdogTicks === 1 || watchdogTicks % 90 === 0) {
             let logBackupStatus = await checkPageStatus(backupPage);
             let nextAfterBackupIndex = getSafeBackupIndex(currentUrlIndex, backupUrlIndex, urlList);
             let nextAfterBackupUrl = urlList[nextAfterBackupIndex].url;
             
             console.log(`\n==================================================`);
-            // console.log(`[💓] ACTIVE HEARTBEAT (${activeBrowserName}): Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'} (Limit: ${activeHangThresholdMs/1000}s)`);
-            console.log(`[💓] ACTIVE HEARTBEAT (${activeBrowserName}): Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'} | Frames: ${activeStatus.decodedFrames}`);
-            console.log(`[▶️] CURRENTLY LIVE              : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
+            console.log(`[💓] ACTIVE HEARTBEAT (${activeBrowserName}): Status is ${activeStatus.status} | Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'} | Frames: ${activeStatus.decodedFrames !== undefined ? activeStatus.decodedFrames : 'N/A'} (Limit: ${activeHangThresholdMs/1000}s)`);
+            console.log(`[▶️] CURRENTLY LIVE              : Server [${currentUrlIndex}] -> ${activeUrlStr}`);
             console.log(`--------------------------------------------------`);
-            console.log(`[🖤] BACKUP HEARTBEAT (${backupBrowserName}): Status is ${logBackupStatus.status} | Video Time: ${logBackupStatus.currentTime ? logBackupStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
-            console.log(`[🔄] RUNNING IN BACKGROUND       : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
+            console.log(`[🖤] BACKUP HEARTBEAT (${backupBrowserName}): Status is ${isBackupRebuilding ? 'REBUILDING' : logBackupStatus.status} | Time: ${logBackupStatus.currentTime ? logBackupStatus.currentTime.toFixed(1) + 's' : 'N/A'} | Frames: ${logBackupStatus.decodedFrames !== undefined ? logBackupStatus.decodedFrames : 'N/A'}`);
+            console.log(`[🔄] RUNNING IN BACKGROUND       : Server [${backupUrlIndex}] -> ${backupUrlStr}`);
             console.log(`[⏭️] NEXT QUEUE (AFTER BACKUP)  : Server [${nextAfterBackupIndex}] -> ${nextAfterBackupUrl}`);
             console.log(`==================================================\n`);
         }
