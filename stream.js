@@ -3189,10 +3189,40 @@ async function startWatchdog() {
                 streamSetupTime = Date.now(); isWarmupPhase = true; currentStreamStartTime = Date.now();
             }
 
-            // --------------------------------------------------------------------
+// --------------------------------------------------------------------
             // ❌ SCENARIO C: BOTH TABS FAILED
             // --------------------------------------------------------------------
             else {
+                // 🚀 SMART POLLING FIX: Wait dynamically up to 10s for the backup to finish rebuilding
+                if (isBackupRebuilding) {
+                    console.log(`\n[⏳] HOLDING FIRE: Active is DEAD, but Backup is currently rebuilding...`);
+                    console.log(`[*] Initiating smart polling (Max 10s wait) for backup recovery...`);
+                    
+                    let backupRecovered = false;
+                    let waitAttempts = 0;
+                    
+                    while (waitAttempts < 10) { // 10 attempts * 1000ms = 10 seconds max
+                        // Agar lock khul gaya hai, toh check karo ke kya backup healthy hua?
+                        if (!isBackupRebuilding) {
+                            let verifyStatus = await checkPageStatus(backupPage);
+                            if (verifyStatus.status === 'HEALTHY') {
+                                backupRecovered = true;
+                                break; // Foran loop tor do, wait khatam!
+                            }
+                        }
+                        await new Promise(r => setTimeout(r, 1000));
+                        waitAttempts++;
+                    }
+
+                    if (backupRecovered) {
+                        console.log(`[✅] BACKUP SURVIVED THE REBUILD! Watchdog will promote it in the next cycle.`);
+                        continue; // Skip Scenario C, let the next loop cycle promote it seamlessly
+                    } else {
+                        console.log(`[❌] BACKUP REBUILD FAILED OR TIMED OUT. Proceeding to total engine wipe.`);
+                    }
+                }
+
+                console.log(`\n==================================================`);
                 console.log(`[!] ❌ BOTH TABS FAILED (Active & Backup Compromised)`);
                 try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch (e) {}
 
