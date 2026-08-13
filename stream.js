@@ -5164,254 +5164,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
         // This prevents accidental black-screen behavior.
         // -----------------------------------------------------------------------------
 
-if (bestIframeHandle) {
 
-    await page.evaluate((mainIframe) => {
-
-        // =========================================================================
-        // 🛡️ PARENT PAGE ISOLATION
-        // =========================================================================
-
-        if (window.__smartIframeIsolationInterval) {
-            clearInterval(
-                window.__smartIframeIsolationInterval
-            );
-
-            window.__smartIframeIsolationInterval = null;
-        }
-
-        const applyParentIsolation = () => {
-
-            try {
-
-                if (
-                    !mainIframe ||
-                    !mainIframe.isConnected
-                ) {
-                    return;
-                }
-
-                // -----------------------------------------------------------------
-                // Force parent document black
-                // -----------------------------------------------------------------
-                document.documentElement.style.setProperty(
-                    'background',
-                    'black',
-                    'important'
-                );
-
-                document.documentElement.style.setProperty(
-                    'overflow',
-                    'hidden',
-                    'important'
-                );
-
-                if (document.body) {
-
-                    document.body.style.setProperty(
-                        'background',
-                        'black',
-                        'important'
-                    );
-
-                    document.body.style.setProperty(
-                        'overflow',
-                        'hidden',
-                        'important'
-                    );
-
-                    document.body.style.setProperty(
-                        'margin',
-                        '0',
-                        'important'
-                    );
-
-                    document.body.style.setProperty(
-                        'padding',
-                        '0',
-                        'important'
-                    );
-
-                    document.body.style.setProperty(
-                        'width',
-                        '100vw',
-                        'important'
-                    );
-
-                    document.body.style.setProperty(
-                        'height',
-                        '100vh',
-                        'important'
-                    );
-                }
-
-                // -----------------------------------------------------------------
-                // Hide all OTHER top-level iframes
-                // -----------------------------------------------------------------
-                const allIframes =
-                    Array.from(
-                        document.querySelectorAll('iframe')
-                    );
-
-                allIframes.forEach(ifr => {
-
-                    if (ifr === mainIframe) {
-                        return;
-                    }
-
-                    try {
-
-                        ifr.style.setProperty(
-                            'display',
-                            'none',
-                            'important'
-                        );
-
-                        ifr.style.setProperty(
-                            'visibility',
-                            'hidden',
-                            'important'
-                        );
-
-                        ifr.style.setProperty(
-                            'opacity',
-                            '0',
-                            'important'
-                        );
-
-                        ifr.style.setProperty(
-                            'pointer-events',
-                            'none',
-                            'important'
-                        );
-
-                        ifr.style.setProperty(
-                            'z-index',
-                            '-9999',
-                            'important'
-                        );
-
-                    } catch (e) {}
-                });
-
-                // -----------------------------------------------------------------
-                // Make verified top-level iframe FULL VIEWPORT
-                // -----------------------------------------------------------------
-                mainIframe.style.setProperty(
-                    'position',
-                    'fixed',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'inset',
-                    '0px',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'width',
-                    '100vw',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'height',
-                    '100vh',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'min-width',
-                    '100vw',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'min-height',
-                    '100vh',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'max-width',
-                    'none',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'max-height',
-                    'none',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'margin',
-                    '0',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'padding',
-                    '0',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'border',
-                    '0',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'display',
-                    'block',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'visibility',
-                    'visible',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'opacity',
-                    '1',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'z-index',
-                    '2147483645',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'background',
-                    'black',
-                    'important'
-                );
-
-                mainIframe.style.setProperty(
-                    'overflow',
-                    'hidden',
-                    'important'
-                );
-
-            } catch (err) {}
-        };
-
-        applyParentIsolation();
-
-        window.__smartIframeIsolationInterval =
-            setInterval(
-                applyParentIsolation,
-                500
-            );
-
-    }, bestIframeHandle).catch(() => {});
-}
 
 
 // =============================================================================
@@ -5421,431 +5174,1016 @@ if (bestIframeHandle) {
 // Therefore we MUST style the already-verified targetFrame directly.
 // =============================================================================
 
-if (targetFrame) {
+        // =========================================================================
+        // 🎬 FINAL VIEWPORT ENGINE
+        // PARENT IFRAME + INNER PLAYER + CAROUSEL/TRAP BREAKER
+        // =========================================================================
 
-    try {
+        // =========================================================================
+        // STEP 6A: PARENT PAGE / TOP-LEVEL IFRAME FULLSCREEN
+        // =========================================================================
+        if (bestIframeHandle) {
 
-        await targetFrame.evaluate(() => {
+            await page.evaluate((mainIframe) => {
 
-            // Prevent duplicate fullscreen intervals
-            if (window.__smartVideoFullscreenInterval) {
-                clearInterval(
-                    window.__smartVideoFullscreenInterval
-                );
-
-                window.__smartVideoFullscreenInterval = null;
-            }
-
-            // ---------------------------------------------------------------------
-            // Find the actual strongest visible video
-            // ---------------------------------------------------------------------
-            const findBestVideo = () => {
-
-                const videos =
-                    Array.from(
-                        document.querySelectorAll('video')
-                    ).filter(video => {
-
-                        const style =
-                            window.getComputedStyle(video);
-
-                        return (
-                            video.clientWidth >= 50 &&
-                            video.clientHeight >= 50 &&
-                            style.display !== 'none' &&
-                            style.visibility !== 'hidden' &&
-                            style.opacity !== '0' &&
-                            !video.ended
-                        );
-                    });
-
-                if (!videos.length) {
-                    return null;
+                // Prevent duplicate parent isolation loops
+                if (window.__smartIframeIsolationInterval) {
+                    clearInterval(
+                        window.__smartIframeIsolationInterval
+                    );
+                    window.__smartIframeIsolationInterval = null;
                 }
 
-                return videos.sort(
-                    (a, b) =>
-                        (b.clientWidth * b.clientHeight) -
-                        (a.clientWidth * a.clientHeight)
-                )[0];
-            };
+                const breakContainingBlockChain = () => {
 
-            // ---------------------------------------------------------------------
-            // Fullscreen the actual player inside the iframe
-            // ---------------------------------------------------------------------
-            const applyInnerFullscreen = () => {
+                    let node = mainIframe.parentElement;
 
-                try {
+                    while (
+                        node &&
+                        node !== document.documentElement
+                    ) {
+                        try {
 
-                    const video = findBestVideo();
+                            // CSS properties that can create a containing
+                            // block for position: fixed descendants.
+                            node.style.setProperty(
+                                'transform',
+                                'none',
+                                'important'
+                            );
 
-                    if (!video) {
-                        return;
+                            node.style.setProperty(
+                                'perspective',
+                                'none',
+                                'important'
+                            );
+
+                            node.style.setProperty(
+                                'filter',
+                                'none',
+                                'important'
+                            );
+
+                            node.style.setProperty(
+                                'backdrop-filter',
+                                'none',
+                                'important'
+                            );
+
+                            node.style.setProperty(
+                                'contain',
+                                'none',
+                                'important'
+                            );
+
+                            node.style.setProperty(
+                                'clip-path',
+                                'none',
+                                'important'
+                            );
+
+                            node.style.setProperty(
+                                'will-change',
+                                'auto',
+                                'important'
+                            );
+
+                            // Remove carousel clipping
+                            node.style.setProperty(
+                                'overflow',
+                                'visible',
+                                'important'
+                            );
+
+                            node.style.setProperty(
+                                'overflow-x',
+                                'visible',
+                                'important'
+                            );
+
+                            node.style.setProperty(
+                                'overflow-y',
+                                'visible',
+                                'important'
+                            );
+
+                        } catch (e) {}
+
+                        node = node.parentElement;
                     }
+                };
 
-                    // -------------------------------------------------------------
-                    // Force document itself to viewport
-                    // -------------------------------------------------------------
-                    document.documentElement.style.setProperty(
-                        'width',
-                        '100%',
-                        'important'
-                    );
+                const applyParentFullscreen = () => {
 
-                    document.documentElement.style.setProperty(
-                        'height',
-                        '100%',
-                        'important'
-                    );
+                    try {
 
-                    document.documentElement.style.setProperty(
-                        'margin',
-                        '0',
-                        'important'
-                    );
+                        if (
+                            !mainIframe ||
+                            !mainIframe.isConnected
+                        ) {
+                            return;
+                        }
 
-                    document.documentElement.style.setProperty(
-                        'padding',
-                        '0',
-                        'important'
-                    );
+                        // Break transformed carousel/container chain
+                        breakContainingBlockChain();
 
-                    document.documentElement.style.setProperty(
-                        'background',
-                        'black',
-                        'important'
-                    );
-
-                    document.documentElement.style.setProperty(
-                        'overflow',
-                        'hidden',
-                        'important'
-                    );
-
-                    if (document.body) {
-
-                        document.body.style.setProperty(
+                        // ---------------------------------------------------------
+                        // Root document
+                        // ---------------------------------------------------------
+                        document.documentElement.style.setProperty(
                             'width',
                             '100%',
                             'important'
                         );
 
-                        document.body.style.setProperty(
+                        document.documentElement.style.setProperty(
                             'height',
                             '100%',
                             'important'
                         );
 
-                        document.body.style.setProperty(
+                        document.documentElement.style.setProperty(
                             'margin',
                             '0',
                             'important'
                         );
 
-                        document.body.style.setProperty(
+                        document.documentElement.style.setProperty(
                             'padding',
                             '0',
                             'important'
                         );
 
-                        document.body.style.setProperty(
+                        document.documentElement.style.setProperty(
                             'background',
                             'black',
                             'important'
                         );
 
-                        document.body.style.setProperty(
+                        document.documentElement.style.setProperty(
                             'overflow',
                             'hidden',
                             'important'
                         );
-                    }
 
-                    // -------------------------------------------------------------
-                    // Find the real player wrapper
-                    // -------------------------------------------------------------
-                    let playerWrapper =
-                        video.closest(
-                            [
-                                '.jwplayer',
-                                '#player',
-                                '.plyr',
-                                '.plyr--video',
-                                '.vjs-player',
-                                '.video-js',
-                                '.shaka-video-container',
-                                '.html5-video-player',
-                                '[data-player]',
-                                '[class*="player"]'
-                            ].join(',')
-                        );
+                        // ---------------------------------------------------------
+                        // Body
+                        // ---------------------------------------------------------
+                        if (document.body) {
 
-                    // If no known wrapper is found,
-                    // climb ancestors conservatively.
-                    if (!playerWrapper) {
+                            document.body.style.setProperty(
+                                'width',
+                                '100%',
+                                'important'
+                            );
 
-                        let current = video.parentElement;
+                            document.body.style.setProperty(
+                                'height',
+                                '100%',
+                                'important'
+                            );
 
-                        let levels = 0;
+                            document.body.style.setProperty(
+                                'margin',
+                                '0',
+                                'important'
+                            );
 
-                        while (
-                            current &&
-                            current !== document.body &&
-                            levels < 4
-                        ) {
+                            document.body.style.setProperty(
+                                'padding',
+                                '0',
+                                'important'
+                            );
 
-                            const rect =
-                                current.getBoundingClientRect();
+                            document.body.style.setProperty(
+                                'background',
+                                'black',
+                                'important'
+                            );
 
-                            if (
-                                rect.width >=
-                                    video.clientWidth * 0.85 &&
-                                rect.height >=
-                                    video.clientHeight * 0.85
-                            ) {
+                            // Do not clip the fixed iframe.
+                            document.body.style.setProperty(
+                                'overflow',
+                                'visible',
+                                'important'
+                            );
+                        }
 
-                                playerWrapper = current;
+                        // ---------------------------------------------------------
+                        // Hide OTHER top-level iframes
+                        // ---------------------------------------------------------
+                        const allIframes =
+                            Array.from(
+                                document.querySelectorAll('iframe')
+                            );
+
+                        for (const iframe of allIframes) {
+
+                            if (iframe === mainIframe) {
+                                continue;
                             }
 
-                            current = current.parentElement;
-                            levels++;
+                            try {
+
+                                iframe.style.setProperty(
+                                    'display',
+                                    'none',
+                                    'important'
+                                );
+
+                                iframe.style.setProperty(
+                                    'visibility',
+                                    'hidden',
+                                    'important'
+                                );
+
+                                iframe.style.setProperty(
+                                    'opacity',
+                                    '0',
+                                    'important'
+                                );
+
+                                iframe.style.setProperty(
+                                    'pointer-events',
+                                    'none',
+                                    'important'
+                                );
+
+                                iframe.style.setProperty(
+                                    'z-index',
+                                    '-9999',
+                                    'important'
+                                );
+
+                            } catch (e) {}
                         }
-                    }
 
-                    // -------------------------------------------------------------
-                    // Fullscreen the player wrapper
-                    // -------------------------------------------------------------
-                    if (playerWrapper) {
-
-                        playerWrapper.style.setProperty(
+                        // ---------------------------------------------------------
+                        // THE VERIFIED TOP-LEVEL IFRAME
+                        // ---------------------------------------------------------
+                        mainIframe.style.setProperty(
                             'position',
                             'fixed',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
-                            'inset',
+                        mainIframe.style.setProperty(
+                            'top',
                             '0px',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
+                        mainIframe.style.setProperty(
+                            'left',
+                            '0px',
+                            'important'
+                        );
+
+                        mainIframe.style.setProperty(
+                            'right',
+                            '0px',
+                            'important'
+                        );
+
+                        mainIframe.style.setProperty(
+                            'bottom',
+                            '0px',
+                            'important'
+                        );
+
+                        mainIframe.style.setProperty(
                             'width',
                             '100vw',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
+                        mainIframe.style.setProperty(
                             'height',
                             '100vh',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
+                        mainIframe.style.setProperty(
                             'min-width',
                             '100vw',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
+                        mainIframe.style.setProperty(
                             'min-height',
                             '100vh',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
+                        mainIframe.style.setProperty(
                             'max-width',
                             'none',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
+                        mainIframe.style.setProperty(
                             'max-height',
                             'none',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
+                        mainIframe.style.setProperty(
                             'margin',
                             '0',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
+                        mainIframe.style.setProperty(
                             'padding',
                             '0',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
+                        mainIframe.style.setProperty(
                             'border',
                             '0',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
+                        mainIframe.style.setProperty(
+                            'display',
+                            'block',
+                            'important'
+                        );
+
+                        mainIframe.style.setProperty(
+                            'visibility',
+                            'visible',
+                            'important'
+                        );
+
+                        mainIframe.style.setProperty(
+                            'opacity',
+                            '1',
+                            'important'
+                        );
+
+                        mainIframe.style.setProperty(
                             'background',
                             'black',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
+                        mainIframe.style.setProperty(
                             'overflow',
                             'hidden',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
+                        mainIframe.style.setProperty(
                             'z-index',
-                            '2147483646',
+                            '2147483645',
                             'important'
                         );
 
-                        playerWrapper.style.setProperty(
-                            'display',
-                            'block',
-                            'important'
+                    } catch (err) {}
+                };
+
+                // Apply immediately
+                applyParentFullscreen();
+
+                // Re-apply because carousel/player frameworks can
+                // restore their original layout later.
+                window.__smartIframeIsolationInterval =
+                    setInterval(
+                        applyParentFullscreen,
+                        500
+                    );
+
+            }, bestIframeHandle).catch(() => {});
+        }
+
+
+        // =========================================================================
+        // STEP 6B: INNER FRAME / ACTUAL VIDEO FULLSCREEN
+        // =========================================================================
+        if (targetFrame) {
+
+            try {
+
+                await targetFrame.evaluate(() => {
+
+                    // Prevent duplicate inner fullscreen loops
+                    if (window.__smartVideoFullscreenInterval) {
+
+                        clearInterval(
+                            window.__smartVideoFullscreenInterval
                         );
+
+                        window.__smartVideoFullscreenInterval = null;
                     }
 
-                    // -------------------------------------------------------------
-                    // Fullscreen actual VIDEO element
-                    // -------------------------------------------------------------
-                    video.style.setProperty(
-                        'position',
-                        'absolute',
-                        'important'
-                    );
+                    const findBestVideo = () => {
 
-                    video.style.setProperty(
-                        'inset',
-                        '0px',
-                        'important'
-                    );
+                        const videos =
+                            Array.from(
+                                document.querySelectorAll('video')
+                            ).filter(video => {
 
-                    video.style.setProperty(
-                        'width',
-                        '100%',
-                        'important'
-                    );
+                                const style =
+                                    window.getComputedStyle(video);
 
-                    video.style.setProperty(
-                        'height',
-                        '100%',
-                        'important'
-                    );
+                                return (
+                                    video.clientWidth >= 50 &&
+                                    video.clientHeight >= 50 &&
+                                    !video.ended &&
+                                    style.display !== 'none' &&
+                                    style.visibility !== 'hidden' &&
+                                    style.opacity !== '0'
+                                );
+                            });
 
-                    video.style.setProperty(
-                        'min-width',
-                        '100%',
-                        'important'
-                    );
+                        if (!videos.length) {
+                            return null;
+                        }
 
-                    video.style.setProperty(
-                        'min-height',
-                        '100%',
-                        'important'
-                    );
+                        return videos.sort(
+                            (a, b) =>
+                                (b.clientWidth * b.clientHeight) -
+                                (a.clientWidth * a.clientHeight)
+                        )[0];
+                    };
 
-                    video.style.setProperty(
-                        'max-width',
-                        'none',
-                        'important'
-                    );
 
-                    video.style.setProperty(
-                        'max-height',
-                        'none',
-                        'important'
-                    );
+                    const breakInnerContainingBlocks = (video) => {
 
-                    video.style.setProperty(
-                        'margin',
-                        '0',
-                        'important'
-                    );
+                        let node = video.parentElement;
 
-                    video.style.setProperty(
-                        'padding',
-                        '0',
-                        'important'
-                    );
+                        while (
+                            node &&
+                            node !== document.documentElement
+                        ) {
 
-                    video.style.setProperty(
-                        'border',
-                        '0',
-                        'important'
-                    );
+                            try {
 
-                    video.style.setProperty(
-                        'display',
-                        'block',
-                        'important'
-                    );
+                                node.style.setProperty(
+                                    'transform',
+                                    'none',
+                                    'important'
+                                );
 
-                    video.style.setProperty(
-                        'visibility',
-                        'visible',
-                        'important'
-                    );
+                                node.style.setProperty(
+                                    'perspective',
+                                    'none',
+                                    'important'
+                                );
 
-                    video.style.setProperty(
-                        'opacity',
-                        '1',
-                        'important'
-                    );
+                                node.style.setProperty(
+                                    'filter',
+                                    'none',
+                                    'important'
+                                );
 
-                    video.style.setProperty(
-                        'background',
-                        'black',
-                        'important'
-                    );
+                                node.style.setProperty(
+                                    'backdrop-filter',
+                                    'none',
+                                    'important'
+                                );
 
-                    // Preserve full video without cropping.
-                    video.style.setProperty(
-                        'object-fit',
-                        'contain',
-                        'important'
-                    );
+                                node.style.setProperty(
+                                    'contain',
+                                    'none',
+                                    'important'
+                                );
 
-                    video.style.setProperty(
-                        'object-position',
-                        'center center',
-                        'important'
-                    );
+                                node.style.setProperty(
+                                    'clip-path',
+                                    'none',
+                                    'important'
+                                );
 
-                    video.style.setProperty(
-                        'z-index',
-                        '2147483646',
-                        'important'
-                    );
+                                node.style.setProperty(
+                                    'will-change',
+                                    'auto',
+                                    'important'
+                                );
 
-                } catch (err) {}
-            };
+                                // Crucial for carousel / slider clipping
+                                node.style.setProperty(
+                                    'overflow',
+                                    'visible',
+                                    'important'
+                                );
 
-            // Apply immediately
-            applyInnerFullscreen();
+                                node.style.setProperty(
+                                    'overflow-x',
+                                    'visible',
+                                    'important'
+                                );
 
-            // Re-apply because many players rebuild their DOM
-            window.__smartVideoFullscreenInterval =
-                setInterval(
-                    applyInnerFullscreen,
-                    500
+                                node.style.setProperty(
+                                    'overflow-y',
+                                    'visible',
+                                    'important'
+                                );
+
+                            } catch (e) {}
+
+                            node = node.parentElement;
+                        }
+                    };
+
+
+                    const hideCarouselNavigation = () => {
+
+                        const selectors = [
+                            '.swiper-pagination',
+                            '.swiper-pagination-bullets',
+                            '.swiper-pagination-clickable',
+                            '.slick-dots',
+                            '.owl-dots',
+                            '.carousel-indicators',
+                            '[class*="swiper-pagination"]',
+                            '[class*="slick-dots"]',
+                            '[class*="carousel-indicator"]'
+                        ];
+
+                        try {
+
+                            document
+                                .querySelectorAll(
+                                    selectors.join(',')
+                                )
+                                .forEach(el => {
+
+                                    // Hide only common carousel
+                                    // navigation indicators.
+                                    el.style.setProperty(
+                                        'display',
+                                        'none',
+                                        'important'
+                                    );
+
+                                    el.style.setProperty(
+                                        'visibility',
+                                        'hidden',
+                                        'important'
+                                    );
+
+                                    el.style.setProperty(
+                                        'opacity',
+                                        '0',
+                                        'important'
+                                    );
+
+                                    el.style.setProperty(
+                                        'pointer-events',
+                                        'none',
+                                        'important'
+                                    );
+                                });
+
+                        } catch (e) {}
+                    };
+
+
+                    const applyInnerFullscreen = () => {
+
+                        try {
+
+                            const video = findBestVideo();
+
+                            if (!video) {
+                                return;
+                            }
+
+                            // -----------------------------------------------------
+                            // BREAK SLIDER / CAROUSEL CSS TRAP
+                            // -----------------------------------------------------
+                            breakInnerContainingBlocks(video);
+
+                            // -----------------------------------------------------
+                            // INNER DOCUMENT
+                            // -----------------------------------------------------
+                            document.documentElement.style.setProperty(
+                                'width',
+                                '100%',
+                                'important'
+                            );
+
+                            document.documentElement.style.setProperty(
+                                'height',
+                                '100%',
+                                'important'
+                            );
+
+                            document.documentElement.style.setProperty(
+                                'margin',
+                                '0',
+                                'important'
+                            );
+
+                            document.documentElement.style.setProperty(
+                                'padding',
+                                '0',
+                                'important'
+                            );
+
+                            document.documentElement.style.setProperty(
+                                'background',
+                                'black',
+                                'important'
+                            );
+
+                            document.documentElement.style.setProperty(
+                                'overflow',
+                                'hidden',
+                                'important'
+                            );
+
+                            if (document.body) {
+
+                                document.body.style.setProperty(
+                                    'width',
+                                    '100%',
+                                    'important'
+                                );
+
+                                document.body.style.setProperty(
+                                    'height',
+                                    '100%',
+                                    'important'
+                                );
+
+                                document.body.style.setProperty(
+                                    'margin',
+                                    '0',
+                                    'important'
+                                );
+
+                                document.body.style.setProperty(
+                                    'padding',
+                                    '0',
+                                    'important'
+                                );
+
+                                document.body.style.setProperty(
+                                    'background',
+                                    'black',
+                                    'important'
+                                );
+
+                                // Keep ancestors from clipping our
+                                // position:fixed video.
+                                document.body.style.setProperty(
+                                    'overflow',
+                                    'visible',
+                                    'important'
+                                );
+                            }
+
+                            // -----------------------------------------------------
+                            // Find known player wrapper
+                            // -----------------------------------------------------
+                            let playerWrapper =
+                                video.closest(
+                                    [
+                                        '.jwplayer',
+                                        '#player',
+                                        '.plyr',
+                                        '.plyr--video',
+                                        '.vjs-player',
+                                        '.video-js',
+                                        '.shaka-video-container',
+                                        '.html5-video-player',
+                                        '[data-player]',
+                                        '[class*="player"]'
+                                    ].join(',')
+                                );
+
+                            // -----------------------------------------------------
+                            // Fallback: climb a few ancestors
+                            // -----------------------------------------------------
+                            if (!playerWrapper) {
+
+                                let current =
+                                    video.parentElement;
+
+                                let levels = 0;
+
+                                while (
+                                    current &&
+                                    current !== document.body &&
+                                    levels < 6
+                                ) {
+
+                                    try {
+
+                                        const rect =
+                                            current.getBoundingClientRect();
+
+                                        if (
+                                            rect.width >=
+                                                video.clientWidth * 0.80 &&
+                                            rect.height >=
+                                                video.clientHeight * 0.80
+                                        ) {
+
+                                            playerWrapper =
+                                                current;
+                                        }
+
+                                    } catch (e) {}
+
+                                    current =
+                                        current.parentElement;
+
+                                    levels++;
+                                }
+                            }
+
+                            // -----------------------------------------------------
+                            // Fullscreen player wrapper
+                            // -----------------------------------------------------
+                            if (playerWrapper) {
+
+                                playerWrapper.style.setProperty(
+                                    'position',
+                                    'fixed',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'top',
+                                    '0px',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'left',
+                                    '0px',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'right',
+                                    '0px',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'bottom',
+                                    '0px',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'width',
+                                    '100vw',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'height',
+                                    '100vh',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'min-width',
+                                    '100vw',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'min-height',
+                                    '100vh',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'max-width',
+                                    'none',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'max-height',
+                                    'none',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'margin',
+                                    '0',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'padding',
+                                    '0',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'border',
+                                    '0',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'display',
+                                    'block',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'visibility',
+                                    'visible',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'opacity',
+                                    '1',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'background',
+                                    'black',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'overflow',
+                                    'hidden',
+                                    'important'
+                                );
+
+                                playerWrapper.style.setProperty(
+                                    'z-index',
+                                    '2147483646',
+                                    'important'
+                                );
+                            }
+
+                            // -----------------------------------------------------
+                            // Actual video = true viewport
+                            // -----------------------------------------------------
+                            video.style.setProperty(
+                                'position',
+                                'fixed',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'top',
+                                '0px',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'left',
+                                '0px',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'right',
+                                '0px',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'bottom',
+                                '0px',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'width',
+                                '100vw',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'height',
+                                '100vh',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'min-width',
+                                '100vw',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'min-height',
+                                '100vh',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'max-width',
+                                'none',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'max-height',
+                                'none',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'margin',
+                                '0',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'padding',
+                                '0',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'border',
+                                '0',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'display',
+                                'block',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'visibility',
+                                'visible',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'opacity',
+                                '1',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'background',
+                                'black',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'object-fit',
+                                'contain',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'object-position',
+                                'center center',
+                                'important'
+                            );
+
+                            video.style.setProperty(
+                                'z-index',
+                                '2147483647',
+                                'important'
+                            );
+
+                            // -----------------------------------------------------
+                            // Remove carousel navigation dots
+                            // -----------------------------------------------------
+                            hideCarouselNavigation();
+
+                        } catch (err) {}
+                    };
+
+                    // Apply immediately
+                    applyInnerFullscreen();
+
+                    // Re-apply because player/carousel JavaScript may
+                    // reconstruct its styles or DOM.
+                    window.__smartVideoFullscreenInterval =
+                        setInterval(
+                            applyInnerFullscreen,
+                            500
+                        );
+
+                });
+
+                console.log(
+                    '[✅] CSS TRAP BREAKER + INNER VIDEO FULLSCREEN ACTIVATED.'
                 );
 
-        });
+            } catch (e) {
 
-        console.log(
-            '[✅] INNER VIDEO FULLSCREEN ENGINE ACTIVATED.'
-        );
-
-    } catch (e) {
-
-        console.log(
-            `[⚠️] Inner video fullscreen setup failed safely: ${e.message}`
-        );
-    }
-}
+                console.log(
+                    `[⚠️] Inner fullscreen engine failed safely: ${e.message}`
+                );
+            }
+        }
 
         // -----------------------------------------------------------------------------
         // IMPORTANT FALLBACK FOR THE EXISTING AUDIO / PLAYER CONTROL BLOCK BELOW
