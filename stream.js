@@ -1,5 +1,3 @@
-
-
 const puppeteer = require('puppeteer-extra');
 let isWarmupPhase = true;
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
@@ -641,6 +639,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     if (clickSuccess) {
                         serverClicked = true; 
                         console.log(`[+] Server Button clicked successfully!`);
+                        
                         await new Promise(r => setTimeout(r, 2000)); 
                         if (isActivePage) await page.bringToFront(); 
                     } else await new Promise(r => setTimeout(r, 2000));
@@ -659,12 +658,18 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         let playing = false;
                         document.querySelectorAll('video').forEach(v => {
                             if (v.clientWidth > 50 && !v.paused && v.currentTime > 0) {
-                                v.muted = false; v.volume = 1.0; playing = true;
+                                v.muted = false; 
+                                v.volume = 1.0;
+                                playing = true;
                             }
                         });
                         return playing;
                     });
-                    if (autoPlayed) { isVideoPlaying = true; break; }
+
+                    if (autoPlayed) {
+                        isVideoPlaying = true;
+                        break;
+                    }
 
                     const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, [class*="unmute"], .fp-play');
                     if (playBtn) {
@@ -672,10 +677,13 @@ async function initializeVideo(page, startMuted, isActivePage) {
                             const style = window.getComputedStyle(el);
                             return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
                         }, playBtn);
+
                         if (isVisible) {
                             await frame.evaluate(el => el.click(), playBtn); 
+                            // await takeAndBatchScreenshot(page, `play-btn-clicked`);
                             await new Promise(r => setTimeout(r, 3000)); 
-                            isVideoPlaying = true; break; 
+                            isVideoPlaying = true;
+                            break; 
                         }
                     }
 
@@ -687,12 +695,21 @@ async function initializeVideo(page, startMuted, isActivePage) {
                                 if (v.clientWidth > 50) { 
                                     v.muted = false; v.volume = 1.0; 
                                     try { v.click(); } catch(e){}
-                                    try { let p = v.play(); if (p !== undefined) p.catch(()=>{}); played = true; } catch(e) {}
+                                    try {
+                                        let p = v.play();
+                                        if (p !== undefined) p.catch(()=>{});
+                                        played = true;
+                                    } catch(e) {}
                                 }
                             }
                             return played;
                         });
-                        if (forced) { isVideoPlaying = true; break; }
+
+                        if (forced) {
+                            // await takeAndBatchScreenshot(page, `force-play-applied`);
+                            isVideoPlaying = true;
+                            break;
+                        }
                     }
                 } catch (err) {}
             }
@@ -700,183 +717,148 @@ async function initializeVideo(page, startMuted, isActivePage) {
             attempts++;
         }
 
-        // =====================================================================================
-        // 🎯 FINAL SMART PLAYER DETECTOR (Fast & Reliable)
-        // =====================================================================================
-        console.log('[*] Scanning ALL frames using final behavioral stream detection...');
+       console.log('[*] Scanning for Exact Real Video Player (Duration + Geometry Logic)...');
         let targetFrame = null;
-        let bestIframeHandle = null;
-        let maxScore = -Infinity;
-
-        const inspectVideoInFrame = async (frame, videoIndex) => {
+        for (const frame of page.frames()) {
             try {
-                return await frame.evaluate(async (index) => {
-                    const vids = Array.from(document.querySelectorAll('video'));
-                    const v = vids[index];
-                    if (!v || v.clientWidth < 50 || v.clientHeight < 50) return null;
-                    const initialTime = Number.isFinite(v.currentTime) ? v.currentTime : 0;
-                    let initialPresentedFrames = 0;
-                    try {
-                        if (typeof v.getVideoPlaybackQuality === 'function') {
-                            const q = v.getVideoPlaybackQuality();
-                            initialPresentedFrames = Number.isFinite(q.totalVideoFrames) ? q.totalVideoFrames : 0;
+                const frameStatus = await frame.evaluate(() => {
+                    const videos = Array.from(document.querySelectorAll('video'));
+                    let bestVideo = null;
+                    let maxScore = -1;
+
+                    for (const v of videos) {
+                        // 1. Size aur Shape Check: Choti videos aur mobile (vertical) ads ko ignore karein
+                        if (v.clientWidth < 100 || v.clientHeight < 100) continue;
+                        if (v.clientHeight > v.clientWidth) continue; 
+
+                        let score = v.clientWidth * v.clientHeight;
+                        const duration = v.duration;
+
+                        // 2. Duration Check: Live stream aur ads ke darmian farq
+                        if (duration === Infinity || isNaN(duration)) {
+                            score += 100000000; // Live Stream: Highest Priority
+                        } else if (duration > 3600) {
+                            score += 50000000;  // Long VOD (> 1 hour): High Priority
+                        } else if (duration > 0 && duration < 120) {
+                            score = -1;         // Short video (< 2 mins): 100% Ad (Penalty)
                         }
-                    } catch (e) {}
 
-                    let callbackFrames = 0;
-                    let finished = false;
-                    let timeoutId = null;
-
-                    await new Promise(resolve => {
-                        const finish = () => { if (finished) return; finished = true; if (timeoutId) clearTimeout(timeoutId); resolve(); };
-                        const onFrame = () => { if (finished) return; callbackFrames++; if (callbackFrames >= 4) { finish(); return; } try { v.requestVideoFrameCallback(onFrame); } catch(e) { finish(); } };
-                        timeoutId = setTimeout(() => { finish(); }, 850);
-                        if (typeof v.requestVideoFrameCallback === 'function' && !v.ended) { try { v.requestVideoFrameCallback(onFrame); } catch(e) { finish(); } } else { setTimeout(() => finish(), 800); }
-                    });
-
-                    const finalTime = Number.isFinite(v.currentTime) ? v.currentTime : 0;
-                    let finalPresentedFrames = initialPresentedFrames;
-                    try {
-                        if (typeof v.getVideoPlaybackQuality === 'function') {
-                            const q = v.getVideoPlaybackQuality();
-                            if (Number.isFinite(q.totalVideoFrames)) finalPresentedFrames = q.totalVideoFrames;
+                        // Best video ko update karein agar iska score zyada hai
+                        if (score > maxScore) {
+                            maxScore = score;
+                            bestVideo = v;
                         }
-                    } catch (e) {}
+                    }
+                    
+                    return bestVideo !== null;
+                });
 
-                    return {
-                        index, w: v.clientWidth, h: v.clientHeight,
-                        duration: v.duration, paused: v.paused, ended: v.ended, readyState: v.readyState,
-                        currentTimeDelta: Math.max(0, finalTime - initialTime),
-                        callbackFrames,
-                        playbackQualityDelta: Math.max(0, finalPresentedFrames - initialPresentedFrames),
-                        visible: v.clientWidth > 0 && v.clientHeight > 0 && window.getComputedStyle(v).display !== 'none'
-                    };
-                }, videoIndex);
-            } catch (e) { return null; }
-        };
-
-        const frameCandidates = [];
-        const frameObservationPromises = page.frames().map(async (frame) => {
-            try {
-                if (frame.isDetached()) return;
-                const videoCount = await frame.evaluate(() => document.querySelectorAll('video').length).catch(() => 0);
-                if (!videoCount) return;
-                const videoPromises = Array.from({ length: videoCount }, (_, index) => inspectVideoInFrame(frame, index));
-                const videos = (await Promise.all(videoPromises)).filter(Boolean);
-                if (videos.length > 0) frameCandidates.push({ frame, videos });
-            } catch (e) {}
-        });
-        await Promise.all(frameObservationPromises);
-
-        for (const candidate of frameCandidates) {
-            for (const vStats of candidate.videos) {
-                if (!vStats.visible || vStats.w < 50 || vStats.h < 50 || vStats.ended || vStats.paused) continue;
-                let score = (vStats.w * vStats.h) / 1000;
-                if (vStats.readyState >= 3) score += 6000;
-                if (vStats.currentTimeDelta > 0.05) score += 12000;
-                if (vStats.callbackFrames > 0) score += 10000;
-                if (vStats.playbackQualityDelta > 0) score += 15000;
-                if (vStats.w > vStats.h) score += 4000; else score -= 5000;
-                if (score > maxScore) { maxScore = score; targetFrame = candidate.frame; }
-            }
+                if (frameStatus) { 
+                    targetFrame = frame; 
+                    console.log(`[+] Smart Scanner locked onto the CORRECT video frame! (Ad bypassed)`);
+                    break; 
+                }
+            } catch (e) { }
         }
 
-        if (targetFrame && maxScore > 0) {
-            console.log(`[+] Smart Scanner locked onto active stream! (Score: ${Math.floor(maxScore)})`);
-            try {
-                let topLevelFrame = targetFrame;
-                let parent = topLevelFrame.parentFrame();
-                while (parent && parent !== page.mainFrame()) {
-                    topLevelFrame = parent;
-                    parent = topLevelFrame.parentFrame();
-                }
-                if (topLevelFrame !== page.mainFrame()) {
-                    bestIframeHandle = await topLevelFrame.frameElement();
-                }
-            } catch (e) { bestIframeHandle = null; }
-        } else {
-            console.log('[⚠️] No verified stream found, relying on old brute-force method.');
-        }
-
-        // =====================================================================================
-        // 🛡️ OUTER PAGE ISOLATION (RESTORED OLD BRUTE-FORCE POWER + NEW LOGIC)
-        // =====================================================================================
-        await page.evaluate((handle) => {
+        await page.evaluate(() => {
             setInterval(() => {
                 try {
-                    let mainIframe = handle;
-
-                    // THE OLD CODE POWER: If Puppeteer failed to give handle, find it by brute-force!
-                    if (!mainIframe) {
-                        let iframes = Array.from(document.querySelectorAll('iframe'));
-                        let mScore = -1;
-                        iframes.forEach(ifr => {
-                            let w = ifr.clientWidth; let h = ifr.clientHeight; let area = w * h;
-                            if (area < 5000) return;
-                            let s = area;
-                            if (ifr.hasAttribute('allowfullscreen') || ifr.hasAttribute('webkitallowfullscreen')) s += 10000000;
-                            if (h > w) s = -1;
-                            if (s > mScore) { mScore = s; mainIframe = ifr; }
-                        });
-                        if (!mainIframe && iframes.length > 0) {
-                            mainIframe = iframes.find(ifr => ifr.getAttribute('allowfullscreen') !== null || (ifr.src && (ifr.src.includes('player') || ifr.src.includes('embed') || ifr.src.includes('stream') || ifr.src.includes('watch'))));
-                        }
-                    }
-
-                    if (!mainIframe) return;
-
-                    // CSS Trap Breaker (Breaks Carousel Dots & Wrappers)
-                    let pNode = mainIframe.parentElement;
-                    while (pNode && pNode !== document.documentElement) {
-                        pNode.style.setProperty('transform', 'none', 'important');
-                        pNode.style.setProperty('perspective', 'none', 'important');
-                        pNode.style.setProperty('filter', 'none', 'important');
-                        pNode.style.setProperty('contain', 'none', 'important');
-                        pNode.style.setProperty('overflow', 'visible', 'important');
-                        pNode.style.setProperty('overflow-x', 'visible', 'important');
-                        pNode.style.setProperty('overflow-y', 'visible', 'important');
-                        pNode = pNode.parentElement;
-                    }
-
                     document.documentElement.style.setProperty('background-color', 'black', 'important');
                     document.body.style.setProperty('background-color', 'black', 'important');
                     document.body.style.setProperty('overflow', 'hidden', 'important');
                     document.documentElement.style.setProperty('overflow', 'hidden', 'important');
 
-                    Array.from(document.querySelectorAll('iframe')).forEach(ifr => {
-                        if (ifr !== mainIframe) {
-                            ifr.style.setProperty('display', 'none', 'important');
-                            ifr.style.setProperty('opacity', '0', 'important');
-                            ifr.style.setProperty('z-index', '-9999', 'important');
+                    let iframes = Array.from(document.querySelectorAll('iframe'));
+                    let mainIframe = null; let maxScore = -1;
+
+                    iframes.forEach(ifr => {
+                        let width = ifr.clientWidth;
+                        let height = ifr.clientHeight;
+                        let area = width * height;
+                        if (area < 5000) return;
+                        let score = area;
+                        
+                        if (ifr.hasAttribute('allowfullscreen') || 
+                            ifr.hasAttribute('webkitallowfullscreen') || 
+                            ifr.hasAttribute('mozallowfullscreen')) {
+                            score += 10000000; 
+                        }
+                        
+                        if (height > width) {
+                            score = -1; 
+                        }
+
+                        if (score > maxScore) {
+                            maxScore = score;
+                            mainIframe = ifr;
                         }
                     });
 
-                    // THE OLD CODE FULLSCREEN
-                    mainIframe.style.setProperty('position', 'fixed', 'important');
-                    mainIframe.style.setProperty('top', '0px', 'important');
-                    mainIframe.style.setProperty('left', '0px', 'important');
-                    mainIframe.style.setProperty('width', '100vw', 'important');
-                    mainIframe.style.setProperty('height', '100vh', 'important');
-                    mainIframe.style.setProperty('z-index', '2147483645', 'important'); 
-                    mainIframe.style.setProperty('background-color', 'black', 'important');
-                    mainIframe.style.setProperty('border', 'none', 'important');
-                    mainIframe.style.setProperty('opacity', '1', 'important');
-                    mainIframe.style.setProperty('display', 'block', 'important');
-                    mainIframe.style.setProperty('visibility', 'visible', 'important');
+                    if (!mainIframe && iframes.length > 0) {
+                        mainIframe = iframes.find(ifr => 
+                            ifr.getAttribute('allowfullscreen') !== null || 
+                            (ifr.src && (ifr.src.includes('player') || ifr.src.includes('embed') || ifr.src.includes('stream') || ifr.src.includes('watch')))
+                        );
+                    }
 
-                    const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads';
-                    document.querySelectorAll(junkClasses).forEach(el => { try { el.remove(); } catch(e){} });
+                    if (mainIframe) {
+                        iframes.forEach(ifr => {
+                            if (ifr !== mainIframe) {
+                                ifr.style.setProperty('display', 'none', 'important');
+                                ifr.style.setProperty('opacity', '0', 'important');
+                                ifr.style.setProperty('z-index', '-9999', 'important');
+                                
+                                if (ifr.parentNode && ifr.parentNode !== document.body) {
+                                    try { 
+                                        ifr.parentNode.style.setProperty('display', 'none', 'important'); 
+                                        ifr.parentNode.style.setProperty('opacity', '0', 'important');
+                                    } catch(e) {}
+                                }
+                            }
+                        });
+
+                        mainIframe.style.setProperty('position', 'fixed', 'important');
+                        mainIframe.style.setProperty('top', '0px', 'important');
+                        mainIframe.style.setProperty('left', '0px', 'important');
+                        mainIframe.style.setProperty('width', '100vw', 'important');
+                        mainIframe.style.setProperty('height', '100vh', 'important');
+                        mainIframe.style.setProperty('z-index', '2147483645', 'important'); 
+                        mainIframe.style.setProperty('background-color', 'black', 'important');
+                        mainIframe.style.setProperty('border', 'none', 'important');
+                        mainIframe.style.setProperty('opacity', '1', 'important');
+                        mainIframe.style.setProperty('display', 'block', 'important');
+                        mainIframe.style.setProperty('visibility', 'visible', 'important');
+                    }
+
+                    const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay):not(#stream-recovery-overlay):not([class*="player"]):not([class*="jw"]):not([class*="vjs"]), [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"], [id*="notification"]';
+                    document.querySelectorAll(junkClasses).forEach(el => { 
+                        try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
+                    });
+
+                    const adKeywords = ['jerk', 'mate', 'free', 'online', 'adult', 'dating', 'close', 'notification', 'justine', 'paying', 'job'];
+                    document.querySelectorAll('div, section, span, a').forEach(el => {
+                        if (el.id === 'smart-stream-overlay' || el.id === 'stream-recovery-overlay') return;
+                        
+                        const style = window.getComputedStyle(el);
+                        const isFloating = style.position === 'fixed' || style.position === 'absolute';
+                        
+                        if (isFloating && el.innerText) {
+                            const textLower = el.innerText.toLowerCase();
+                            const hasBadKeyword = adKeywords.some(keyword => textLower.includes(keyword));
+                            
+                            if (hasBadKeyword || (parseInt(style.zIndex) > 100000 && !el.querySelector('video') && !el.querySelector('iframe'))) {
+                                try { el.remove(); } catch(e) { el.style.setProperty('display', 'none', 'important'); }
+                            }
+                        }
+                    });
+
                 } catch (err) {}
             }, 500); 
-        }, bestIframeHandle).catch(() => {});
+        }).catch(() => {});
 
-        // Fallback for audio script
-        if (!targetFrame) targetFrame = page.mainFrame();
-
-        // =====================================================================================
-        // 🎥 INNER VIDEO AUDIO & FULLSCREEN (RESTORED OLD CODE)
-        // =====================================================================================
         await targetFrame.evaluate((muteVideo) => {
+            // FIX 1: Use window object to control audio globally to avoid Audio War
             window.isStreamMuted = muteVideo; 
 
             setInterval(() => {
@@ -901,20 +883,14 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     for (const v of videos) {
                         if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; }
                     }
-                    if (!realVideo && videos.length > 0) { realVideo = videos[0]; }
+
+                    if (!realVideo && videos.length > 0) {
+                        realVideo = videos[0];
+                    }
 
                     if (realVideo) { 
                         let playerWrap = realVideo.closest('.jwplayer, #player, .plyr, .vjs-player, .shaka-video-container, [data-player]') || realVideo;
                         
-                        // Break internal CSS Traps
-                        let vNode = playerWrap.parentElement;
-                        while (vNode && vNode !== document.documentElement) {
-                            vNode.style.setProperty('transform', 'none', 'important');
-                            vNode.style.setProperty('contain', 'none', 'important');
-                            vNode = vNode.parentElement;
-                        }
-
-                        // THE OLD CODE FULLSCREEN
                         playerWrap.style.setProperty('position', 'fixed', 'important');
                         playerWrap.style.setProperty('top', '0px', 'important');
                         playerWrap.style.setProperty('left', '0px', 'important');
@@ -1756,7 +1732,6 @@ if (exactDurationMs) {
 }
 
 mainLoop();
-
 
 
 
