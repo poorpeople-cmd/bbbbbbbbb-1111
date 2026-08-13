@@ -5164,206 +5164,688 @@ async function initializeVideo(page, startMuted, isActivePage) {
         // This prevents accidental black-screen behavior.
         // -----------------------------------------------------------------------------
 
-        if (bestIframeHandle) {
+if (bestIframeHandle) {
 
-            await page.evaluate((mainIframe) => {
+    await page.evaluate((mainIframe) => {
 
-                // Prevent duplicate intervals if initializeVideo()
-                // is called repeatedly on the same page.
+        // =========================================================================
+        // 🛡️ PARENT PAGE ISOLATION
+        // =========================================================================
+
+        if (window.__smartIframeIsolationInterval) {
+            clearInterval(
+                window.__smartIframeIsolationInterval
+            );
+
+            window.__smartIframeIsolationInterval = null;
+        }
+
+        const applyParentIsolation = () => {
+
+            try {
+
                 if (
-                    window.__smartIframeIsolationInterval
+                    !mainIframe ||
+                    !mainIframe.isConnected
                 ) {
-
-                    clearInterval(
-                        window.__smartIframeIsolationInterval
-                    );
-
-                    window.__smartIframeIsolationInterval =
-                        null;
+                    return;
                 }
 
-                const applyStreamIsolation = () => {
+                // -----------------------------------------------------------------
+                // Force parent document black
+                // -----------------------------------------------------------------
+                document.documentElement.style.setProperty(
+                    'background',
+                    'black',
+                    'important'
+                );
+
+                document.documentElement.style.setProperty(
+                    'overflow',
+                    'hidden',
+                    'important'
+                );
+
+                if (document.body) {
+
+                    document.body.style.setProperty(
+                        'background',
+                        'black',
+                        'important'
+                    );
+
+                    document.body.style.setProperty(
+                        'overflow',
+                        'hidden',
+                        'important'
+                    );
+
+                    document.body.style.setProperty(
+                        'margin',
+                        '0',
+                        'important'
+                    );
+
+                    document.body.style.setProperty(
+                        'padding',
+                        '0',
+                        'important'
+                    );
+
+                    document.body.style.setProperty(
+                        'width',
+                        '100vw',
+                        'important'
+                    );
+
+                    document.body.style.setProperty(
+                        'height',
+                        '100vh',
+                        'important'
+                    );
+                }
+
+                // -----------------------------------------------------------------
+                // Hide all OTHER top-level iframes
+                // -----------------------------------------------------------------
+                const allIframes =
+                    Array.from(
+                        document.querySelectorAll('iframe')
+                    );
+
+                allIframes.forEach(ifr => {
+
+                    if (ifr === mainIframe) {
+                        return;
+                    }
 
                     try {
 
-                        if (
-                            !mainIframe ||
-                            !mainIframe.isConnected
-                        ) {
-                            return;
-                        }
-
-                        document.documentElement.style.setProperty(
-                            'background-color',
-                            'black',
+                        ifr.style.setProperty(
+                            'display',
+                            'none',
                             'important'
                         );
 
-                        if (document.body) {
-
-                            document.body.style.setProperty(
-                                'background-color',
-                                'black',
-                                'important'
-                            );
-
-                            document.body.style.setProperty(
-                                'overflow',
-                                'hidden',
-                                'important'
-                            );
-                        }
-
-                        document.documentElement.style.setProperty(
-                            'overflow',
+                        ifr.style.setProperty(
+                            'visibility',
                             'hidden',
                             'important'
                         );
 
-                        // ---------------------------------------------------------
-                        // Hide only OTHER top-level iframes
-                        // ---------------------------------------------------------
-                        const allIframes =
-                            Array.from(
-                                document.querySelectorAll('iframe')
-                            );
+                        ifr.style.setProperty(
+                            'opacity',
+                            '0',
+                            'important'
+                        );
 
-                        allIframes.forEach(ifr => {
+                        ifr.style.setProperty(
+                            'pointer-events',
+                            'none',
+                            'important'
+                        );
 
-                            if (ifr === mainIframe) {
-                                return;
+                        ifr.style.setProperty(
+                            'z-index',
+                            '-9999',
+                            'important'
+                        );
+
+                    } catch (e) {}
+                });
+
+                // -----------------------------------------------------------------
+                // Make verified top-level iframe FULL VIEWPORT
+                // -----------------------------------------------------------------
+                mainIframe.style.setProperty(
+                    'position',
+                    'fixed',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'inset',
+                    '0px',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'width',
+                    '100vw',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'height',
+                    '100vh',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'min-width',
+                    '100vw',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'min-height',
+                    '100vh',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'max-width',
+                    'none',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'max-height',
+                    'none',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'margin',
+                    '0',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'padding',
+                    '0',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'border',
+                    '0',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'display',
+                    'block',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'visibility',
+                    'visible',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'opacity',
+                    '1',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'z-index',
+                    '2147483645',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'background',
+                    'black',
+                    'important'
+                );
+
+                mainIframe.style.setProperty(
+                    'overflow',
+                    'hidden',
+                    'important'
+                );
+
+            } catch (err) {}
+        };
+
+        applyParentIsolation();
+
+        window.__smartIframeIsolationInterval =
+            setInterval(
+                applyParentIsolation,
+                500
+            );
+
+    }, bestIframeHandle).catch(() => {});
+}
+
+
+// =============================================================================
+// 🎥 FINAL INNER-PLAYER FULLSCREEN ENGINE
+// IMPORTANT:
+// The parent page cannot style elements inside an iframe.
+// Therefore we MUST style the already-verified targetFrame directly.
+// =============================================================================
+
+if (targetFrame) {
+
+    try {
+
+        await targetFrame.evaluate(() => {
+
+            // Prevent duplicate fullscreen intervals
+            if (window.__smartVideoFullscreenInterval) {
+                clearInterval(
+                    window.__smartVideoFullscreenInterval
+                );
+
+                window.__smartVideoFullscreenInterval = null;
+            }
+
+            // ---------------------------------------------------------------------
+            // Find the actual strongest visible video
+            // ---------------------------------------------------------------------
+            const findBestVideo = () => {
+
+                const videos =
+                    Array.from(
+                        document.querySelectorAll('video')
+                    ).filter(video => {
+
+                        const style =
+                            window.getComputedStyle(video);
+
+                        return (
+                            video.clientWidth >= 50 &&
+                            video.clientHeight >= 50 &&
+                            style.display !== 'none' &&
+                            style.visibility !== 'hidden' &&
+                            style.opacity !== '0' &&
+                            !video.ended
+                        );
+                    });
+
+                if (!videos.length) {
+                    return null;
+                }
+
+                return videos.sort(
+                    (a, b) =>
+                        (b.clientWidth * b.clientHeight) -
+                        (a.clientWidth * a.clientHeight)
+                )[0];
+            };
+
+            // ---------------------------------------------------------------------
+            // Fullscreen the actual player inside the iframe
+            // ---------------------------------------------------------------------
+            const applyInnerFullscreen = () => {
+
+                try {
+
+                    const video = findBestVideo();
+
+                    if (!video) {
+                        return;
+                    }
+
+                    // -------------------------------------------------------------
+                    // Force document itself to viewport
+                    // -------------------------------------------------------------
+                    document.documentElement.style.setProperty(
+                        'width',
+                        '100%',
+                        'important'
+                    );
+
+                    document.documentElement.style.setProperty(
+                        'height',
+                        '100%',
+                        'important'
+                    );
+
+                    document.documentElement.style.setProperty(
+                        'margin',
+                        '0',
+                        'important'
+                    );
+
+                    document.documentElement.style.setProperty(
+                        'padding',
+                        '0',
+                        'important'
+                    );
+
+                    document.documentElement.style.setProperty(
+                        'background',
+                        'black',
+                        'important'
+                    );
+
+                    document.documentElement.style.setProperty(
+                        'overflow',
+                        'hidden',
+                        'important'
+                    );
+
+                    if (document.body) {
+
+                        document.body.style.setProperty(
+                            'width',
+                            '100%',
+                            'important'
+                        );
+
+                        document.body.style.setProperty(
+                            'height',
+                            '100%',
+                            'important'
+                        );
+
+                        document.body.style.setProperty(
+                            'margin',
+                            '0',
+                            'important'
+                        );
+
+                        document.body.style.setProperty(
+                            'padding',
+                            '0',
+                            'important'
+                        );
+
+                        document.body.style.setProperty(
+                            'background',
+                            'black',
+                            'important'
+                        );
+
+                        document.body.style.setProperty(
+                            'overflow',
+                            'hidden',
+                            'important'
+                        );
+                    }
+
+                    // -------------------------------------------------------------
+                    // Find the real player wrapper
+                    // -------------------------------------------------------------
+                    let playerWrapper =
+                        video.closest(
+                            [
+                                '.jwplayer',
+                                '#player',
+                                '.plyr',
+                                '.plyr--video',
+                                '.vjs-player',
+                                '.video-js',
+                                '.shaka-video-container',
+                                '.html5-video-player',
+                                '[data-player]',
+                                '[class*="player"]'
+                            ].join(',')
+                        );
+
+                    // If no known wrapper is found,
+                    // climb ancestors conservatively.
+                    if (!playerWrapper) {
+
+                        let current = video.parentElement;
+
+                        let levels = 0;
+
+                        while (
+                            current &&
+                            current !== document.body &&
+                            levels < 4
+                        ) {
+
+                            const rect =
+                                current.getBoundingClientRect();
+
+                            if (
+                                rect.width >=
+                                    video.clientWidth * 0.85 &&
+                                rect.height >=
+                                    video.clientHeight * 0.85
+                            ) {
+
+                                playerWrapper = current;
                             }
 
-                            try {
+                            current = current.parentElement;
+                            levels++;
+                        }
+                    }
 
-                                ifr.style.setProperty(
-                                    'display',
-                                    'none',
-                                    'important'
-                                );
+                    // -------------------------------------------------------------
+                    // Fullscreen the player wrapper
+                    // -------------------------------------------------------------
+                    if (playerWrapper) {
 
-                                ifr.style.setProperty(
-                                    'opacity',
-                                    '0',
-                                    'important'
-                                );
-
-                                ifr.style.setProperty(
-                                    'visibility',
-                                    'hidden',
-                                    'important'
-                                );
-
-                                ifr.style.setProperty(
-                                    'z-index',
-                                    '-9999',
-                                    'important'
-                                );
-
-                            } catch (e) {}
-                        });
-
-                        // ---------------------------------------------------------
-                        // Maximize ONLY the verified iframe
-                        // ---------------------------------------------------------
-                        mainIframe.style.setProperty(
+                        playerWrapper.style.setProperty(
                             'position',
                             'fixed',
                             'important'
                         );
 
-                        mainIframe.style.setProperty(
-                            'top',
+                        playerWrapper.style.setProperty(
+                            'inset',
                             '0px',
                             'important'
                         );
 
-                        mainIframe.style.setProperty(
-                            'left',
-                            '0px',
-                            'important'
-                        );
-
-                        mainIframe.style.setProperty(
+                        playerWrapper.style.setProperty(
                             'width',
                             '100vw',
                             'important'
                         );
 
-                        mainIframe.style.setProperty(
+                        playerWrapper.style.setProperty(
                             'height',
                             '100vh',
                             'important'
                         );
 
-                        mainIframe.style.setProperty(
-                            'z-index',
-                            '2147483645',
+                        playerWrapper.style.setProperty(
+                            'min-width',
+                            '100vw',
                             'important'
                         );
 
-                        mainIframe.style.setProperty(
-                            'background-color',
-                            'black',
+                        playerWrapper.style.setProperty(
+                            'min-height',
+                            '100vh',
                             'important'
                         );
 
-                        mainIframe.style.setProperty(
-                            'border',
+                        playerWrapper.style.setProperty(
+                            'max-width',
                             'none',
                             'important'
                         );
 
-                        mainIframe.style.setProperty(
-                            'opacity',
-                            '1',
+                        playerWrapper.style.setProperty(
+                            'max-height',
+                            'none',
                             'important'
                         );
 
-                        mainIframe.style.setProperty(
+                        playerWrapper.style.setProperty(
+                            'margin',
+                            '0',
+                            'important'
+                        );
+
+                        playerWrapper.style.setProperty(
+                            'padding',
+                            '0',
+                            'important'
+                        );
+
+                        playerWrapper.style.setProperty(
+                            'border',
+                            '0',
+                            'important'
+                        );
+
+                        playerWrapper.style.setProperty(
+                            'background',
+                            'black',
+                            'important'
+                        );
+
+                        playerWrapper.style.setProperty(
+                            'overflow',
+                            'hidden',
+                            'important'
+                        );
+
+                        playerWrapper.style.setProperty(
+                            'z-index',
+                            '2147483646',
+                            'important'
+                        );
+
+                        playerWrapper.style.setProperty(
                             'display',
                             'block',
                             'important'
                         );
+                    }
 
-                        mainIframe.style.setProperty(
-                            'visibility',
-                            'visible',
-                            'important'
-                        );
-
-                        // Conservative UI cleanup only.
-                        // Do NOT destroy generic overlays/popups here.
-                        // Those can belong to legitimate player UI.
-                        const junkSelectors =
-                            '.chat, #chat, header, footer, .sidebar, .banner, .ads';
-
-                        document
-                            .querySelectorAll(
-                                junkSelectors
-                            )
-                            .forEach(el => {
-
-                                try {
-                                    el.remove();
-                                } catch (e) {}
-                            });
-
-                    } catch (err) {}
-                };
-
-                // Apply immediately
-                applyStreamIsolation();
-
-                // Keep verified iframe fullscreen if page layout changes.
-                window.__smartIframeIsolationInterval =
-                    setInterval(
-                        applyStreamIsolation,
-                        500
+                    // -------------------------------------------------------------
+                    // Fullscreen actual VIDEO element
+                    // -------------------------------------------------------------
+                    video.style.setProperty(
+                        'position',
+                        'absolute',
+                        'important'
                     );
 
-            }, bestIframeHandle).catch(() => {});
-        }
+                    video.style.setProperty(
+                        'inset',
+                        '0px',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'width',
+                        '100%',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'height',
+                        '100%',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'min-width',
+                        '100%',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'min-height',
+                        '100%',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'max-width',
+                        'none',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'max-height',
+                        'none',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'margin',
+                        '0',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'padding',
+                        '0',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'border',
+                        '0',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'display',
+                        'block',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'visibility',
+                        'visible',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'opacity',
+                        '1',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'background',
+                        'black',
+                        'important'
+                    );
+
+                    // Preserve full video without cropping.
+                    video.style.setProperty(
+                        'object-fit',
+                        'contain',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'object-position',
+                        'center center',
+                        'important'
+                    );
+
+                    video.style.setProperty(
+                        'z-index',
+                        '2147483646',
+                        'important'
+                    );
+
+                } catch (err) {}
+            };
+
+            // Apply immediately
+            applyInnerFullscreen();
+
+            // Re-apply because many players rebuild their DOM
+            window.__smartVideoFullscreenInterval =
+                setInterval(
+                    applyInnerFullscreen,
+                    500
+                );
+
+        });
+
+        console.log(
+            '[✅] INNER VIDEO FULLSCREEN ENGINE ACTIVATED.'
+        );
+
+    } catch (e) {
+
+        console.log(
+            `[⚠️] Inner video fullscreen setup failed safely: ${e.message}`
+        );
+    }
+}
 
         // -----------------------------------------------------------------------------
         // IMPORTANT FALLBACK FOR THE EXISTING AUDIO / PLAYER CONTROL BLOCK BELOW
