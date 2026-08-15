@@ -928,7 +928,7 @@ async function checkPageStatus(page) {
                             targetV = videos.sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
                         }
                         
-                        // FIX 1: Humne "&& targetV.currentTime > 0" hata diya hai
+                        // FIX 1: Removed 'targetV.currentTime > 0'
                         if (targetV && !targetV.ended) {
                             let frames = 0;
                             if (targetV.getVideoPlaybackQuality) {
@@ -940,10 +940,8 @@ async function checkPageStatus(page) {
                         }
                         return { status: 'DEAD' };
                     }),
-                    // FIX 2: 2500 ki jagah 4000 timeout laga diya hai taake CPU slow hone pe code crash na ho
+                    // FIX 2: Increased timeout to 4000ms
                     new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000))
-                ]);
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
                 ]);
                 if (result && result.status !== 'DEAD') return result;
             } catch (err) {}
