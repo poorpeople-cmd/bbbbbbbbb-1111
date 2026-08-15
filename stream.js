@@ -318,6 +318,15 @@ async function setupNetworkAdBlocker(page) {
 async function applyPreloadFirewall(page) {
     if (!page) return;
     try {
+        // 🛠️ FIX: Bypassing "Access Denied" by faking the Referer & Origin Headers
+        try {
+            let baseDomain = new URL(urlList[0].url).origin;
+            await page.setExtraHTTPHeaders({
+                'Referer': baseDomain + '/',
+                'Origin': baseDomain
+            });
+        } catch(e) {}
+
         await page.evaluateOnNewDocument(() => {
             const originalAttachShadow = Element.prototype.attachShadow;
             Element.prototype.attachShadow = function(init) {
