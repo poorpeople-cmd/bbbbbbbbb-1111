@@ -315,13 +315,9 @@ async function showLoadingUI(page, title, sub) {
 async function hideLoadingUI(page) {
     try {
         await page.evaluate(() => {
-            const overlay = document.getElementById('smart-stream-overlay');
-            if (overlay) {
-                overlay.style.setProperty('display', 'none', 'important');
-                overlay.style.setProperty('opacity', '0', 'important');
-                overlay.style.setProperty('z-index', '-9999', 'important');
-                overlay.remove();
-            }
+            // Destroys any stuck loading overlays permanently
+            const overlays = document.querySelectorAll('#smart-stream-overlay');
+            overlays.forEach(overlay => overlay.remove());
         });
     } catch (e) {}
 }
@@ -452,16 +448,24 @@ async function forcePlayerFullscreen(page) {
 }
 
 // 🛡️ NEW: Advanced Visual Readiness Verification (Checks actual Video Element & Playback)
+// 🛡️ FIXED: Advanced Visual Readiness Verification (Searches ALL frames)
 async function waitForActiveVisualReady(page) {
     if (!page) return false;
     let readyCount = 0;
     for (let i = 0; i < 40; i++) { // Max 20 seconds wait (500ms intervals)
         try {
-            let isReady = await page.evaluate(() => {
-                let v = document.querySelector('video');
-                // Strict check: Must have width, not be paused, and have started playing.
-                return (v && v.clientWidth > window.innerWidth * 0.5 && !v.paused && v.currentTime > 0);
-            });
+            let isReady = false;
+            for (const frame of page.frames()) {
+                try {
+                    if (frame.isDetached()) continue;
+                    const frameReady = await frame.evaluate(() => {
+                        let v = document.querySelector('video');
+                        // Video element exists, has size, and is actively playing
+                        return (v && v.clientWidth > 50 && !v.paused && v.currentTime > 0);
+                    });
+                    if (frameReady) { isReady = true; break; }
+                } catch(err) {}
+            }
 
             if (isReady) readyCount++; else readyCount = 0;
             if (readyCount >= 3) return true; // 3 consecutive passes required!
@@ -875,22 +879,20 @@ async function startWatchdog() {
         }
 
 if (activeStatus.status === 'HEALTHY') {
-            // 🛡️ FIX: Removed 'isFrameStuck'. Now relying ONLY on 'currentTime' moving.
             let isTimeStuck = (lastActiveTime !== -1 && activeStatus.currentTime === lastActiveTime);
 
             if (isTimeStuck) {
                 if (!isRecoveryUIShown) { await showRecoveryUI(activePage); isRecoveryUIShown = true; }
-                if (Date.now() - frozenCheckTimestamp > activeHangThresholdMs) { 
-                    activeStatus.status = 'FROZEN'; 
-                    isRecoveryUIShown = false; 
-                }
+                if (Date.now() - frozenCheckTimestamp > activeHangThresholdMs) { activeStatus.status = 'FROZEN'; isRecoveryUIShown = false; }
             } else {
-                lastActiveTime = activeStatus.currentTime; 
-                frozenCheckTimestamp = Date.now();
-                if (isRecoveryUIShown) { 
-                    await hideRecoveryUI(activePage); 
-                    isRecoveryUIShown = false; 
-                }
+                lastActiveTime = activeStatus.currentTime; lastDecodedFrames = activeStatus.decodedFrames; frozenCheckTimestamp = Date.now();
+                
+                // Remove Recovery UI
+                if (isRecoveryUIShown) { await hideRecoveryUI(activePage); isRecoveryUIShown = false; }
+                
+                // 🛡️ BULLETPROOF FALLBACK: Force remove Loading UI if stream is actually healthy
+                await hideLoadingUI(activePage); 
+
                 for (const frame of activePage.frames()) {
                     try {
                         if (!frame.isDetached()) {
