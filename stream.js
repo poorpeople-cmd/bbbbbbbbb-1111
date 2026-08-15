@@ -318,15 +318,6 @@ async function setupNetworkAdBlocker(page) {
 async function applyPreloadFirewall(page) {
     if (!page) return;
     try {
-        // 🛠️ FIX: Bypassing "Access Denied" by faking the Referer & Origin Headers
-        try {
-            let baseDomain = new URL(urlList[0].url).origin;
-            await page.setExtraHTTPHeaders({
-                'Referer': baseDomain + '/',
-                'Origin': baseDomain
-            });
-        } catch(e) {}
-
         await page.evaluateOnNewDocument(() => {
             const originalAttachShadow = Element.prototype.attachShadow;
             Element.prototype.attachShadow = function(init) {
@@ -904,79 +895,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
 
 
-async function checkPageStatus(page) {
-    if (!page) return { status: 'DEAD' };
-    try {
-        for (const frame of page.frames()) {
-            try {
-                if (frame.isDetached()) continue;
-                const result = await Promise.race([
-                    frame.evaluate(() => {
-                        const bodyText = document.body ? document.body.innerText.toLowerCase() : "";
-                        
-                        // 🛠️ FIX 1: HLS Error Detection & "Ctrl + R" (Page Reload)
-                        if (
-                            bodyText.includes("hls:networkerror_manifestloaderror") || 
-                            bodyText.includes("could not play video") ||
-                            bodyText.includes("problem trying to load the video")
-                        ) {
-                            // 1 second ka time de kar automatically page ko refresh (Ctrl+R) kar dega
-                            setTimeout(() => {
-                                window.location.reload(true);
-                            }, 1000);
-                            
-                            return { status: 'HLS_RECOVERING', currentTime: 0, decodedFrames: 0 };
-                        }
-
-                        // Critical Errors Check
-                        if (
-                            bodyText.includes("stream error") || 
-                            bodyText.includes("not found") || 
-                            bodyText.includes("domain is blocked") ||
-                            bodyText.includes("error: forbidden") ||
-                            bodyText.includes("does not have permission") ||
-                            bodyText.includes("access denied") ||
-                            (bodyText.includes("cloudflare") && bodyText.includes("blocked"))
-                        ) {
-                            return { status: 'CRITICAL_ERROR' };
-                        }
-                        
-                        const videos = Array.from(document.querySelectorAll('video'));
-                        let targetV = null;
-
-                        for (const v of videos) {
-                            if (v.clientWidth > 0 && v.clientWidth < 100) continue;
-                            if ((v.src && v.src.startsWith('blob:')) || v.matches('.jw-video, .plyr__video, .vjs-tech')) {
-                                targetV = v; break;
-                            }
-                        }
-                        
-                        if (!targetV && videos.length > 0) {
-                            targetV = videos.sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
-                        }
-                        
-                        // 🛠️ FIX 2: Prevent fake DEAD by allowing targetV.currentTime to be 0 (buffering)
-                        if (targetV && !targetV.ended) {
-                            let frames = 0;
-                            if (targetV.getVideoPlaybackQuality) {
-                                frames = targetV.getVideoPlaybackQuality().totalVideoFrames;
-                            } else if (targetV.webkitDecodedFrameCount !== undefined) {
-                                frames = targetV.webkitDecodedFrameCount;
-                            }
-                            return { status: 'HEALTHY', currentTime: targetV.currentTime, decodedFrames: frames };
-                        }
-                        return { status: 'DEAD' };
-                    }),
-                    // 🛠️ FIX 3: Timeout at 4000ms
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000))
-                ]);
-                if (result && result.status !== 'DEAD') return result;
-            } catch (err) {}
-        }
-    } catch (e) { return { status: 'DEAD' }; }
-    return { status: 'DEAD' };
-}
-
 // async function checkPageStatus(page) {
 //     if (!page) return { status: 'DEAD' };
 //     try {
@@ -987,22 +905,21 @@ async function checkPageStatus(page) {
 //                     frame.evaluate(() => {
 //                         const bodyText = document.body ? document.body.innerText.toLowerCase() : "";
                         
-//                         // 🛠️ FIX 1: HLS Manifest Error Detection & Auto-Recovery Click
+//                         // 🛠️ FIX 1: HLS Error Detection & "Ctrl + R" (Page Reload)
 //                         if (
 //                             bodyText.includes("hls:networkerror_manifestloaderror") || 
 //                             bodyText.includes("could not play video") ||
 //                             bodyText.includes("problem trying to load the video")
 //                         ) {
-//                             const reloadElements = document.querySelectorAll('button, div, span, a, i');
-//                             reloadElements.forEach(el => {
-//                                 const className = (el.className || '').toLowerCase();
-//                                 if (className.includes('reload') || className.includes('refresh') || className.includes('retry')) {
-//                                     try { el.click(); } catch(e) {}
-//                                 }
-//                             });
+//                             // 1 second ka time de kar automatically page ko refresh (Ctrl+R) kar dega
+//                             setTimeout(() => {
+//                                 window.location.reload(true);
+//                             }, 1000);
+                            
 //                             return { status: 'HLS_RECOVERING', currentTime: 0, decodedFrames: 0 };
 //                         }
 
+//                         // Critical Errors Check
 //                         if (
 //                             bodyText.includes("stream error") || 
 //                             bodyText.includes("not found") || 
@@ -1029,7 +946,7 @@ async function checkPageStatus(page) {
 //                             targetV = videos.sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
 //                         }
                         
-//                         // 🛠️ FIX 2: Removed "targetV.currentTime > 0" to stop fake DEAD triggers on buffer
+//                         // 🛠️ FIX 2: Prevent fake DEAD by allowing targetV.currentTime to be 0 (buffering)
 //                         if (targetV && !targetV.ended) {
 //                             let frames = 0;
 //                             if (targetV.getVideoPlaybackQuality) {
@@ -1041,7 +958,7 @@ async function checkPageStatus(page) {
 //                         }
 //                         return { status: 'DEAD' };
 //                     }),
-//                     // 🛠️ FIX 3: Increased Promise timeout to 4000ms for stable background evaluation
+//                     // 🛠️ FIX 3: Timeout at 4000ms
 //                     new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000))
 //                 ]);
 //                 if (result && result.status !== 'DEAD') return result;
@@ -1050,6 +967,80 @@ async function checkPageStatus(page) {
 //     } catch (e) { return { status: 'DEAD' }; }
 //     return { status: 'DEAD' };
 // }
+
+async function checkPageStatus(page) {
+    if (!page) return { status: 'DEAD' };
+    try {
+        for (const frame of page.frames()) {
+            try {
+                if (frame.isDetached()) continue;
+                const result = await Promise.race([
+                    frame.evaluate(() => {
+                        const bodyText = document.body ? document.body.innerText.toLowerCase() : "";
+                        
+                        // 🛠️ FIX 1: HLS Manifest Error Detection & Auto-Recovery Click
+                        if (
+                            bodyText.includes("hls:networkerror_manifestloaderror") || 
+                            bodyText.includes("could not play video") ||
+                            bodyText.includes("problem trying to load the video")
+                        ) {
+                            const reloadElements = document.querySelectorAll('button, div, span, a, i');
+                            reloadElements.forEach(el => {
+                                const className = (el.className || '').toLowerCase();
+                                if (className.includes('reload') || className.includes('refresh') || className.includes('retry')) {
+                                    try { el.click(); } catch(e) {}
+                                }
+                            });
+                            return { status: 'HLS_RECOVERING', currentTime: 0, decodedFrames: 0 };
+                        }
+
+                        if (
+                            bodyText.includes("stream error") || 
+                            bodyText.includes("not found") || 
+                            bodyText.includes("domain is blocked") ||
+                            bodyText.includes("error: forbidden") ||
+                            bodyText.includes("does not have permission") ||
+                            bodyText.includes("access denied") ||
+                            (bodyText.includes("cloudflare") && bodyText.includes("blocked"))
+                        ) {
+                            return { status: 'CRITICAL_ERROR' };
+                        }
+                        
+                        const videos = Array.from(document.querySelectorAll('video'));
+                        let targetV = null;
+
+                        for (const v of videos) {
+                            if (v.clientWidth > 0 && v.clientWidth < 100) continue;
+                            if ((v.src && v.src.startsWith('blob:')) || v.matches('.jw-video, .plyr__video, .vjs-tech')) {
+                                targetV = v; break;
+                            }
+                        }
+                        
+                        if (!targetV && videos.length > 0) {
+                            targetV = videos.sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
+                        }
+                        
+                        // 🛠️ FIX 2: Removed "targetV.currentTime > 0" to stop fake DEAD triggers on buffer
+                        if (targetV && !targetV.ended) {
+                            let frames = 0;
+                            if (targetV.getVideoPlaybackQuality) {
+                                frames = targetV.getVideoPlaybackQuality().totalVideoFrames;
+                            } else if (targetV.webkitDecodedFrameCount !== undefined) {
+                                frames = targetV.webkitDecodedFrameCount;
+                            }
+                            return { status: 'HEALTHY', currentTime: targetV.currentTime, decodedFrames: frames };
+                        }
+                        return { status: 'DEAD' };
+                    }),
+                    // 🛠️ FIX 3: Increased Promise timeout to 4000ms for stable background evaluation
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000))
+                ]);
+                if (result && result.status !== 'DEAD') return result;
+            } catch (err) {}
+        }
+    } catch (e) { return { status: 'DEAD' }; }
+    return { status: 'DEAD' };
+}
 
 async function startWatchdog() {
     let lastActiveTime = -1;
