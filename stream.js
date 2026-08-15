@@ -354,7 +354,14 @@ async function showRecoveryUI(page) {
 }
 
 async function hideRecoveryUI(page) {
-    try { await page.evaluate(() => { const overlay = document.getElementById('stream-recovery-overlay'); if (overlay) { overlay.style.setProperty('display', 'none', 'important'); } }); } catch (e) {}
+    try { 
+        await page.evaluate(() => { 
+            const overlay = document.getElementById('stream-recovery-overlay'); 
+            if (overlay) { 
+                overlay.remove(); // Completely destroys the overlay element
+            } 
+        }); 
+    } catch (e) {}
 }
 
 function setupOBSConfig() {
@@ -867,16 +874,23 @@ async function startWatchdog() {
             if (elapsedMs > FORCE_REFRESH_MS) { if (!isExempted) { activeStatus.status = 'FORCE_REFRESH'; } }
         }
 
-        if (activeStatus.status === 'HEALTHY') {
-            let isTimeStuck = (activeStatus.currentTime === lastActiveTime);
-            let isFrameStuck = (activeStatus.decodedFrames === lastDecodedFrames && activeStatus.decodedFrames > 0);
+if (activeStatus.status === 'HEALTHY') {
+            // 🛡️ FIX: Removed 'isFrameStuck'. Now relying ONLY on 'currentTime' moving.
+            let isTimeStuck = (lastActiveTime !== -1 && activeStatus.currentTime === lastActiveTime);
 
-            if (isTimeStuck || isFrameStuck) {
+            if (isTimeStuck) {
                 if (!isRecoveryUIShown) { await showRecoveryUI(activePage); isRecoveryUIShown = true; }
-                if (Date.now() - frozenCheckTimestamp > activeHangThresholdMs) { activeStatus.status = 'FROZEN'; isRecoveryUIShown = false; }
+                if (Date.now() - frozenCheckTimestamp > activeHangThresholdMs) { 
+                    activeStatus.status = 'FROZEN'; 
+                    isRecoveryUIShown = false; 
+                }
             } else {
-                lastActiveTime = activeStatus.currentTime; lastDecodedFrames = activeStatus.decodedFrames; frozenCheckTimestamp = Date.now();
-                if (isRecoveryUIShown) { await hideRecoveryUI(activePage); isRecoveryUIShown = false; }
+                lastActiveTime = activeStatus.currentTime; 
+                frozenCheckTimestamp = Date.now();
+                if (isRecoveryUIShown) { 
+                    await hideRecoveryUI(activePage); 
+                    isRecoveryUIShown = false; 
+                }
                 for (const frame of activePage.frames()) {
                     try {
                         if (!frame.isDetached()) {
