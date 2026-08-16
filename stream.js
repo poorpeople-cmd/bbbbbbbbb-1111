@@ -1,4 +1,4 @@
-// chatgpt sigle link code streamed work
+
 
 
 const puppeteer = require('puppeteer-extra');
@@ -12,32 +12,29 @@ const { spawn, execSync, exec } = require('child_process');
 const { OBSWebSocket } = require('obs-websocket-js'); 
 
 // =========================================================================================
-// 🛡️ GLOBAL CRASH PREVENTION SHIELD (2026 LATEST FIX)
+// 🛡️ GLOBAL CRASH PREVENTION SHIELD (DEBUGGING MODE)
 // =========================================================================================
 process.on('uncaughtException', (err) => {
-    if (err.message && err.message.includes('Requesting main frame too early')) {
-        console.log(`[🛡️] SYSTEM SHIELD: Ignored stealth plugin background frame error.`);
-    } else {
-        console.log(`[⚠️] IGNORED UNCAUGHT EXCEPTION: ${err.message}`);
-    }
+    console.error('\n========================================');
+    console.error('[💥] UNCAUGHT EXCEPTION');
+    console.error(err);
+    console.error(err.stack);
+    console.error('========================================\n');
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-    let msg = reason && reason.message ? reason.message : reason;
-    if (msg && msg.includes('Protocol error')) {
-        console.log(`[🛡️] SYSTEM SHIELD: Ignored detached frame protocol error.`);
-    } else {
-        console.log(`[⚠️] IGNORED UNHANDLED REJECTION: ${msg}`);
-    }
+process.on('unhandledRejection', (reason) => {
+    console.error('\n========================================');
+    console.error('[💥] UNHANDLED REJECTION');
+    console.error(reason);
+    console.error('========================================\n');
 });
-// =========================================================================================
 
 const obs = new OBSWebSocket(); 
 
 // =========================================================================================
 // ⏱️ BIG VARIABLE: FORCE AUTO-REFRESH TIME (IN MINUTES)
 // =========================================================================================
-const FORCE_REFRESH_MINUTES = 40; 
+const FORCE_REFRESH_MINUTES = 40000; 
 const FORCE_REFRESH_MS = FORCE_REFRESH_MINUTES * 60 * 1000;
 
 // =========================================================================================
@@ -47,7 +44,8 @@ const NO_REFRESH_DOMAINS = [
     'youtube.com',
     'facebook.com',
     'streamed.pk',
-    'cricstreams.', // crichd
+    'cricstreams.', 
+    'sport4u.online',
     'website-vercel-helper-d-jaja-3-2.vercel.app',
     'websitestream.netlify.app/?ch=Channel%20HD%2071'
 ];
@@ -91,16 +89,7 @@ const STREAM_KEYS = {
     's1.8'  : '14204395527727_14846438017583_s2jlti7lsm',
     's1.9'  : '14204411387439_14846464887343_f5lxgcqj5y',
     's1.10' : '14204424691247_14846487562799_xmbvntt6wa',
-
     's2.1'  : '14204490948143_14846603495983_kzevn36tii',
-    's2.2'  : '14204506742319_14846634494511_ta2rxyg2oy',
-    's2.3'  : '14204523322927_14846661233199_foqb3q7zb4',
-    's2.4'  : '14204540034607_14846689085999_gjejdie4uy',
-    's2.5'  : '14204555304495_14846715497007_zdanghuxzu',
-    's2.6'  : '14204565200431_14846734371375_ap3bqpabpu',
-    's2.7'  : '14204577259055_14846756194863_3ecad2535u',
-    's2.8'  : '14204592528943_14846785227311_4hjl46y62e',
-    's2.9'  : '14204602621487_14846802594351_ilnp6lxekq',
     's2.10' : '14206184136239_14849618610735_ihnbx7hkoi'
 };
 
@@ -116,13 +105,36 @@ else { RES_W = 1920; RES_H = 1080; BITRATE = 6000; }
 console.log(`[🚀] Smart Engine Locked to: ${RES_W}x${RES_H} @ ${BITRATE}kbps`);
 console.log(`[⏱️] Auto-Refresh Time Set To: ${FORCE_REFRESH_MINUTES} Minutes`);
 
+// =========================================================================================
+// 🔄 DYNAMIC URL PARSER & METADATA EXTRACTOR
+// =========================================================================================
 let rawUrls = (process.env.TARGET_URLS || '').trim();
-let urlList = rawUrls !== '' 
-    ? rawUrls.split(',').map(u => u.trim().startsWith('http') ? u.trim() : 'https://' + u.trim()) 
-    : ['https://dadocric.st/player.php?id=starsp3&v=m'];
+let urlList = [];
+
+if (rawUrls !== '') {
+    urlList = rawUrls.split(',').map(u => {
+        let trimmed = u.trim();
+        let hangThreshold = 8000; 
+        if (trimmed.startsWith('!')) { hangThreshold = 20000; trimmed = trimmed.substring(1); }
+        if (!trimmed.startsWith('http')) trimmed = 'https://' + trimmed;
+        return { url: trimmed, hangTime: hangThreshold };
+    });
+} else {
+    urlList = [
+        { url: 'https://sport4u.online', hangTime: 8000 },
+        { url: 'https://dadocric.st/player.php?id=starsp3&v=m', hangTime: 8000 }
+    ];
+}
+
+function getSafeBackupIndex(activeIndex, currentIndex, list) {
+    if (list.length <= 1) return 0; 
+    let next = (currentIndex + 1) % list.length;
+    if (next === activeIndex) next = (next + 1) % list.length; 
+    return next;
+}
 
 let currentUrlIndex = 0;
-let backupUrlIndex = urlList.length > 1 ? 1 : 0; 
+let backupUrlIndex = getSafeBackupIndex(currentUrlIndex, currentUrlIndex, urlList);
 
 const SELECTED_CHANNEL = process.env.OKRU_STREAM_ID || '1';
 const SERVER_SELECTION = process.env.SERVER_SELECTION || 'None'; 
@@ -130,20 +142,119 @@ const PROXY_ENGINE = process.env.PROXY_ENGINE || 'Cloudflare WARP (Recommended)'
 
 const ACTIVE_STREAM_KEY = STREAM_KEYS[SELECTED_CHANNEL] || STREAM_KEYS['1'];
 
-let browser = null;
+let browserArgs = []; 
+let activeBrowser = null;
+let backupBrowser = null;
+let activeBrowserName = "CHROME 1";
+let backupBrowserName = "CHROME 2";
 let obsProcess = null;
 let activePage = null;
 let backupPage = null;
 
-const FROZEN_THRESHOLD_MS = 8000; 
-
-if (!fs.existsSync('./screenshots')) fs.mkdirSync('./screenshots');
-let pendingScreenshots = [];
-let uploadCycleCount = 0;
+async function createBrowserInstance(args) {
+    return await puppeteer.launch({
+        headless: false, 
+        defaultViewport: { width: RES_W, height: RES_H },
+        ignoreDefaultArgs: ['--enable-automation'], 
+        args: args
+    });
+}
 
 // =========================================================================================
-// 🛡️ ADVANCED NETWORK INTELLIGENCE & NAVIGATION SHIELD
+// 🛡️ SMART BROWSER RECOVERY & FIREWALL
 // =========================================================================================
+async function preparePage(page) {
+    if (!page) return;
+
+    // =========================================================
+    // 🛡️ NEW: BOT-DETECTION & BLACK SCREEN BYPASS (HEADERS)
+    // =========================================================
+    try {
+        // 1. Spoof a very standard, modern Windows Chrome User-Agent
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        
+        // 2. Inject fake headers so the server thinks we came from their main site
+        await page.setExtraHTTPHeaders({
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://w2.sportsonlinee.click/', // Tricks the server!
+            'Origin': 'https://w2.sportsonlinee.click',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin'
+        });
+    } catch(e) {}
+    // =========================================================
+
+    // =========================================================
+    // 🛡️ ANTI-DEVTOOLS & DEBUGGER TRAP BYPASS (Pichla Fix)
+    // =========================================================
+    try {
+        const client = await page.target().createCDPSession();
+        await client.send('Debugger.enable');
+        await client.send('Debugger.setBreakpointsActive', { active: false });
+    } catch (e) {
+        console.log('[⚠️] CDP Debugger bypass failed');
+    }
+
+    await page.evaluateOnNewDocument(() => {
+        window.devtools = { isOpen: false, orientation: undefined };
+        Object.defineProperty(window, 'devtools', { get: function() { return false; }, set: function() {} });
+        const originalClear = console.clear; console.clear = function() {}; 
+        
+        const originalSetHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML').set;
+        Object.defineProperty(Element.prototype, 'innerHTML', {
+            set: function(value) {
+                if (typeof value === 'string' && value.includes('Close developer tools')) return; 
+                return originalSetHTML.call(this, value);
+            }
+        });
+    });
+    // =========================================================
+
+    // Execute existing firewall rules
+    await setupNetworkAdBlocker(page);
+    attachAntiAdListeners(page);
+    await applyPreloadFirewall(page);
+}
+
+async function createFreshBackupBrowser() {
+    console.log('\n[🛠️] BACKUP RECOVERY: Creating fresh backup Chrome...');
+    try { if (backupBrowser && backupBrowser.isConnected()) { const pages = await backupBrowser.pages(); for (const p of pages) { try { await p.close(); } catch (e) {} } } } catch (e) {}
+    try { if (backupBrowser && !backupBrowser.isConnected()) backupBrowser = null; } catch (e) { backupBrowser = null; }
+
+    backupBrowser = await createBrowserInstance(browserArgs);
+    const pages = await backupBrowser.pages();
+    backupPage = pages[0];
+    await preparePage(backupPage);
+
+    backupBrowser.on('targetcreated', async (target) => {
+        if (target.type() === 'page') {
+            try { const newPage = await target.page(); setTimeout(async () => { if (newPage && newPage !== backupPage) { try { await newPage.close(); } catch (e) {} } }, 500); } catch (e) {}
+        }
+    });
+    console.log('[✅] BACKUP RECOVERY: Fresh backup Chrome created.');
+    return true;
+}
+
+async function createFreshActiveBrowser() {
+    console.log('\n[🛠️] ACTIVE RECOVERY: Creating fresh active Chrome...');
+    try { if (activeBrowser && activeBrowser.isConnected()) { const pages = await activeBrowser.pages(); for (const p of pages) { try { await p.close(); } catch (e) {} } } } catch (e) {}
+    try { if (activeBrowser && !activeBrowser.isConnected()) activeBrowser = null; } catch (e) { activeBrowser = null; }
+
+    activeBrowser = await createBrowserInstance(browserArgs);
+    const pages = await activeBrowser.pages();
+    activePage = pages[0];
+    await preparePage(activePage);
+
+    activeBrowser.on('targetcreated', async (target) => {
+        if (target.type() === 'page') {
+            try { const newPage = await target.page(); setTimeout(async () => { if (newPage && newPage !== activePage) { try { await newPage.close(); } catch (e) {} } }, 500); } catch (e) {}
+        }
+    });
+    console.log('[✅] ACTIVE RECOVERY: Fresh active Chrome created.');
+    return true;
+}
+
 async function setupNetworkAdBlocker(page) {
     if (!page) return;
     try {
@@ -152,32 +263,17 @@ async function setupNetworkAdBlocker(page) {
             const url = request.url().toLowerCase();
             const type = request.resourceType();
 
-            // 🚫 SHIELD: Same-Tab Hostile Redirect Hijacking Block
             if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
                 const targetUrl = request.url().toLowerCase();
-                
                 const adKeywords = ['popads', 'exoclick', 'adsterra', 'onclickads', 'jerkmate', 'adrevenue', 'fanduel', 'bet', 'casino'];
-                const isMaliciousAd = adKeywords.some(keyword => targetUrl.includes(keyword));
-
-                if (isMaliciousAd) {
+                if (adKeywords.some(keyword => targetUrl.includes(keyword))) {
                     console.log(`[🛡️] NAVIGATION SHIELD: Blocked malicious ad redirection to -> ${targetUrl.substring(0, 70)}...`);
                     request.abort().catch(()=>{});
                     return;
                 }
             }
 
-            // Strict Ad Infrastructure Block list
-            if (
-                url.includes('popads') || 
-                url.includes('exoclick') || 
-                url.includes('adsterra') || 
-                url.includes('onclickads') || 
-                url.includes('jerkmate') ||
-                url.includes('adrevenue') ||
-                url.includes('fanduel') ||
-                url.includes('doubleclick') ||
-                (type === 'script' && (url.includes('analytics') || url.includes('tracking') || url.includes('ad-delivery') || url.includes('pop') || url.includes('zone')))
-            ) {
+            if (url.includes('popads') || url.includes('exoclick') || url.includes('adsterra') || url.includes('onclickads') || url.includes('jerkmate') || url.includes('adrevenue') || url.includes('fanduel') || url.includes('doubleclick') || (type === 'script' && (url.includes('analytics') || url.includes('tracking') || url.includes('ad-delivery') || url.includes('pop') || url.includes('zone')))) {
                 request.abort().catch(()=>{});
             } else {
                 request.continue().catch(()=>{});
@@ -190,102 +286,36 @@ async function applyPreloadFirewall(page) {
     if (!page) return;
     try {
         await page.evaluateOnNewDocument(() => {
-            // Permanent root execution block for popup alerts & confirms
-            window.alert = function() {};
-            window.confirm = function() { return true; };
-            window.prompt = function() { return null; };
-            window.open = function() { return null; };
-            
-            // 🚫 ANTI-DIALOG FIX: Neutralize onbeforeunload modal box popup completely
-            Object.defineProperty(window, 'onbeforeunload', {
-                configurable: true,
-                get: function() { return null; },
-                set: function() { return null; }
-            });
-
+            const originalAttachShadow = Element.prototype.attachShadow;
+            Element.prototype.attachShadow = function(init) {
+                if (init && init.mode === 'closed') init.mode = 'open'; 
+                const shadowRoot = originalAttachShadow.call(this, init);
+                const observer = new MutationObserver(() => {
+                    const adElements = shadowRoot.querySelectorAll('in-page-message, [id^="note-"], [id^="missclick-"], [id^="close-"], [src*="adexchangerapid"]');
+                    if (adElements.length > 0) { console.log('[🛡️] SHIELD: Shadow DOM Ad Detected & Destroyed!'); this.remove(); }
+                });
+                observer.observe(shadowRoot, { childList: true, subtree: true });
+                return shadowRoot;
+            };
+            Element.prototype.attachShadow.toString = function() { return "function attachShadow() { [native code] }"; };
+            window.alert = function() {}; window.confirm = function() { return true; }; window.prompt = function() { return null; }; window.open = function() { return null; };
+            Object.defineProperty(window, 'onbeforeunload', { configurable: true, get: function() { return null; }, set: function() { return null; } });
             document.addEventListener('click', (e) => {
                 const target = e.target;
                 if (target && (target.tagName === 'A' || target.closest('a'))) {
                     const link = target.tagName === 'A' ? target : target.closest('a');
                     if (link.href && !link.href.includes(window.location.hostname) && !link.href.includes('javascript')) {
-                        console.log("[🛡️] RE-DIRECT SHIELD: Blocked navigation to external ad domain.");
-                        e.preventDefault();
-                        e.stopPropagation();
-                        return false;
+                        console.log("[🛡️] RE-DIRECT SHIELD: Blocked external ad navigation.");
+                        e.preventDefault(); e.stopPropagation(); return false;
                     }
                 }
             }, true);
 
             const style = document.createElement('style');
-            style.textContent = `html, body { background-color: #000000 !important; overflow: hidden !important; }`;
+            style.textContent = `html, body { background-color: #000000 !important; overflow: hidden !important; } in-page-message, [id^="note-"], [id^="missclick-"], [id^="close-"] { display: none !important; opacity: 0 !important; pointer-events: none !important; }`;
             document.documentElement.appendChild(style);
-
-            const attachOverlay = () => {
-                let target = document.body || document.documentElement;
-                if (target && !document.getElementById('smart-stream-overlay')) {
-                    const overlay = document.createElement('div');
-                    overlay.id = 'smart-stream-overlay';
-                    overlay.innerHTML = `
-                        <style>
-                            #smart-stream-overlay {
-                                position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
-                                width: 100vw !important; height: 100vh !important; background: #000000 !important;
-                                z-index: 2147483647 !important; display: flex !important; flex-direction: column !important;
-                                justify-content: center !important; align-items: center !important; color: #ffffff !important;
-                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
-                                pointer-events: all !important;
-                            }
-                            .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
-                            .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
-                            .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-                            @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                            @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
-                            .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
-                            .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
-                        </style>
-                        <div class="stream-spinner"></div>
-                        <div class="progress-container"><div class="progress-bar-fill"></div></div>
-                        <div class="stream-title">STREAM LOADING</div>
-                        <div class="stream-sub">Connecting to secure stream engine...</div>
-                    `;
-                    target.appendChild(overlay);
-                } else if (!target) {
-                    requestAnimationFrame(attachOverlay);
-                }
-            };
-            attachOverlay();
         });
-    } catch (e) {
-        console.log(`[🛡️] SYSTEM SHIELD: Preload firewall safe injection caught an error.`);
-    }
-}
-
-async function takeAndBatchScreenshot(page, stepName) {
-    if (!page) return;
-    try {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const filePath = `./screenshots/snap_${timestamp}_${stepName}.png`;
-        await page.screenshot({ path: filePath });
-        console.log(`[📸] Screenshot saved: ${filePath}`);
-        pendingScreenshots.push(filePath);
-
-        if (pendingScreenshots.length >= 3) {
-            try {
-                const tag = 'live-stream-logs';
-                try { execSync(`gh release view ${tag} || gh release create ${tag} -t "Live Logs"`, { stdio: 'ignore' }); } catch(e) {}
-                try {
-                    const oldAssets = execSync(`gh release view ${tag} --json assets -q ".assets[].name"`, { encoding: 'utf-8' }).trim().split('\n');
-                    for (const asset of oldAssets) if (asset) execSync(`gh release delete-asset ${tag} "${asset}" -y`, { stdio: 'ignore' });
-                } catch(e) {}
-
-                const fileList = pendingScreenshots.join(' ');
-                exec(`gh release upload ${tag} ${fileList} --clobber`, (err) => {
-                    if (!err) uploadCycleCount++;
-                });
-                pendingScreenshots = []; 
-            } catch (err) { }
-        }
-    } catch (e) { }
+    } catch (e) {}
 }
 
 async function showLoadingUI(page, title, sub) {
@@ -293,30 +323,20 @@ async function showLoadingUI(page, title, sub) {
         await page.evaluate((t, s) => {
             if (window.self !== window.top) return; 
             let overlay = document.getElementById('smart-stream-overlay');
-
             if (overlay) {
                 const titleEl = overlay.querySelector('.stream-title');
                 const subEl = overlay.querySelector('.stream-sub');
                 if (titleEl) titleEl.innerHTML = t;
                 if (subEl) subEl.innerHTML = s;
-                
                 overlay.style.setProperty('display', 'flex', 'important');
                 overlay.style.setProperty('opacity', '1', 'important');
                 overlay.style.setProperty('z-index', '2147483647', 'important');
-            } 
-            else {
+            } else {
                 overlay = document.createElement('div');
                 overlay.id = 'smart-stream-overlay';
                 overlay.innerHTML = `
                     <style>
-                        #smart-stream-overlay {
-                            position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
-                            width: 100vw !important; height: 100vh !important; background: #000000 !important;
-                            z-index: 2147483647 !important; display: flex !important; flex-direction: column !important;
-                            justify-content: center !important; align-items: center !important; color: #ffffff !important;
-                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
-                            pointer-events: all !important;
-                        }
+                        #smart-stream-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: #000000 !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; color: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; pointer-events: all !important; }
                         .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
                         .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
                         .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
@@ -352,6 +372,37 @@ async function hideLoadingUI(page) {
     } catch (e) {}
 }
 
+async function showRecoveryUI(page) {
+    try {
+        await page.evaluate(() => {
+            if (window.self !== window.top) return; 
+            let overlay = document.getElementById('stream-recovery-overlay');
+            if (overlay) { overlay.style.setProperty('display', 'flex', 'important'); return; }
+            overlay = document.createElement('div');
+            overlay.id = 'stream-recovery-overlay';
+            overlay.innerHTML = `
+                <style>
+                    #stream-recovery-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: rgba(0, 0, 0, 0.95) !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; color: #ffffff !important; font-family: Arial, sans-serif !important; pointer-events: all !important; backdrop-filter: blur(8px); }
+                    .recovery-radar { width: 100px; height: 100px; border-radius: 50%; border: 3px solid transparent; border-top-color: #ff9800; border-bottom-color: #ff9800; animation: radar-spin 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite; margin-bottom: 20px; box-shadow: 0 0 30px rgba(255, 152, 0, 0.3); }
+                    .recovery-radar::before { content: ''; position: absolute; top: 10px; left: 10px; right: 10px; bottom: 10px; border-radius: 50%; border: 3px solid transparent; border-left-color: #f44336; border-right-color: #f44336; animation: radar-spin 2s linear infinite reverse; }
+                    @keyframes radar-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                    .warn-title { font-size: 32px !important; font-weight: 800 !important; color: #ff9800 !important; letter-spacing: 2px !important; margin-bottom: 10px !important; text-transform: uppercase !important; }
+                    .warn-sub { font-size: 18px !important; color: #dddddd !important; animation: pulse-text 1.5s infinite; }
+                    @keyframes pulse-text { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+                </style>
+                <div class="recovery-radar"></div>
+                <div class="warn-title">SIGNAL LOST</div>
+                <div class="warn-sub">Attempting Auto-Recovery...</div>
+            `;
+            document.documentElement.appendChild(overlay);
+        });
+    } catch (e) {}
+}
+
+async function hideRecoveryUI(page) {
+    try { await page.evaluate(() => { const overlay = document.getElementById('stream-recovery-overlay'); if (overlay) { overlay.style.setProperty('display', 'none', 'important'); } }); } catch (e) {}
+}
+
 function setupOBSConfig() {
     const obsDir = path.join(os.homedir(), '.config', 'obs-studio');
     const profilesDir = path.join(obsDir, 'basic', 'profiles', 'Untitled');
@@ -363,105 +414,135 @@ function setupOBSConfig() {
     const globalIniContent = `[General]\nLicenseAccepted=true\n[BasicWindow]\nShowAutoConfig=false\nWarned=true\n[OBSWebSocket]\nServerEnabled=true\nServerPort=4455\nServerPassword=secret\n`;
     fs.writeFileSync(path.join(obsDir, 'global.ini'), globalIniContent);
     
-    const basicIniContent = `[General]
-Name=Untitled
-[Video]
-BaseCX=${RES_W}
-BaseCY=${RES_H}
-OutputCX=${RES_W}
-OutputCY=${RES_H}
-FPSCommon=30
-[Output]
-Mode=Simple
-[SimpleOutput]
-VBitrate=${BITRATE}
-StreamEncoder=x264
-x264Preset=ultrafast
-x264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0
-`;
+    const basicIniContent = `[General]\nName=Untitled\n[Video]\nBaseCX=${RES_W}\nBaseCY=${RES_H}\nOutputCX=${RES_W}\nOutputCY=${RES_H}\nFPSCommon=30\n[Output]\nMode=Simple\n[SimpleOutput]\nVBitrate=${BITRATE}\nStreamEncoder=x264\nx264Preset=ultrafast\nx264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0\n`;
     fs.writeFileSync(path.join(profilesDir, 'basic.ini'), basicIniContent);
 
-    const serviceJson = {
-        "settings": { "server": "rtmp://vsu.okcdn.ru/input/", "key": ACTIVE_STREAM_KEY },
-        "type": "rtmp_custom"
-    };
+    const serviceJson = { "settings": { "server": "rtmp://vsu.okcdn.ru/input/", "key": ACTIVE_STREAM_KEY }, "type": "rtmp_custom" };
     fs.writeFileSync(path.join(profilesDir, 'service.json'), JSON.stringify(serviceJson, null, 2));
 
     const sceneJson = {
-        "current_scene": "WaitingScene", 
-        "current_program_scene": "WaitingScene", 
-        "name": "Untitled",
+        "current_scene": "WaitingScene", "current_program_scene": "WaitingScene", "name": "Untitled",
         "scene_order": [{"name": "WaitingScene"}, {"name": "MainScene"}],
         "sources": [
             { "id": "xshm_input", "name": "Screen", "settings": { "show_cursor": false } },
             { "id": "pulse_output_capture", "name": "Audio", "settings": {} },
-            {
-                "id": "scene", "name": "MainScene",
-                "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true}, {"name": "Audio", "id": 2, "visible": true} ] }
-            },
-            {
-                "id": "scene", "name": "WaitingScene",
-                "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true} ] } 
-            }
+            { "id": "scene", "name": "MainScene", "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true}, {"name": "Audio", "id": 2, "visible": true} ] } },
+            { "id": "scene", "name": "WaitingScene", "settings": { "items": [ {"name": "Screen", "id": 1, "visible": true} ] } }
         ]
     };
     fs.writeFileSync(path.join(scenesDir, 'Untitled.json'), JSON.stringify(sceneJson, null, 2));
 }
 
 function attachAntiAdListeners(page) {
-    page.on('dialog', async dialog => {
-        try { await dialog.dismiss(); } catch(e){}
-    });
+    page.on('dialog', async dialog => { try { await dialog.dismiss(); } catch(e){} });
 }
 
-// =========================================================================================
-// 🔊 2026 INTELLIGENT FUZZY UNMUTE ENGINE (No Class/ID Dependence)
-// =========================================================================================
+// 🛡️ NEW: Force Fullscreen instantly
+async function forcePlayerFullscreen(page) {
+    if (!page) return;
+    try {
+        await page.evaluate(() => {
+            document.documentElement.style.setProperty('background-color', 'black', 'important');
+            document.body.style.setProperty('background-color', 'black', 'important');
+            document.body.style.setProperty('overflow', 'hidden', 'important');
+            document.documentElement.style.setProperty('overflow', 'hidden', 'important');
+
+            let iframes = Array.from(document.querySelectorAll('iframe'));
+            let mainIframe = null; let maxScore = -1;
+
+            iframes.forEach(ifr => {
+                let w = ifr.clientWidth; let h = ifr.clientHeight;
+                let area = w * h;
+                if (area < 5000) return;
+                let score = area;
+                if (ifr.hasAttribute('allowfullscreen') || ifr.hasAttribute('webkitallowfullscreen')) score += 10000000;
+                if (h > w) score = -1;
+                if (score > maxScore) { maxScore = score; mainIframe = ifr; }
+            });
+
+            if (!mainIframe && iframes.length > 0) {
+                mainIframe = iframes.find(ifr => ifr.getAttribute('allowfullscreen') !== null || (ifr.src && (ifr.src.includes('player') || ifr.src.includes('embed'))));
+            }
+
+            if (mainIframe) {
+                iframes.forEach(ifr => {
+                    if (ifr !== mainIframe) {
+                        ifr.style.setProperty('display', 'none', 'important');
+                        ifr.style.setProperty('opacity', '0', 'important');
+                    }
+                });
+                mainIframe.style.setProperty('position', 'fixed', 'important');
+                mainIframe.style.setProperty('top', '0px', 'important');
+                mainIframe.style.setProperty('left', '0px', 'important');
+                mainIframe.style.setProperty('width', '100vw', 'important');
+                mainIframe.style.setProperty('height', '100vh', 'important');
+                mainIframe.style.setProperty('z-index', '2147483645', 'important'); 
+                mainIframe.style.setProperty('background-color', 'black', 'important');
+                mainIframe.style.setProperty('border', 'none', 'important');
+                mainIframe.style.setProperty('opacity', '1', 'important');
+                mainIframe.style.setProperty('display', 'block', 'important');
+                mainIframe.style.setProperty('visibility', 'visible', 'important');
+            }
+
+            const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay):not(#stream-recovery-overlay)';
+            document.querySelectorAll(junkClasses).forEach(el => { try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } });
+        });
+    } catch(e) {}
+}
+
+// 🛡️ NEW: Advanced Visual Readiness Verification
+async function waitForActiveVisualReady(page) {
+    if (!page) return false;
+    let readyCount = 0;
+    for (let i = 0; i < 40; i++) { // Max 20 seconds wait (500ms intervals)
+        try {
+            let isReady = await page.evaluate(() => {
+                let v = document.querySelector('video');
+                let videoReady = (v && v.clientWidth > window.innerWidth * 0.5 && !v.paused && v.currentTime > 0);
+                
+                let iframeReady = false;
+                let iframes = Array.from(document.querySelectorAll('iframe'));
+                for (let ifr of iframes) {
+                    if (ifr.style.width === '100vw' && ifr.style.height === '100vh') {
+                        iframeReady = true; break;
+                    }
+                }
+                return videoReady || iframeReady;
+            });
+
+            if (isReady) readyCount++; else readyCount = 0;
+            if (readyCount >= 3) return true; // 3 consecutive passes required!
+        } catch(e) {}
+        await new Promise(r => setTimeout(r, 500));
+    }
+    return false;
+}
+
 async function triggerSmartUnmute(page) {
     for (const frame of page.frames()) {
         try {
             if (frame.isDetached()) continue;
-
             await frame.evaluate(() => {
-                // 1. Scan all interactive elements
                 const potentialElements = Array.from(document.querySelectorAll('button, div, span, a, i'));
-                
                 potentialElements.forEach(el => {
                     const text = (el.innerText || el.textContent || '').trim().toUpperCase();
                     const onClickStr = (el.getAttribute('onclick') || '').toLowerCase();
-                    const ariaLabel = (el.getAttribute('aria-label') || '').toUpperCase();
-                    
-                    // Fuzzy match checking
                     const matchesText = text.includes('UNMUTE') || text.includes('MUTE ME') || text.includes('STREAM UNMUTE') || text.includes('AUDIO');
                     const matchesJS = onClickStr.includes('unmute') || onClickStr.includes('volume') || onClickStr.includes('audio');
-                    const matchesAria = ariaLabel.includes('UNMUTE') || ariaLabel.includes('VOLUME');
-
-                    if (matchesText || matchesJS || matchesAria) {
+                    if (matchesText || matchesJS) {
                         const rect = el.getBoundingClientRect();
                         const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none';
-
-                        if (isVisible) {
-                            console.log(`[🔊 ENGINE]: Dynamically triggered click on element with text: "${text || 'JS Action'}"`);
-                            try { el.click(); } catch(e) {}
-                            try { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e) {}
-                        }
+                        if (isVisible) { try { el.click(); } catch(e) {} try { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e) {} }
                     }
                 });
-
-                // 2. Bruteforce Browser Native Media Layer
-                document.querySelectorAll('video, audio').forEach(media => {
-                    if (media.muted) {
-                        media.muted = false;
-                        media.volume = 1.0;
-                    }
-                });
+                document.querySelectorAll('video, audio').forEach(media => { if (media.muted) { media.muted = false; media.volume = 1.0; } });
             }).catch(() => {});
         } catch (e) {}
     }
 }
-// =========================================================================================
 
 async function initializeVideo(page, startMuted, isActivePage) {
+    if (!page) return;
     try {
         if (SERVER_SELECTION !== 'None') {
             console.log(`[*] Clicking specific Server: ${SERVER_SELECTION}`);
@@ -475,81 +556,38 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         if (targetBtn) { targetBtn.click(); return true; }
                         return false;
                     }, SERVER_SELECTION);
-
-                    if (clickSuccess) {
-                        serverClicked = true; 
-                        console.log(`[+] Server Button clicked successfully!`);
-                        await takeAndBatchScreenshot(page, `server-clicked`);
-                        await new Promise(r => setTimeout(r, 2000)); 
-                        if (isActivePage) await page.bringToFront(); 
-                    } else await new Promise(r => setTimeout(r, 2000));
+                    if (clickSuccess) { serverClicked = true; await new Promise(r => setTimeout(r, 2000)); if (isActivePage) await page.bringToFront(); } 
+                    else await new Promise(r => setTimeout(r, 2000));
                 } catch (err) { await new Promise(r => setTimeout(r, 2000)); }
             }
         }
 
         console.log('[*] Checking if Video is Autoplaying or Needs a Play Button...');
-        let isVideoPlaying = false; 
-        let attempts = 0;
+        let isVideoPlaying = false; let attempts = 0;
         
         while (!isVideoPlaying && attempts < 15) {
             for (const frame of page.frames()) {
                 try {
                     const autoPlayed = await frame.evaluate(() => {
                         let playing = false;
-                        document.querySelectorAll('video').forEach(v => {
-                            if (v.clientWidth > 50 && !v.paused && v.currentTime > 0) {
-                                v.muted = false; 
-                                v.volume = 1.0;
-                                playing = true;
-                            }
-                        });
+                        document.querySelectorAll('video').forEach(v => { if (v.clientWidth > 50 && !v.paused && v.currentTime > 0) { v.muted = false; v.volume = 1.0; playing = true; } });
                         return playing;
                     });
-
-                    if (autoPlayed) {
-                        isVideoPlaying = true;
-                        break;
-                    }
+                    if (autoPlayed) { isVideoPlaying = true; break; }
 
                     const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, [class*="unmute"], .fp-play');
                     if (playBtn) {
-                        const isVisible = await frame.evaluate(el => {
-                            const style = window.getComputedStyle(el);
-                            return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-                        }, playBtn);
-
-                        if (isVisible) {
-                            await frame.evaluate(el => el.click(), playBtn); 
-                            await takeAndBatchScreenshot(page, `play-btn-clicked`);
-                            await new Promise(r => setTimeout(r, 3000)); 
-                            isVideoPlaying = true;
-                            break; 
-                        }
+                        const isVisible = await frame.evaluate(el => { const style = window.getComputedStyle(el); return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0'; }, playBtn);
+                        if (isVisible) { await frame.evaluate(el => el.click(), playBtn); await new Promise(r => setTimeout(r, 3000)); isVideoPlaying = true; break; }
                     }
 
                     if (!isVideoPlaying && attempts > 5) {
                         const forced = await frame.evaluate(async () => {
-                            let played = false;
-                            let vids = document.querySelectorAll('video');
-                            for(let v of vids) {
-                                if (v.clientWidth > 50) { 
-                                    v.muted = false; v.volume = 1.0; 
-                                    try { v.click(); } catch(e){}
-                                    try {
-                                        let p = v.play();
-                                        if (p !== undefined) p.catch(()=>{});
-                                        played = true;
-                                    } catch(e) {}
-                                }
-                            }
+                            let played = false; let vids = document.querySelectorAll('video');
+                            for(let v of vids) { if (v.clientWidth > 50) { v.muted = false; v.volume = 1.0; try { v.click(); } catch(e){} try { let p = v.play(); if (p !== undefined) p.catch(()=>{}); played = true; } catch(e) {} } }
                             return played;
                         });
-
-                        if (forced) {
-                            await takeAndBatchScreenshot(page, `force-play-applied`);
-                            isVideoPlaying = true;
-                            break;
-                        }
+                        if (forced) { isVideoPlaying = true; break; }
                     }
                 } catch (err) {}
             }
@@ -560,119 +598,27 @@ async function initializeVideo(page, startMuted, isActivePage) {
         console.log('[*] Scanning for Exact Real Video Player...');
         let targetFrame = null;
         for (const frame of page.frames()) {
-            try {
-                const isRealLiveStream = await frame.evaluate(() => {
-                    const vid = document.querySelector('video');
-                    return vid && vid.clientWidth > 50 && vid.clientHeight > 50;
-                });
-                if (isRealLiveStream) { 
-                    targetFrame = frame; 
-                    console.log(`[+] Smart Scanner locked onto video frame!`);
-                    break; 
-                }
-            } catch (e) { }
+            try { const isRealLiveStream = await frame.evaluate(() => { const vid = document.querySelector('video'); return vid && vid.clientWidth > 50 && vid.clientHeight > 50; }); if (isRealLiveStream) { targetFrame = frame; break; } } catch (e) { }
         }
 
+        // Apply force fullscreen immediately once
+        await forcePlayerFullscreen(page);
+
+        // Keep maintaining it
         await page.evaluate(() => {
             setInterval(() => {
                 try {
-                    document.documentElement.style.setProperty('background-color', 'black', 'important');
-                    document.body.style.setProperty('background-color', 'black', 'important');
-                    document.body.style.setProperty('overflow', 'hidden', 'important');
-                    document.documentElement.style.setProperty('overflow', 'hidden', 'important');
-
                     let iframes = Array.from(document.querySelectorAll('iframe'));
-                    let mainIframe = null; let maxScore = -1;
-
-                    // 1. ADVANCED GEOMETRIC SCORING
-                    iframes.forEach(ifr => {
-                        let width = ifr.clientWidth;
-                        let height = ifr.clientHeight;
-                        let area = width * height;
-
-                        if (area < 5000) return;
-
-                        let score = area;
-                        
-                        if (ifr.hasAttribute('allowfullscreen') || 
-                            ifr.hasAttribute('webkitallowfullscreen') || 
-                            ifr.hasAttribute('mozallowfullscreen')) {
-                            score += 10000000; 
-                        }
-                        
-                        if (height > width) {
-                            score = -1; 
-                        }
-
-                        if (score > maxScore) {
-                            maxScore = score;
-                            mainIframe = ifr;
-                        }
-                    });
-
-                    if (!mainIframe && iframes.length > 0) {
-                        mainIframe = iframes.find(ifr => 
-                            ifr.getAttribute('allowfullscreen') !== null || 
-                            (ifr.src && (ifr.src.includes('player') || ifr.src.includes('embed') || ifr.src.includes('stream') || ifr.src.includes('watch')))
-                        );
-                    }
-
+                    let mainIframe = iframes.find(ifr => ifr.style.width === '100vw' && ifr.style.height === '100vh');
                     if (mainIframe) {
-                        iframes.forEach(ifr => {
-                            if (ifr !== mainIframe) {
-                                ifr.style.setProperty('display', 'none', 'important');
-                                ifr.style.setProperty('opacity', '0', 'important');
-                                ifr.style.setProperty('z-index', '-9999', 'important');
-                                
-                                if (ifr.parentNode && ifr.parentNode !== document.body) {
-                                    try { 
-                                        ifr.parentNode.style.setProperty('display', 'none', 'important'); 
-                                        ifr.parentNode.style.setProperty('opacity', '0', 'important');
-                                    } catch(e) {}
-                                }
-                            }
-                        });
-
-                        mainIframe.style.setProperty('position', 'fixed', 'important');
-                        mainIframe.style.setProperty('top', '0px', 'important');
-                        mainIframe.style.setProperty('left', '0px', 'important');
-                        mainIframe.style.setProperty('width', '100vw', 'important');
-                        mainIframe.style.setProperty('height', '100vh', 'important');
-                        mainIframe.style.setProperty('z-index', '2147483645', 'important'); 
-                        mainIframe.style.setProperty('background-color', 'black', 'important');
-                        mainIframe.style.setProperty('border', 'none', 'important');
-                        mainIframe.style.setProperty('opacity', '1', 'important');
-                        mainIframe.style.setProperty('display', 'block', 'important');
-                        mainIframe.style.setProperty('visibility', 'visible', 'important');
+                        iframes.forEach(ifr => { if (ifr !== mainIframe) { ifr.style.setProperty('display', 'none', 'important'); } });
                     }
-
-                    const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"], [id*="notification"]';
-                    document.querySelectorAll(junkClasses).forEach(el => { 
-                        try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
-                    });
-
-                    const adKeywords = ['jerk', 'mate', 'free', 'online', 'adult', 'dating', 'close', 'notification', 'justine', 'paying', 'job'];
-                    document.querySelectorAll('div, section, span, a').forEach(el => {
-                        if (el.id === 'smart-stream-overlay') return;
-                        
-                        const style = window.getComputedStyle(el);
-                        const isFloating = style.position === 'fixed' || style.position === 'absolute';
-                        
-                        if (isFloating && el.innerText) {
-                            const textLower = el.innerText.toLowerCase();
-                            const hasBadKeyword = adKeywords.some(keyword => textLower.includes(keyword));
-                            
-                            if (hasBadKeyword || (parseInt(style.zIndex) > 100000 && !el.querySelector('video') && !el.querySelector('iframe'))) {
-                                try { el.remove(); } catch(e) { el.style.setProperty('display', 'none', 'important'); }
-                            }
-                        }
-                    });
-
                 } catch (err) {}
             }, 500); 
         }).catch(() => {});
 
         await targetFrame.evaluate((muteVideo) => {
+            window.isStreamMuted = muteVideo; 
             setInterval(() => {
                 try {
                     const style = document.createElement('style');
@@ -683,35 +629,26 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     const videos = Array.from(document.querySelectorAll('video'));
                     let realVideo = null;
 
-                    mediaElements.forEach(media => { 
-                        media.muted = muteVideo; 
-                        media.volume = muteVideo ? 0.0 : 1.0; 
-                    });
+                    mediaElements.forEach(media => { media.muted = window.isStreamMuted; media.volume = window.isStreamMuted ? 0.0 : 1.0; });
+                    if (!window.isStreamMuted) document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
 
-                    if (!muteVideo) {
-                        document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
-                    }
-
-                    for (const v of videos) {
-                        if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; }
-                    }
-
-                    if (!realVideo && videos.length > 0) {
-                        realVideo = videos[0];
-                    }
+                    for (const v of videos) { if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; } }
+                    if (!realVideo && videos.length > 0) realVideo = videos[0];
 
                     if (realVideo) { 
-                        realVideo.style.setProperty('position', 'fixed', 'important');
-                        realVideo.style.setProperty('top', '0px', 'important');
-                        realVideo.style.setProperty('left', '0px', 'important');
-                        realVideo.style.setProperty('width', '100vw', 'important');
-                        realVideo.style.setProperty('height', '100vh', 'important');
-                        realVideo.style.setProperty('z-index', '2147483646', 'important'); 
-                        realVideo.style.setProperty('background-color', 'black', 'important');
+                        let playerWrap = realVideo.closest('.jwplayer, #player, .plyr, .vjs-player, .shaka-video-container, [data-player]') || realVideo;
+                        playerWrap.style.setProperty('position', 'fixed', 'important');
+                        playerWrap.style.setProperty('top', '0px', 'important');
+                        playerWrap.style.setProperty('left', '0px', 'important');
+                        playerWrap.style.setProperty('width', '100vw', 'important');
+                        playerWrap.style.setProperty('height', '100vh', 'important');
+                        playerWrap.style.setProperty('z-index', '2147483646', 'important'); 
+                        playerWrap.style.setProperty('background-color', 'black', 'important');
+                        playerWrap.style.setProperty('opacity', '1', 'important');
+                        playerWrap.style.setProperty('visibility', 'visible', 'important');
+                        playerWrap.style.setProperty('display', 'block', 'important');
+                        if (playerWrap !== realVideo) { realVideo.style.setProperty('width', '100%', 'important'); realVideo.style.setProperty('height', '100%', 'important'); }
                         realVideo.style.setProperty('object-fit', 'contain', 'important');
-                        realVideo.style.setProperty('opacity', '1', 'important');
-                        realVideo.style.setProperty('visibility', 'visible', 'important');
-                        realVideo.style.setProperty('display', 'block', 'important');
                     }
                 } catch(err) {}
             }, 500); 
@@ -719,9 +656,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
     } catch (e) { }
 
-    // 🔥 Added Smart Unmute Execution Here
-    await triggerSmartUnmute(page);
-    await new Promise(r => setTimeout(r, 1000));
+    if (!startMuted) { await triggerSmartUnmute(page); await new Promise(r => setTimeout(r, 1000)); }
 }
 
 async function checkPageStatus(page) {
@@ -733,45 +668,26 @@ async function checkPageStatus(page) {
                 const result = await Promise.race([
                     frame.evaluate(() => {
                         const bodyText = document.body ? document.body.innerText.toLowerCase() : "";
-                        
-                        if (
-                            bodyText.includes("stream error") || 
-                            bodyText.includes("not found") || 
-                            bodyText.includes("domain is blocked") ||
-                            bodyText.includes("error: forbidden") ||
-                            bodyText.includes("does not have permission") ||
-                            bodyText.includes("access denied") ||
-                            (bodyText.includes("cloudflare") && bodyText.includes("blocked"))
-                        ) {
+                        if (bodyText.includes("stream error") || bodyText.includes("not found") || bodyText.includes("domain is blocked") || bodyText.includes("error: forbidden") || bodyText.includes("does not have permission") || bodyText.includes("access denied") || (bodyText.includes("cloudflare") && bodyText.includes("blocked"))) {
                             return { status: 'CRITICAL_ERROR' };
                         }
-                        
                         const videos = Array.from(document.querySelectorAll('video'));
                         let targetV = null;
-
                         for (const v of videos) {
                             if (v.clientWidth > 0 && v.clientWidth < 100) continue;
-                            if ((v.src && v.src.startsWith('blob:')) || v.matches('.jw-video, .plyr__video, .vjs-tech')) {
-                                targetV = v; break;
-                            }
+                            if ((v.src && v.src.startsWith('blob:')) || v.matches('.jw-video, .plyr__video, .vjs-tech')) { targetV = v; break; }
                         }
+                        if (!targetV && videos.length > 0) targetV = videos.sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
                         
-                        if (!targetV && videos.length > 0) {
-                            targetV = videos.sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
-                        }
-                        
-                        if (targetV && !targetV.ended && targetV.currentTime > 0) {
+                        if (targetV && !targetV.ended) {
                             let frames = 0;
-                            if (targetV.getVideoPlaybackQuality) {
-                                frames = targetV.getVideoPlaybackQuality().totalVideoFrames;
-                            } else if (targetV.webkitDecodedFrameCount !== undefined) {
-                                frames = targetV.webkitDecodedFrameCount;
-                            }
+                            if (targetV.getVideoPlaybackQuality) frames = targetV.getVideoPlaybackQuality().totalVideoFrames;
+                            else if (targetV.webkitDecodedFrameCount !== undefined) frames = targetV.webkitDecodedFrameCount;
                             return { status: 'HEALTHY', currentTime: targetV.currentTime, decodedFrames: frames };
                         }
                         return { status: 'DEAD' };
                     }),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000))
                 ]);
                 if (result && result.status !== 'DEAD') return result;
             } catch (err) {}
@@ -781,63 +697,129 @@ async function checkPageStatus(page) {
 }
 
 async function startWatchdog() {
-    let lastActiveTime = -1;
-    let lastDecodedFrames = -1; 
-    let frozenCheckTimestamp = Date.now();
-    let watchdogTicks = 0;
-    
-    let streamSetupTime = Date.now(); 
-    let isWarmupPhase = true; 
+    let lastActiveTime = -1; let lastDecodedFrames = -1; let frozenCheckTimestamp = Date.now();
+    let watchdogTicks = 0; let streamSetupTime = Date.now(); 
+    let isWarmupPhase = true; let backupWarmupTime = Date.now(); 
     const WARMUP_MAX_TIME = 15000; 
-
-    let activeUrlStr = urlList[currentUrlIndex];
-    let backupUrlStr = urlList[backupUrlIndex];
-
-    let currentStreamStartTime = Date.now();
+    let activeUrlStr = urlList[currentUrlIndex].url; let backupUrlStr = urlList[backupUrlIndex].url;
+    let currentStreamStartTime = Date.now(); let isRecoveryUIShown = false;
 
     while (true) {
-        if (!browser || !browser.isConnected()) throw new Error("Browser closed.");
+        const activeBrowserAlive = activeBrowser && activeBrowser.isConnected();
+        const backupBrowserAlive = backupBrowser && backupBrowser.isConnected();
 
+        if (!activeBrowserAlive && backupBrowserAlive) {
+            console.log('\n==================================================');
+            console.log('[🚨] ACTIVE CHROME DISCONNECTED');
+            console.log('[🔄] BACKUP CHROME IS ALIVE');
+            console.log('[⚡] PROMOTING BACKUP -> ACTIVE');
+            console.log('==================================================\n');
+
+            const oldActiveBrowser = activeBrowser; const oldActivePage = activePage;
+            activeBrowser = backupBrowser; activePage = backupPage;
+            backupBrowser = oldActiveBrowser; backupPage = oldActivePage;
+            const oldActiveName = activeBrowserName; activeBrowserName = backupBrowserName; backupBrowserName = oldActiveName;
+
+            const previousActiveIndex = currentUrlIndex; currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex].url;
+            backupUrlIndex = getSafeBackupIndex(currentUrlIndex, previousActiveIndex, urlList); backupUrlStr = urlList[backupUrlIndex].url;
+
+            lastActiveTime = -1; lastDecodedFrames = -1; frozenCheckTimestamp = Date.now();
+            streamSetupTime = Date.now(); currentStreamStartTime = Date.now();
+            isWarmupPhase = true; backupWarmupTime = Date.now(); isRecoveryUIShown = false;
+
+            try { await activePage.bringToFront(); await hideLoadingUI(activePage); } catch (e) {}
+
+            try {
+                await createFreshBackupBrowser();
+                await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                await initializeVideo(backupPage, true, false);
+            } catch (e) {}
+            continue;
+        }
+
+        if (activeBrowserAlive && !backupBrowserAlive) {
+            console.log('\n==================================================');
+            console.log('[⚠️] BACKUP CHROME DISCONNECTED -> REBUILDING');
+            console.log('==================================================\n');
+            try {
+                backupUrlIndex = getSafeBackupIndex(currentUrlIndex, backupUrlIndex, urlList); backupUrlStr = urlList[backupUrlIndex].url;
+                await createFreshBackupBrowser();
+                await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                await initializeVideo(backupPage, true, false);
+                backupWarmupTime = Date.now();
+            } catch (e) {}
+        }
+
+        if (!activeBrowserAlive && !backupBrowserAlive) {
+            console.log('\n==================================================');
+            console.log('[🚨] BOTH CHROME INSTANCES DISCONNECTED -> RECOVERY');
+            console.log('==================================================\n');
+            try {
+                currentUrlIndex = getSafeBackupIndex(currentUrlIndex, currentUrlIndex, urlList); activeUrlStr = urlList[currentUrlIndex].url;
+                backupUrlIndex = getSafeBackupIndex(currentUrlIndex, currentUrlIndex, urlList); backupUrlStr = urlList[backupUrlIndex].url;
+
+                await createFreshActiveBrowser();
+                await activePage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                await showLoadingUI(activePage, "SEARCHING SERVER", "Finding a stable stream connection...");
+                await initializeVideo(activePage, false, true);
+                
+                await waitForActiveVisualReady(activePage); // 🛡️ NEW
+                await hideLoadingUI(activePage);
+
+                try {
+                    await createFreshBackupBrowser();
+                    await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                    await initializeVideo(backupPage, true, false);
+                } catch (backupError) {}
+
+                try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
+
+                streamSetupTime = Date.now(); currentStreamStartTime = Date.now(); backupWarmupTime = Date.now();
+                frozenCheckTimestamp = Date.now(); lastActiveTime = -1; lastDecodedFrames = -1;
+                isWarmupPhase = true; isRecoveryUIShown = false;
+            } catch (e) { await new Promise(r => setTimeout(r, 3000)); }
+            continue;
+        }
+
+        let activeHangThresholdMs = urlList[currentUrlIndex].hangTime;
         let activeStatus = await checkPageStatus(activePage);
+
+        // BACKGROUND SHIELD
+        if (!isWarmupPhase && (Date.now() - backupWarmupTime > 30000)) { 
+            let backupStatus = await checkPageStatus(backupPage);
+            if (backupStatus.status === 'DEAD' || backupStatus.status === 'CRITICAL_ERROR' || backupStatus.status === 'FROZEN') {
+                backupUrlIndex = getSafeBackupIndex(currentUrlIndex, backupUrlIndex, urlList); backupUrlStr = urlList[backupUrlIndex].url;
+                backupWarmupTime = Date.now();
+                try {
+                    await backupPage.goto('about:blank').catch(()=>{}); await applyPreloadFirewall(backupPage);
+                    await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                    await initializeVideo(backupPage, true, false);
+                } catch(e) {}
+            }
+        }
 
         if (activeStatus.status === 'HEALTHY' && !isWarmupPhase) {
             let elapsedMs = Date.now() - currentStreamStartTime;
             let isExempted = NO_REFRESH_DOMAINS.some(domain => activeUrlStr.includes(domain));
-
-            if (elapsedMs > FORCE_REFRESH_MS) {
-                if (!isExempted) {
-                    console.log(`\n[⏱️ PROACTIVE REFRESH]: Stream ran smoothly for ${FORCE_REFRESH_MINUTES} minutes! Forcing SAME LINK swap to keep connection fresh...`);
-                    activeStatus.status = 'FORCE_REFRESH'; 
-                }
-            }
+            if (elapsedMs > FORCE_REFRESH_MS) { if (!isExempted) { activeStatus.status = 'FORCE_REFRESH'; } }
         }
 
         if (activeStatus.status === 'HEALTHY') {
-            await hideLoadingUI(activePage); 
-            isWarmupPhase = false; 
-
-            // 🔥 Added Smart Unmute Continuous Engine Here
-            await triggerSmartUnmute(activePage);
-
+            // 🛡️ Note: hideLoadingUI is NO LONGER called here!
             let isTimeStuck = (activeStatus.currentTime === lastActiveTime);
             let isFrameStuck = (activeStatus.decodedFrames === lastDecodedFrames && activeStatus.decodedFrames > 0);
 
             if (isTimeStuck || isFrameStuck) {
-                if (Date.now() - frozenCheckTimestamp > FROZEN_THRESHOLD_MS) {
-                    activeStatus.status = 'FROZEN';
-                    if (isFrameStuck && !isTimeStuck) {
-                        console.log(`[!] ⚠️ SYSTEM SHIELD: Detected Black Screen (Audio playing, but video frames stuck). Triggering HOT-SWAP.`);
-                    }
-                }
+                if (!isRecoveryUIShown) { await showRecoveryUI(activePage); isRecoveryUIShown = true; }
+                if (Date.now() - frozenCheckTimestamp > activeHangThresholdMs) { activeStatus.status = 'FROZEN'; isRecoveryUIShown = false; }
             } else {
-                lastActiveTime = activeStatus.currentTime; 
-                lastDecodedFrames = activeStatus.decodedFrames; 
-                frozenCheckTimestamp = Date.now();
-                
+                lastActiveTime = activeStatus.currentTime; lastDecodedFrames = activeStatus.decodedFrames; frozenCheckTimestamp = Date.now();
+                if (isRecoveryUIShown) { await hideRecoveryUI(activePage); isRecoveryUIShown = false; }
                 for (const frame of activePage.frames()) {
                     try {
                         if (!frame.isDetached()) {
                             frame.evaluate(() => { 
+                                window.isStreamMuted = false;
                                 document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
                                 document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
                             }).catch(()=>{});
@@ -849,26 +831,26 @@ async function startWatchdog() {
 
         if (backupPage) {
             for (const frame of backupPage.frames()) {
-                try {
-                    if (!frame.isDetached()) {
-                        frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }).catch(()=>{});
-                    }
-                } catch(e) {}
+                try { if (!frame.isDetached()) frame.evaluate(() => { window.isStreamMuted = true; document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }).catch(()=>{}); } catch(e) {}
             }
         }
 
         watchdogTicks++;
-        
         if (watchdogTicks === 1 || watchdogTicks % 90 === 0) {
-            console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
-            console.log(`[▶️] CURRENTLY LIVE   : Server [${currentUrlIndex}] (Audio ON) -> ${activeUrlStr}`);
-            console.log(`[⏭️] NEXT IN QUEUE    : Server [${backupUrlIndex}] (Audio MUTED) -> ${backupUrlStr}`);
+            let logBackupStatus = await checkPageStatus(backupPage);
+            let nextAfterBackupIndex = getSafeBackupIndex(currentUrlIndex, backupUrlIndex, urlList); let nextAfterBackupUrl = urlList[nextAfterBackupIndex].url;
+            console.log(`\n==================================================`);
+            console.log(`[💓] ACTIVE HEARTBEAT (${activeBrowserName}): Status is ${activeStatus.status} | Video Time: ${activeStatus.currentTime ? activeStatus.currentTime.toFixed(1) + 's' : 'N/A'}`);
+            console.log(`[▶️] CURRENTLY LIVE              : Server [${currentUrlIndex}] -> ${activeUrlStr}`);
+            console.log(`--------------------------------------------------`);
+            console.log(`[🖤] BACKUP HEARTBEAT (${backupBrowserName}): Status is ${logBackupStatus.status}`);
+            console.log(`[🔄] RUNNING IN BACKGROUND       : Server [${backupUrlIndex}] -> ${backupUrlStr}`);
+            console.log(`==================================================\n`);
         }
 
-        if (watchdogTicks % 120 === 0) {
-            await takeAndBatchScreenshot(activePage, `heartbeat-tick-${watchdogTicks}`);
-        }
-
+        // =========================================================================================
+        // 🔄 2. ACTIVE TAB HOT-SWAP SHIELD (SCENARIO A, B, C)
+        // =========================================================================================
         if (activeStatus.status === 'FROZEN' || activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'FORCE_REFRESH') {
             
             if (isWarmupPhase && (Date.now() - streamSetupTime < WARMUP_MAX_TIME)) { 
@@ -878,228 +860,211 @@ async function startWatchdog() {
             }
 
             let isProactiveRefresh = (activeStatus.status === 'FORCE_REFRESH');
-
-            if (isProactiveRefresh) {
-                console.log(`\n==================================================`);
-                console.log(`[!] 🔄 PROACTIVE REFRESH TRIGGERED`);
-                console.log(`[*] Preparing a FRESH copy of SAME Server [${currentUrlIndex}] in background...`);
-                console.log(`==================================================`);
-                
-                for (const frame of activePage.frames()) {
-                    try { if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {}
-                }
-
-                try {
-                    await backupPage.goto('about:blank').catch(()=>{});
-                    await applyPreloadFirewall(backupPage);
-                    await backupPage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
-                } catch(e) {
-                    console.log(`[⏳] Proactive refresh buffer navigation handled safely.`);
-                }
-            } else {
-                console.log(`\n==================================================`);
-                console.log(`[!] ❌ WATCHDOG DETECTED ISSUE: ${activeStatus.status}`);
-                console.log(`[💀] FAILED STREAM: Server [${currentUrlIndex}] -> ${activeUrlStr}`);
-                console.log(`==================================================`);
-                await takeAndBatchScreenshot(activePage, `error-${activeStatus.status.toLowerCase()}`);
-            }
+            if (isProactiveRefresh) console.log(`\n[!] 🔄 PROACTIVE REFRESH TRIGGERED`);
+            else console.log(`\n[!] ❌ WATCHDOG DETECTED ISSUE: ${activeStatus.status}`);
             
             console.log(`[*] Checking Backup Tab status before switching...`);
             let backupStatus = await checkPageStatus(backupPage);
 
-            if (backupStatus.status === 'HEALTHY' || backupStatus.status === 'DEAD') { 
-                
-                if (!isProactiveRefresh) {
-                    for (const frame of activePage.frames()) {
-                        try { if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {}
-                    }
-                }
-                
-                await showLoadingUI(backupPage, isProactiveRefresh ? "REFRESHING CONNECTION" : "RECONNECTING", isProactiveRefresh ? "Optimizing current server stream <span class='stream-blink'>...</span>" : "Establishing secure connection to backup server <span class='stream-blink'>...</span>");
-                await backupPage.bringToFront();
-                await new Promise(r => setTimeout(r, 1000)); 
-                
-                try { await backupPage.mouse.click(10, 10); } catch(e){} 
+            // --------------------------------------------------------------------
+            // ⚡ SCENARIO A: INSTANT SEAMLESS HOT-SWAP
+            // --------------------------------------------------------------------
+            if (backupStatus.status === 'HEALTHY' && !isProactiveRefresh) {
+                console.log('\n[⚡] BACKUP STREAM ALREADY HEALTHY. PROMOTING INSTANTLY.');
 
-                console.log(`[*] Initializing Video on the newly active tab...`);
-                await initializeVideo(backupPage, false, true); 
-                await hideLoadingUI(backupPage);
+                await showLoadingUI(backupPage, "RECONNECTING", "Establishing secure connection to backup server...");
+                try { await backupPage.bringToFront(); } catch (e) {}
 
                 let brokenPage = activePage; activePage = backupPage; backupPage = brokenPage;
-                lastActiveTime = -1; frozenCheckTimestamp = Date.now();
+                let brokenBrowser = activeBrowser; activeBrowser = backupBrowser; backupBrowser = brokenBrowser;
+                let brokenName = activeBrowserName; activeBrowserName = backupBrowserName; backupBrowserName = brokenName;
 
-                if (!isProactiveRefresh) {
-                    currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex]; 
-                    backupUrlIndex = (backupUrlIndex + 1) % urlList.length; backupUrlStr = urlList[backupUrlIndex]; 
-                } 
+                let previousActiveIndex = currentUrlIndex; currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex].url; 
+                backupUrlIndex = getSafeBackupIndex(currentUrlIndex, previousActiveIndex, urlList); backupUrlStr = urlList[backupUrlIndex].url;
 
-                console.log(`\n==================================================`);
-                console.log(isProactiveRefresh ? `[🔄] SAME-SERVER FRESH SWAP EXECUTED SUCCESSFULLY` : `[🔄] SMART HOT-SWAP TO NEXT SERVER EXECUTED SUCCESSFULLY`);
-                console.log(`==================================================`);
+                // 🛡️ 1. FORCE FULLSCREEN IMMEDIATELY
+                await forcePlayerFullscreen(activePage);
+
+                // 🛡️ 2. UNMUTE IMMEDIATELY
+                for (const frame of activePage.frames()) {
+                    try {
+                        if (!frame.isDetached()) {
+                            await frame.evaluate(() => { 
+                                window.isStreamMuted = false;
+                                document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
+                                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
+                            });
+                        }
+                    } catch(e) {}
+                }
+
+                lastActiveTime = -1; lastDecodedFrames = -1; frozenCheckTimestamp = Date.now();
+                isRecoveryUIShown = false; 
+
+                streamSetupTime = Date.now(); currentStreamStartTime = Date.now();
+                isWarmupPhase = true; // 🛡️ LOCK WARMUP PHASE
+                
+                // 🛡️ 3. WAIT FOR VISUAL READINESS (No premature removal!)
+                console.log(`[🛡️] SYSTEM SHIELD: Verifying stream layout before removing overlay...`);
+                await waitForActiveVisualReady(activePage);
+                console.log(`[✅] Stream layout verified visually. Overlay safely removed.`);
+
+                await hideLoadingUI(activePage);
+                isWarmupPhase = false; // 🛡️ UNLOCK WARMUP PHASE
+
+                backupWarmupTime = Date.now() + 5000; 
                 console.log(`[📺] NEW ACTIVE STREAM : Server [${currentUrlIndex}] -> ${activeUrlStr}`);
-                console.log(`[🔊] LIVE AUDIO STATUS : ON (Unmuted & Forced)`);
-                console.log(`--------------------------------------------------`);
-                console.log(`[🛡️] NEXT BACKUP QUEUE : Server [${backupUrlIndex}] -> ${backupUrlStr}`);
-                console.log(`[🔇] BACKUP AUDIO      : MUTED (Background Loading)`);
-                console.log(`==================================================\n`);
+
+                setTimeout(async () => {
+                    try {
+                        console.log(`[⏳] Starting background buffer rebuilding safely...`);
+                        await backupPage.goto('about:blank').catch(()=>{}); await applyPreloadFirewall(backupPage);
+                        await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                        await initializeVideo(backupPage, true, false);
+                    } catch (e) {}
+                }, 3000); 
+            }
+
+            // --------------------------------------------------------------------
+            // 🔄 SCENARIO B: PROACTIVE REFRESH OR FORCED RECONNECTION
+            // --------------------------------------------------------------------
+            else if (isProactiveRefresh || (backupStatus.status === 'HEALTHY' && isProactiveRefresh)) {
+                for (const frame of activePage.frames()) { try { if (!frame.isDetached()) await frame.evaluate(() => { window.isStreamMuted = true; document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {} }
+                
+                await showLoadingUI(backupPage, "REFRESHING CONNECTION", "Optimizing current server stream...");
+                await backupPage.bringToFront();
+                await new Promise(r => setTimeout(r, 1000)); 
+                try { await backupPage.mouse.click(10, 10); } catch(e){} 
+
+                await initializeVideo(backupPage, false, true); 
+                
+                let brokenPage = activePage; activePage = backupPage; backupPage = brokenPage;
+                let brokenBrowser = activeBrowser; activeBrowser = backupBrowser; backupBrowser = brokenBrowser;
+                let brokenName = activeBrowserName; activeBrowserName = backupBrowserName; backupBrowserName = brokenName;
+                
+                lastActiveTime = -1; frozenCheckTimestamp = Date.now(); isRecoveryUIShown = false; 
+                let previousActiveIndex = currentUrlIndex; currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex].url; 
+                backupUrlIndex = getSafeBackupIndex(currentUrlIndex, previousActiveIndex, urlList); backupUrlStr = urlList[backupUrlIndex].url;
+
+                // 🛡️ WAIT FOR VISUAL READINESS
+                await waitForActiveVisualReady(activePage);
+                await hideLoadingUI(activePage);
 
                 try {
-                    await backupPage.goto('about:blank').catch(()=>{});
-                    await applyPreloadFirewall(backupPage);
-                    backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-                } catch (e) {
-                    console.log(`[⏳] Background buffer navigation handled safely.`);
-                }
+                    await backupPage.goto('about:blank').catch(()=>{}); await applyPreloadFirewall(backupPage);
+                    await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+                    await initializeVideo(backupPage, true, false);
+                } catch (e) {}
                 
-                streamSetupTime = Date.now(); 
-                isWarmupPhase = true;
-                currentStreamStartTime = Date.now();
-
-            } else {
-                console.error(`[!] ❌ Backup Tab is ALSO DEAD/FROZEN. Hard Restarting System...`);
-                throw new Error("Both Active and Backup tabs failed.");
+                streamSetupTime = Date.now(); isWarmupPhase = true; currentStreamStartTime = Date.now(); backupWarmupTime = Date.now(); 
             }
-        }
 
+            // --------------------------------------------------------------------
+            // ❌ SCENARIO C: BOTH TABS FAILED (Fresh Hunting Mode)
+            // --------------------------------------------------------------------
+            else {
+                console.log(`\n[!] ❌ BOTH TABS FAILED. FRESH HUNTING MODE ACTIVATED.`);
+                try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch (e) {}
+
+                currentUrlIndex = getSafeBackupIndex(currentUrlIndex, currentUrlIndex, urlList); activeUrlStr = urlList[currentUrlIndex].url;
+                backupUrlIndex = getSafeBackupIndex(currentUrlIndex, currentUrlIndex, urlList); backupUrlStr = urlList[backupUrlIndex].url;
+
+                try { await activePage.close(); } catch(e) {}
+                try { await backupPage.close(); } catch(e) {}
+
+                activePage = await activeBrowser.newPage(); backupPage = await backupBrowser.newPage();
+                await setupNetworkAdBlocker(activePage); await setupNetworkAdBlocker(backupPage);
+                attachAntiAdListeners(activePage); attachAntiAdListeners(backupPage);
+                await applyPreloadFirewall(activePage); await applyPreloadFirewall(backupPage);
+
+                try {
+                    await activePage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 });
+                    await showLoadingUI(activePage, "SEARCHING SERVER", "Hunting for a stable stream connection...");
+                    await initializeVideo(activePage, false, true); 
+                    
+                    // 🛡️ WAIT FOR VISUAL READINESS
+                    await waitForActiveVisualReady(activePage);
+                    await hideLoadingUI(activePage);
+                } catch(e) {}
+
+                try {
+                    await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
+                    await initializeVideo(backupPage, true, false); 
+                } catch(e) {}
+
+                streamSetupTime = Date.now(); isWarmupPhase = true; currentStreamStartTime = Date.now(); backupWarmupTime = Date.now();
+                lastActiveTime = -1; frozenCheckTimestamp = Date.now(); isRecoveryUIShown = false;
+
+                try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
+            }
+        } 
         await new Promise(r => setTimeout(r, 2000)); 
     }
 }
 
 async function startDirectStreaming() {
-    console.log(`[*] Starting OBS Studio FIRST...`);
-    setupOBSConfig();
+    activeBrowserName = "CHROME 1"; backupBrowserName = "CHROME 2";
+    console.log(`[*] Starting OBS Studio FIRST...`); setupOBSConfig();
 
     obsProcess = spawn('obs', ['--startstreaming', '--minimize-to-tray']);
     obsProcess.stdout.on('data', (data) => console.log(`[OBS]: ${data.toString().trim()}`));
     obsProcess.stderr.on('data', (data) => {
-        const msg = data.toString().trim();
-        if (msg.includes('error') || msg.includes('fail')) console.log(`[OBS Error]: ${msg}`);
+        const msg = data.toString().trim(); if (msg.includes('error') || msg.includes('fail')) console.log(`[OBS Error]: ${msg}`);
     });
 
     console.log('[*] Waiting for OBS to initialize before launching browser...');
     await new Promise(r => setTimeout(r, 6000));
 
     let isObsConnected = false;
-    console.log('[*] Attempting to connect to OBS WebSocket (Polling Engine Active)...');
     for (let attempt = 1; attempt <= 15; attempt++) {
         try {
-            await Promise.race([
-                obs.connect('ws://127.0.0.1:4455', 'secret'),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
-            ]);
-            isObsConnected = true;
-            console.log('[+] OBS WebSocket Connected Successfully!');
-            break;
-        } catch (e) {
-            console.log(`[⏳] OBS Port 4455 not ready yet. Retrying (${attempt}/15)...`);
-            await new Promise(r => setTimeout(r, 2000));
-        }
+            await Promise.race([obs.connect('ws://127.0.0.1:4455', 'secret'), new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))]);
+            isObsConnected = true; console.log('[+] OBS WebSocket Connected Successfully!'); break;
+        } catch (e) { await new Promise(r => setTimeout(r, 2000)); }
     }
 
-    if (isObsConnected) {
-        try {
-            await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' });
-            console.log('[+] Enforced WaitingScene (Loading Bar Buffer Active)');
-        } catch(e){}
-    }
+    if (isObsConnected) { try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch(e){} }
 
-    let browserArgs = [
-        '--no-sandbox', 
-        '--disable-setuid-sandbox',
-        `--window-size=${RES_W},${RES_H}`, 
-        '--window-position=0,0', 
-        '--kiosk', 
-        '--start-fullscreen',
-        '--autoplay-policy=no-user-gesture-required',
-        '--disable-dev-shm-usage', 
-        '--ignore-certificate-errors',
-        '--disable-web-security',
-        '--ignore-gpu-blocklist', 
-        '--use-gl=egl',
-        '--disable-accelerated-video-decode', 
-        '--disable-accelerated-video-encode',
-        '--disable-smooth-scrolling',
-        '--disable-features=Translate,BlinkGenPropertyTrees,CalculateNativeWinOcclusion',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        
-        `--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`,
-        `--load-extension=${path.join(process.cwd(), 'ublock-lite')}`
+    browserArgs = [
+        '--no-sandbox', '--disable-setuid-sandbox', `--window-size=${RES_W},${RES_H}`, '--window-position=0,0', '--kiosk', '--start-fullscreen',
+        '--autoplay-policy=no-user-gesture-required', '--disable-dev-shm-usage', '--ignore-certificate-errors', '--disable-web-security',
+        '--ignore-gpu-blocklist', '--use-gl=egl', '--disable-accelerated-video-decode', '--disable-accelerated-video-encode',
+        '--disable-smooth-scrolling', '--disable-blink-features=AutomationControlled',
+        '--disable-features=Translate,BlinkGenPropertyTrees,CalculateNativeWinOcclusion,NetworkServiceInProcess2',
+        '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
+        `--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`, `--load-extension=${path.join(process.cwd(), 'ublock-lite')}`
     ];
+    if (PROXY_ENGINE.includes('Cloudflare')) browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
 
-    if (PROXY_ENGINE.includes('Cloudflare')) {
-        browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
-        console.log(`[*] Starting browser with EXACT viewport dimensions: ${RES_W}x${RES_H} and [CLOUDFLARE WARP] Proxy...`);
-    } else {
-        console.log(`[*] Starting browser with EXACT viewport dimensions: ${RES_W}x${RES_H} using [DIRECT GITHUB IP]...`);
-    }
+    activeBrowser = await createBrowserInstance(browserArgs); activePage = (await activeBrowser.pages())[0];
+    backupBrowser = await createBrowserInstance(browserArgs); backupPage = (await backupBrowser.pages())[0];
 
-    browser = await puppeteer.launch({
-        headless: false, 
-        defaultViewport: { width: RES_W, height: RES_H },
-        ignoreDefaultArgs: ['--enable-automation'], 
-        args: browserArgs
-    });
+    activeBrowser.on('targetcreated', async (target) => { if (target.type() === 'page') { const newPage = await target.page(); setTimeout(async () => { if (newPage && newPage !== activePage) { try { await newPage.close(); } catch(e) {} } }, 500); } });
+    backupBrowser.on('targetcreated', async (target) => { if (target.type() === 'page') { const newPage = await target.page(); setTimeout(async () => { if (newPage && newPage !== backupPage) { try { await newPage.close(); } catch(e) {} } }, 500); } });
 
-    browser.on('targetcreated', async (target) => {
-        if (target.type() === 'page') {
-            const newPage = await target.page();
-            setTimeout(async () => {
-                if (newPage && newPage !== activePage && newPage !== backupPage) {
-                    console.log(`[🛡️] AD-BLOCKER: Killed an unwanted pop-up tab!`);
-                    try { await newPage.close(); } catch(e) {}
-                }
-            }, 500);
-        }
-    });
-
-    const pages = await browser.pages();
-    activePage = pages[0]; 
-    backupPage = await browser.newPage();
-    
-    await setupNetworkAdBlocker(activePage);
-    await setupNetworkAdBlocker(backupPage);
-
-    attachAntiAdListeners(activePage);
-    attachAntiAdListeners(backupPage);
-
-    await applyPreloadFirewall(activePage);
-    await applyPreloadFirewall(backupPage);
+    await setupNetworkAdBlocker(activePage); await setupNetworkAdBlocker(backupPage);
+    attachAntiAdListeners(activePage); attachAntiAdListeners(backupPage);
+    await applyPreloadFirewall(activePage); await applyPreloadFirewall(backupPage);
 
     await activePage.bringToFront(); 
 
-    console.log(`[*] STEP 1: Loading Server [${currentUrlIndex}] on Active Page: ${urlList[currentUrlIndex]}`);
-    await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 });
-    
-    await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection <span class='stream-blink'>...</span>");
-    
+    try { await activePage.goto(urlList[currentUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
+    await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection...");
     await initializeVideo(activePage, false, true); 
+    
+    // 🛡️ WAIT FOR VISUAL READINESS (Initial Load)
+    await waitForActiveVisualReady(activePage);
     await hideLoadingUI(activePage); 
 
-    if (isObsConnected) {
-        console.log('\n[*] Active Video is Ready! Shifting OBS from Animated Buffer to LIVE Video (MainScene)...');
-        try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
-    }
+    if (isObsConnected) { try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {} }
 
-    console.log(`[*] STEP 2: Silently preparing Server [${backupUrlIndex}] on Backup Page: ${urlList[backupUrlIndex]}`);
-    backupPage.goto(urlList[backupUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    try { await backupPage.goto(urlList[backupUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
+    await initializeVideo(backupPage, true, false);
     
     await activePage.bringToFront();
     try { await activePage.mouse.click(10, 10); } catch(e){} 
-    await hideLoadingUI(activePage);
 
-    console.log(`\n==================================================`);
-    console.log(`[🎥] INITIAL CAPTURE STATUS: Ready to Broadcast`);
-    console.log(`==================================================`);
-    console.log(`[📺] CURRENT ACTIVE LIVE : Server [${currentUrlIndex}] -> ${urlList[currentUrlIndex]}`);
-    console.log(`[🔊] LIVE AUDIO STATUS   : ON (Unmuted)`);
-    console.log(`--------------------------------------------------`);
-    console.log(`[🛡️] NEXT BACKUP QUEUE   : Server [${backupUrlIndex}] -> ${urlList[backupUrlIndex]}`);
-    console.log(`[🔇] BACKUP AUDIO STATUS : MUTED (Background)`);
-    console.log(`==================================================\n`);
-
-    console.log('[*] Everything Setup! Dual-Tab Monitoring is Active.');
+    console.log(`\n[🎥] INITIAL CAPTURE STATUS: Ready to Broadcast`);
     await startWatchdog();
 }
 
@@ -1107,24 +1072,23 @@ async function mainLoop() {
     while (true) {
         try { await startDirectStreaming(); } 
         catch (error) {
-            console.error(`\n[!] ALERT: ${error.message}`);
-            console.log('[*] 🔄 Hard Restarting everything in 3 seconds...');
-            await cleanup();
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            console.error('\n[🚨] FATAL ENGINE ERROR:', error.message);
+            if (activeBrowser && activeBrowser.isConnected()) { await new Promise(r => setTimeout(r, 3000)); continue; }
+            if (backupBrowser && backupBrowser.isConnected()) { await new Promise(r => setTimeout(r, 3000)); continue; }
+            try { if (activeBrowser) await activeBrowser.close().catch(() => {}); } catch (e) {}
+            try { if (backupBrowser) await backupBrowser.close().catch(() => {}); } catch (e) {}
+            activeBrowser = null; backupBrowser = null; activePage = null; backupPage = null;
+            await new Promise(r => setTimeout(r, 3000)); await cleanup();
         }
     }
 }
 
 async function cleanup() {
-    console.log('[*] Cleaning up resources...');
     try { await obs.disconnect(); } catch (e) { } 
-    if (browser) { try { await browser.close(); } catch(e) { } browser = null; }
+    if (activeBrowser) { try { await activeBrowser.close(); } catch(e) { } activeBrowser = null; }
+    if (backupBrowser) { try { await backupBrowser.close(); } catch(e) { } backupBrowser = null; }
     if (obsProcess) { try { obsProcess.kill('SIGKILL'); } catch(e) { } obsProcess = null; }
-    try {
-        execSync('pkill -9 obs || true', { stdio: 'ignore' });
-        execSync('pkill -9 chrome || true', { stdio: 'ignore' });
-        execSync('pkill -9 puppeteer || true', { stdio: 'ignore' });
-    } catch (e) { }
+    try { execSync('pkill -9 obs || true', { stdio: 'ignore' }); execSync('pkill -9 chrome || true', { stdio: 'ignore' }); execSync('pkill -9 puppeteer || true', { stdio: 'ignore' }); } catch (e) { }
 }
 
 process.on('SIGINT', async () => { await cleanup(); process.exit(0); });
@@ -1132,42 +1096,27 @@ process.on('SIGINT', async () => { await cleanup(); process.exit(0); });
 const customDurationStr = process.env.CUSTOM_DURATION || 'None';
 function parseDurationToMs(str) {
     if (!str || str.toLowerCase() === 'none') return null;
-    let ms = 0;
-    const hMatch = str.match(/(\d+)\s*h/i);
-    const mMatch = str.match(/(\d+)\s*m/i);
+    let ms = 0; const hMatch = str.match(/(\d+)\s*h/i); const mMatch = str.match(/(\d+)\s*m/i);
     if (hMatch) ms += parseInt(hMatch[1]) * 60 * 60 * 1000;
     if (mMatch) ms += parseInt(mMatch[1]) * 60 * 1000;
     return ms > 0 ? ms : null;
 }
 
 const exactDurationMs = parseDurationToMs(customDurationStr);
-if (exactDurationMs) {
-    setTimeout(async () => {
-        console.log(`\n[*] 🛑 Time's up! The assigned duration (${customDurationStr}) is complete. Shutting down cleanly...`);
-        await cleanup();
-        process.exit(0);
-    }, exactDurationMs);
-} else {
+if (exactDurationMs) { setTimeout(async () => { await cleanup(); process.exit(0); }, exactDurationMs); } 
+else {
     setTimeout(() => {
         try {
-            const targetUrls = process.env.TARGET_URLS || 'https://dadocric.st/player.php?id=starsp3&v=m';
-            const channel = process.env.OKRU_STREAM_ID || '1';
-            const quality = process.env.STREAM_QUALITY || '110KBps (Balanced 480p)';
-            const server = process.env.SERVER_SELECTION || 'None';
+            const targetUrls = process.env.TARGET_URLS || 'https://sport4u.online'; const channel = process.env.OKRU_STREAM_ID || '1';
+            const quality = process.env.STREAM_QUALITY || '110KBps (Balanced 480p)'; const server = process.env.SERVER_SELECTION || 'None';
             const cmd = `gh workflow run main.yml -f target_urls="${targetUrls}" -f okru_stream_channel="${channel}" -f stream_quality="${quality}" -f server_selection="${server}" -f proxy_engine="${PROXY_ENGINE}" -f custom_duration="None"`;
             execSync(cmd, { stdio: 'inherit' });
-            setTimeout(async () => {
-                await cleanup(); 
-                process.exit(0); 
-            }, 300000); 
+            setTimeout(async () => { await cleanup(); process.exit(0); }, 300000); 
         } catch (err) { }
     }, 21000000);
 }
 
 mainLoop();
-
-
-
 
 
 
