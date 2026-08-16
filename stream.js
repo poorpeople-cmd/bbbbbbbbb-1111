@@ -166,6 +166,13 @@ async function createBrowserInstance(args) {
 async function preparePage(page) {
     if (!page) return;
 
+    // 🐛 BROWSER CONSOLE LOGS CAPTURE KAREIN
+    page.on('console', msg => {
+        if (msg.type() === 'error' || msg.type() === 'warning') {
+            console.log(`[🌐 BROWSER ${msg.type().toUpperCase()}] ${msg.text()}`);
+        }
+    });
+    
     // =========================================================
     // 🛡️ NEW: BOT-DETECTION & BLACK SCREEN BYPASS (HEADERS)
     // =========================================================
