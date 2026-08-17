@@ -1,6 +1,11 @@
 
 
- // firefox
+
+
+
+
+
+
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 // Stealth plugin is essential to bypass basic Cloudflare checks
@@ -627,6 +632,9 @@ async function startSingleTabWatchdog() {
 // =========================================================================================
 // 🎬 ENGINE INITIALIZATION
 // =========================================================================================
+// =========================================================================================
+// 🎬 ENGINE INITIALIZATION
+// =========================================================================================
 async function startDirectStreaming() {
     console.log(`[*] Starting OBS Studio FIRST...`);
     setupOBSConfig();
@@ -639,11 +647,8 @@ async function startDirectStreaming() {
         '--multi',
         // '--safemode'
         '--portable'
-       
     ]);
 
-    
-    
     obsProcess.stdout.on('data', (data) => console.log(`[OBS]: ${data.toString().trim()}`));
     obsProcess.stderr.on('data', (data) => {
         const msg = data.toString().trim();
@@ -658,9 +663,9 @@ async function startDirectStreaming() {
         try {
             // OBS ki window ko virtual display se permanently unmap (hide) karo
             exec('xdotool search --class "obs" windowunmap 2>/dev/null');
-            // Browser ko full screen kar ke top layer par lock karo
-            exec('xdotool search --class "firefox" windowactivate windowraise 2>/dev/null');
-            exec('xdotool search --class "Firefox" windowactivate windowraise 2>/dev/null');
+            // Chrome ko full screen kar ke top layer par lock karo
+            exec('xdotool search --class "google-chrome" windowactivate windowraise 2>/dev/null');
+            exec('xdotool search --class "chrome" windowactivate windowraise 2>/dev/null');
         } catch (e) {
             // Fail silently
         }
@@ -677,23 +682,28 @@ async function startDirectStreaming() {
         console.log('[+] OBS WebSocket Connected Successfully!');
     } catch (e) {}
 
-    // Firefox Compatible Browser Arguments
+    // Chrome/Chromium Compatible Browser Arguments
     let browserArgs = [
-        `--width=${RES_W}`,
-        `--height=${RES_H}`,
-        '--kiosk' // Fullscreen functionality for Firefox
+        '--no-sandbox', 
+        '--disable-setuid-sandbox', 
+        `--window-size=${RES_W},${RES_H}`, 
+        '--window-position=0,0', 
+        '--kiosk', 
+        '--start-fullscreen',
+        '--autoplay-policy=no-user-gesture-required',
+        '--disable-infobars'
     ];
 
     if (PROXY_ENGINE.includes('Cloudflare')) {
         browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
-        console.log(`[*] Starting FIREFOX with [CLOUDFLARE WARP] Proxy...`);
+        console.log(`[*] Starting CHROME with [CLOUDFLARE WARP] Proxy...`);
     } else {
-        console.log(`[*] Starting FIREFOX...`);
+        console.log(`[*] Starting CHROME...`);
     }
 
     browser = await puppeteer.launch({
-        product: 'firefox',
-        executablePath: '/usr/bin/firefox', // 👈 Yeh nayi line add karni hai
+        // product: 'firefox',  👈 YEH REMOVE KAR DIYA HAI
+        executablePath: '/usr/bin/google-chrome', // 👈 Isko Chrome executablePath pe set kia hai
         headless: false, 
         defaultViewport: { width: RES_W, height: RES_H },
         ignoreDefaultArgs: ['--enable-automation'], 
@@ -743,16 +753,6 @@ async function startDirectStreaming() {
 }
 
 startDirectStreaming();
-
-
-
-
-
-
-
-
-
-
 
 
 
