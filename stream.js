@@ -175,49 +175,26 @@ async function setupNetworkAdBlocker(page) {
     } catch (e) { console.log('[⚠️] Request interception setup failed.'); }
 }
 
+// =========================================================================================
+// 🛡️ UPDATED: ADVANCED NETWORK INTELLIGENCE & NAVIGATION SHIELD
+// =========================================================================================
 async function applyPreloadFirewall(page) {
     if (!page) return;
 
-    // =========================================================
-    // 🛡️ NEW: ANTI-DEVTOOLS & DEBUGGER TRAP BYPASS
-    // =========================================================
-    try {
-        // 1. Disable the infinite 'debugger;' loop sites use to freeze DevTools
-        const client = await page.target().createCDPSession();
-        await client.send('Debugger.enable');
-        await client.send('Debugger.setBreakpointsActive', { active: false });
-    } catch (e) {
-        console.log('[⚠️] CDP Debugger bypass failed');
-    }
-
     try {
         await page.evaluateOnNewDocument(() => {
-            // 2. Spoof common DevTools detection variables
+            // 1. Spoof common DevTools detection variables silently
             window.devtools = { isOpen: false, orientation: undefined };
             Object.defineProperty(window, 'devtools', {
                 get: function() { return false; },
                 set: function() {}
             });
 
-            // 3. Prevent the site from clearing the console
+            // 2. Prevent the site from clearing the console
             const originalClear = console.clear;
             console.clear = function() {}; 
-            
-            // 4. 🛑 BLOCK THE ERROR MESSAGE FROM APPEARING
-            const originalSetHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML').set;
-            Object.defineProperty(Element.prototype, 'innerHTML', {
-                set: function(value) {
-                    if (typeof value === 'string' && value.includes('Close developer tools')) {
-                        console.log('[🛡️] Blocked Anti-DevTools message insertion!');
-                        return; // Text ko screen par print hone se rok do
-                    }
-                    return originalSetHTML.call(this, value);
-                }
-            });
 
-            // =========================================================
-            // ORIGINAL FIREWALL RULES
-            // =========================================================
+            // 3. ORIGINAL FIREWALL RULES
             window.alert = function() {};
             window.confirm = function() { return true; };
             window.prompt = function() { return null; };
