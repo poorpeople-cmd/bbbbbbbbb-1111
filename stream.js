@@ -1,3 +1,5 @@
+
+
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 // Stealth plugin is essential to bypass basic Cloudflare checks
@@ -113,17 +115,16 @@ else { RES_W = 1920; RES_H = 1080; BITRATE = 6000; }
 
 console.log(`[🚀] Smart Engine Locked to: ${RES_W}x${RES_H} @ ${BITRATE}kbps`);
 
-// Fix for URL handling to prevent ProtocolError
+// Fix for URL handling
 let rawUrls = (process.env.TARGET_URLS || '').trim();
 let urlList = rawUrls !== '' 
     ? rawUrls.split(',').map(u => u.trim().replace(/^\\+/, '').startsWith('http') ? u.trim().replace(/^\\+/, '') : 'https://' + u.trim().replace(/^\\+/, '')) 
-    : ['https://dadocric.st/player.php?id=starsp3&v=m'];
+    : ['https://w2.sportsonlinee.click/channels/hd/hd1.php']; // 👈 Default URL changed here for your testing
 
 let currentUrlIndex = 0;
 
 const SELECTED_CHANNEL = process.env.OKRU_STREAM_ID || '1';
-const SERVER_SELECTION = process.env.SERVER_SELECTION || 'None'; 
-const PROXY_ENGINE = process.env.PROXY_ENGINE || 'Cloudflare WARP (Recommended)';
+const PROXY_ENGINE = process.env.PROXY_ENGINE || 'None';
 
 const ACTIVE_STREAM_KEY = STREAM_KEYS[SELECTED_CHANNEL] || STREAM_KEYS['1'];
 
@@ -176,49 +177,13 @@ async function setupNetworkAdBlocker(page) {
 }
 
 // =========================================================================================
-// 🛡️ UPDATED: ADVANCED NETWORK INTELLIGENCE & NAVIGATION SHIELD
+// 🛡️ UPDATED: CLEAN FIREWALL (NO JS TAMPERING - NO DEVTOOLS ALARMS)
 // =========================================================================================
 async function applyPreloadFirewall(page) {
     if (!page) return;
-
     try {
         await page.evaluateOnNewDocument(() => {
-            // 1. Spoof common DevTools detection variables silently
-            window.devtools = { isOpen: false, orientation: undefined };
-            Object.defineProperty(window, 'devtools', {
-                get: function() { return false; },
-                set: function() {}
-            });
-
-            // 2. Prevent the site from clearing the console
-            const originalClear = console.clear;
-            console.clear = function() {}; 
-
-            // 3. ORIGINAL FIREWALL RULES
-            window.alert = function() {};
-            window.confirm = function() { return true; };
-            window.prompt = function() { return null; };
-            window.open = function() { return null; };
-            
-            Object.defineProperty(window, 'onbeforeunload', {
-                configurable: true,
-                get: function() { return null; },
-                set: function() { return null; }
-            });
-
-            document.addEventListener('click', (e) => {
-                const target = e.target;
-                if (target && (target.tagName === 'A' || target.closest('a'))) {
-                    const link = target.tagName === 'A' ? target : target.closest('a');
-                    if (link.href && !link.href.includes(window.location.hostname) && !link.href.includes('javascript')) {
-                        console.log("[🛡️] RE-DIRECT SHIELD: Blocked navigation to external ad domain.");
-                        e.preventDefault();
-                        e.stopPropagation();
-                        return false;
-                    }
-                }
-            }, true);
-
+            // Sirf visual styling (black background), koi JS hijacking nahi karni ab.
             const style = document.createElement('style');
             style.textContent = `html, body { background-color: #000000 !important; overflow: hidden !important; }`;
             document.documentElement.appendChild(style);
@@ -296,9 +261,7 @@ async function triggerSmartUnmute(page) {
             if (frame.isDetached()) continue;
 
             await frame.evaluate(() => {
-                // 1. Scan all interactive elements
                 const potentialElements = Array.from(document.querySelectorAll('button, div, span, a, i'));
-                
                 potentialElements.forEach(el => {
                     const text = (el.innerText || el.textContent || '').trim().toUpperCase();
                     const onClickStr = (el.getAttribute('onclick') || '').toLowerCase();
@@ -319,7 +282,6 @@ async function triggerSmartUnmute(page) {
                     }
                 });
 
-                // 2. Bruteforce Browser Native Media Layer
                 document.querySelectorAll('video, audio').forEach(media => {
                     if (media.muted) {
                         media.muted = false;
@@ -330,7 +292,6 @@ async function triggerSmartUnmute(page) {
         } catch (e) {}
     }
 }
-// =========================================================================================
 
 async function initializeVideo(page, startMuted, isActivePage) {
     try {
@@ -429,14 +390,12 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     let iframes = Array.from(document.querySelectorAll('iframe'));
                     let mainIframe = null; let maxScore = -1;
 
-                    // 1. ADVANCED GEOMETRIC SCORING
                     iframes.forEach(ifr => {
                         let width = ifr.clientWidth;
                         let height = ifr.clientHeight;
                         let area = width * height;
 
                         if (area < 5000) return;
-
                         let score = area;
                         
                         if (ifr.hasAttribute('allowfullscreen') || 
@@ -445,9 +404,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
                             score += 10000000; 
                         }
                         
-                        if (height > width) {
-                            score = -1; 
-                        }
+                        if (height > width) score = -1; 
 
                         if (score > maxScore) {
                             maxScore = score;
@@ -548,7 +505,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
 }
 
 // =========================================================================================
-// 🔄 WATCHDOG: To handle manifestError via reload
+// 🔄 WATCHDOG: Intelligent Status Detection
 // =========================================================================================
 async function checkPageStatus(page) {
     if (!page) return { status: 'DEAD' };
@@ -559,6 +516,11 @@ async function checkPageStatus(page) {
                 const result = await Promise.race([
                     frame.evaluate(() => {
                         const bodyText = document.body ? document.body.innerText.toLowerCase() : "";
+                        
+                        // 🛑 NAYA CHECK: Player's Anti-DevTools Detection
+                        if (bodyText.includes("close developer tools to use our service") || bodyText.includes("close developer tools")) {
+                            return { status: 'PROTECTION_BLOCKED' };
+                        }
                         
                         // Detecting manifest load error
                         if (
@@ -602,6 +564,7 @@ async function checkPageStatus(page) {
 
 async function startSingleTabWatchdog() {
     let watchdogTicks = 0;
+    let deadCounter = 0; // ⏱️ Naya counter 'DEAD' ko confirm karne ke liye
     
     while (true) {
         if (!browser || !browser.isConnected()) throw new Error("Browser closed.");
@@ -613,21 +576,40 @@ async function startSingleTabWatchdog() {
             console.log(`\n[💓] WATCHDOG HEARTBEAT: Status is ${activeStatus.status} | Single-Tab Monitoring`);
         }
 
-        // If manifest error occurs, perform a fresh reload on the same tab
-        if (activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'FROZEN') {
+        // 🛑 SCENARIO 1: DevTools Protection Detected
+        if (activeStatus.status === 'PROTECTION_BLOCKED') {
             console.log(`\n==================================================`);
-            console.log(`[!] ❌ WATCHDOG DETECTED ISSUE: ${activeStatus.status}. Manifest Error possible.`);
-            console.log(`[🔄] Auto-Reloading the page to acquire fresh M3U8 token...`);
-            console.log(`==================================================`);
+            console.log(`[⚠️] PLAYER PROTECTION DETECTED ("Close developer tools")`);
+            console.log(`[🛑] NOT RELOADING. Script will wait here so you can diagnose.`);
+            console.log(`==================================================\n`);
+            deadCounter = 0; // Reset
+        } 
+        // 🔄 SCENARIO 2: Actual Stream Death or Errors
+        else if (activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'FROZEN') {
+            deadCounter++;
             
-            try {
-                await activePage.goto('about:blank').catch(()=>{});
-                await applyPreloadFirewall(activePage);
-                await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
-                await initializeVideo(activePage, false, true);
-            } catch(e) {
-                console.log(`[⏳] Refresh handled safely.`);
+            // Ab foran reload nahi karega. 3 consecutive baar DEAD dekhne ke baad hi reload karega (ya agar critical error ho)
+            if (deadCounter >= 3 || activeStatus.status === 'CRITICAL_ERROR') {
+                console.log(`\n==================================================`);
+                console.log(`[!] ❌ WATCHDOG CONFIRMED ISSUE: ${activeStatus.status}. (${deadCounter} checks failed)`);
+                console.log(`[🔄] Auto-Reloading the page to acquire fresh M3U8 token...`);
+                console.log(`==================================================`);
+                
+                try {
+                    await activePage.goto('about:blank').catch(()=>{});
+                    await applyPreloadFirewall(activePage); 
+                    await activePage.goto(urlList[currentUrlIndex], { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
+                    await initializeVideo(activePage, false, true);
+                } catch(e) {
+                    console.log(`[⏳] Refresh handled safely.`);
+                }
+                deadCounter = 0; // Reload ke baad reset
+            } else {
+                console.log(`[!] Watchdog saw DEAD. Waiting to confirm... (${deadCounter}/3)`);
             }
+        } else {
+            // HEALTHY
+            deadCounter = 0;
         }
 
         await new Promise(r => setTimeout(r, 10000)); 
@@ -646,7 +628,6 @@ async function startDirectStreaming() {
         '--disable-updater',
         '--disable-missing-files-check',
         '--multi',
-        // '--safemode'
         '--portable'
     ]);
 
@@ -662,9 +643,7 @@ async function startDirectStreaming() {
     console.log('[🛡️] Starting OS-Level Window Shield to hide OBS...');
     setInterval(() => {
         try {
-            // OBS ki window ko virtual display se permanently unmap (hide) karo
             exec('xdotool search --class "obs" windowunmap 2>/dev/null');
-            // Chrome ko full screen kar ke top layer par lock karo
             exec('xdotool search --class "google-chrome" windowactivate windowraise 2>/dev/null');
             exec('xdotool search --class "chrome" windowactivate windowraise 2>/dev/null');
         } catch (e) {
@@ -683,12 +662,9 @@ async function startDirectStreaming() {
         console.log('[+] OBS WebSocket Connected Successfully!');
     } catch (e) {}
 
-    // Chrome/Chromium Compatible Browser Arguments
     let browserArgs = [
         '--no-sandbox', 
         '--disable-setuid-sandbox', 
-        `--window-size=${RES_W},${RES_H}`, 
-        '--window-position=0,0', 
         '--kiosk', 
         '--start-fullscreen',
         '--autoplay-policy=no-user-gesture-required',
@@ -703,9 +679,9 @@ async function startDirectStreaming() {
     }
 
     browser = await puppeteer.launch({
-        executablePath: '/usr/bin/google-chrome', // Use Google Chrome
+        executablePath: '/usr/bin/google-chrome', // Chrome browser
         headless: false, 
-        defaultViewport: { width: RES_W, height: RES_H },
+        defaultViewport: null,  // 👈 FIX: Yahan null kar diya hai taake devtools dimensions capture na ho sakein
         ignoreDefaultArgs: ['--enable-automation'], 
         args: browserArgs
     });
@@ -752,10 +728,35 @@ async function startDirectStreaming() {
     await startSingleTabWatchdog();
 }
 
-startDirectStreaming();
+// =========================================================================================
+// 🔄 MASTER AUTO-RECOVERY LOOP (CRASH HANDLER)
+// =========================================================================================
+async function mainLoop() {
+    while (true) {
+        try {
+            console.log('\n==================================================');
+            console.log('[🚀] ENGINE STARTING: Launching Browser & OBS...');
+            console.log('==================================================\n');
+            
+            await startDirectStreaming();
+            
+        } catch (error) {
+            console.log(`\n[🚨] FATAL ENGINE CRASH: ${error.message}`);
+            console.log(`[🔄] REBOOTING: 10 seconds mein system khud restart ho jayega...\n`);
+            
+            try { if (browser) await browser.close(); } catch(e) {}
+            try { if (obsProcess) obsProcess.kill('SIGKILL'); } catch(e) {}
+            try { 
+                execSync('pkill -9 chrome || true', { stdio: 'ignore' }); 
+                execSync('pkill -9 obs || true', { stdio: 'ignore' }); 
+            } catch(e) {}
+            
+            await new Promise(r => setTimeout(r, 10000));
+        }
+    }
+}
 
-
-
+mainLoop();
 
 
 
