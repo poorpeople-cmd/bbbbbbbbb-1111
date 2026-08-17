@@ -132,7 +132,7 @@ let obsProcess = null;
 let activePage = null;
 
 // =========================================================================================
-// 🛡️ ADVANCED NETWORK INTELLIGENCE & NAVIGATION SHIELD (Original)
+// 🛡️ ADVANCED NETWORK INTELLIGENCE & NAVIGATION SHIELD
 // =========================================================================================
 async function setupNetworkAdBlocker(page) {
     if (!page) return;
@@ -307,11 +307,10 @@ function attachAntiAdListeners(page) {
     page.on('dialog', async dialog => {
         try { await dialog.dismiss(); } catch(e){}
     });
-
 }
 
 // =========================================================================================
-// 🔊 2026 INTELLIGENT FUZZY UNMUTE ENGINE (Original)
+// 🔊 2026 INTELLIGENT FUZZY UNMUTE ENGINE
 // =========================================================================================
 async function triggerSmartUnmute(page) {
     console.log('[🔊] Applying Smart Unmute Logic...');
@@ -572,7 +571,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
 }
 
 // =========================================================================================
-// 🔄 WATCHDOG: Re-added to handle manifestError via reload
+// 🔄 WATCHDOG: To handle manifestError via reload
 // =========================================================================================
 async function checkPageStatus(page) {
     if (!page) return { status: 'DEAD' };
@@ -661,14 +660,10 @@ async function startSingleTabWatchdog() {
 // =========================================================================================
 // 🎬 ENGINE INITIALIZATION
 // =========================================================================================
-// =========================================================================================
-// 🎬 ENGINE INITIALIZATION
-// =========================================================================================
 async function startDirectStreaming() {
     console.log(`[*] Starting OBS Studio FIRST...`);
     setupOBSConfig();
 
-    // 🔥 2026 FIX 1: Removed --minimize-to-tray (fails in Xvfb) and added safemode flags
     obsProcess = spawn('obs', [
         '--startstreaming', 
         '--disable-updater',
@@ -731,8 +726,7 @@ async function startDirectStreaming() {
     }
 
     browser = await puppeteer.launch({
-        // product: 'firefox',  👈 YEH REMOVE KAR DIYA HAI
-        executablePath: '/usr/bin/google-chrome', // 👈 Isko Chrome executablePath pe set kia hai
+        executablePath: '/usr/bin/google-chrome', // Use Google Chrome
         headless: false, 
         defaultViewport: { width: RES_W, height: RES_H },
         ignoreDefaultArgs: ['--enable-automation'], 
@@ -752,7 +746,7 @@ async function startDirectStreaming() {
         }
     });
 
-    const pages = await browser.pages();async function applyPreloadFirewall(page) {
+    const pages = await browser.pages();
     activePage = pages[0]; 
     
     await setupNetworkAdBlocker(activePage);
