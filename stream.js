@@ -1548,35 +1548,55 @@ async function checkBackgroundHealth(page) {
 // =========================================================================================
 // 🛡️ CLOUDFLARE BYPASS SHIELD
 // =========================================================================================
+// =========================================================================================
+// 🛡️ CLOUDFLARE BYPASS & REDIRECT SHIELD
+// =========================================================================================
 async function handleCloudflareChallenge(page) {
     if (!page) return;
     try {
-        const cfIframeSelector = 'iframe[src*="cloudflare-challenge"], iframe[src*="turnstile"]';
-        // await page.waitForSelector(cfIframeSelector, { timeout: 5000 });
-        // Timeout 15 seconds (15000) kari do jethi page load thava mate puro samay male
-await page.waitForSelector(cfIframeSelector, { timeout: 15000 });
+        console.log("[🛡️] Checking for Cloudflare / Redirects...");
         
-        const elementHandle = await page.$(cfIframeSelector);
-        if (elementHandle) {
-            console.log("[⚠️] Cloudflare challenge detected! Attempting realistic bypass...");
-            await new Promise(r => setTimeout(r, 2500));
-            const boundingBox = await elementHandle.boundingBox();
-            if (boundingBox) {
-                const clickX = boundingBox.x + (boundingBox.width / 2);
-                const clickY = boundingBox.y + (boundingBox.height / 2);
-                await page.mouse.move(clickX, clickY, { steps: 15 });
-                await page.mouse.down();
-                await new Promise(r => setTimeout(r, 150));
-                await page.mouse.up();
-                console.log("[✅] Cloudflare widget clicked successfully.");
-                await new Promise(r => setTimeout(r, 5000));
+        // Check karte hain ke page par Cloudflare ka text hai ya nahi
+        const isCloudflare = await page.evaluate(() => {
+            const text = document.body ? document.body.innerText.toLowerCase() : "";
+            return text.includes("security verification") || text.includes("verifying you are not a bot");
+        });
+
+        if (isCloudflare) {
+            console.log("[⚠️] Cloudflare Page Detected! Waiting for widget...");
+            
+            // Turnstile aur Cloudflare dono ke iframe selectors
+            const cfIframeSelector = 'iframe[src*="turnstile"], iframe[src*="cloudflare-challenge"]';
+            
+            // 15 seconds tak widget ka wait karega
+            const elementHandle = await page.waitForSelector(cfIframeSelector, { timeout: 15000 }).catch(()=>null);
+            
+            if (elementHandle) {
+                console.log("[🖱️] Widget found. Attempting human-like click...");
+                await new Promise(r => setTimeout(r, 2000));
+                
+                const box = await elementHandle.boundingBox();
+                if (box) {
+                    const clickX = box.x + (box.width / 2);
+                    const clickY = box.y + (box.height / 2);
+                    
+                    await page.mouse.move(clickX, clickY, { steps: 10 });
+                    await page.mouse.down();
+                    await new Promise(r => setTimeout(r, 100));
+                    await page.mouse.up();
+                    console.log("[✅] Click successful.");
+                }
             }
+            
+            // 🌟 CRUCIAL STEP: Click karne ke baad dusre URL par REDIRECT hone ka wait karega
+            console.log("[⏳] Waiting for the website to REDIRECT to the actual video page...");
+            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+            console.log("[🚀] Redirect complete! Now searching for video...");
         }
     } catch (e) {
-        // No challenge found, continue
+        // Agar error aayi toh iska matlab seedha video page khul gaya hai
     }
 }
-
 
 
 
