@@ -1551,53 +1551,99 @@ async function checkBackgroundHealth(page) {
 // =========================================================================================
 // 🛡️ CLOUDFLARE BYPASS & REDIRECT SHIELD
 // =========================================================================================
+// =========================================================================================
+// 🛡️ CLOUDFLARE BYPASS, REDIRECT SHIELD & PAGE DEBUGGER
+// =========================================================================================
 async function handleCloudflareChallenge(page) {
     if (!page) return;
     try {
-        console.log("[🛡️] Checking for Cloudflare / Redirects...");
+        console.log("\n==================================================");
+        console.log("[🔍] PAGE DEBUG INFO (Page Par Kya Hai):");
         
-        // Check karte hain ke page par Cloudflare ka text hai ya nahi
-        const isCloudflare = await page.evaluate(() => {
-            const text = document.body ? document.body.innerText.toLowerCase() : "";
-            return text.includes("security verification") || text.includes("verifying you are not a bot");
+        // Page ka data fetch karna
+        const pageUrl = page.url();
+        const pageTitle = await page.title();
+        console.log(`[🔗] URL   : ${pageUrl}`);
+        console.log(`[🏷️] TITLE : ${pageTitle}`);
+
+        // Page ko thoda set hone ka time dete hain
+        await new Promise(r => setTimeout(r, 2500));
+
+        // Screen par jo text hai usko read karna (pehle 250 characters)
+        const pageText = await page.evaluate(() => {
+            return document.body ? document.body.innerText.substring(0, 250).replace(/\n/g, ' ') : "NO BODY TEXT";
         });
+        console.log(`[📄] TEXT  : ${pageText}`);
+        console.log("==================================================\n");
+
+        console.log("[🛡️] Checking for Cloudflare / Redirects...");
+
+        // Ab hum Title, Text, aur Iframe teeno cheezon se Cloudflare ko verify karenge
+        const cfIframeSelector = 'iframe[src*="turnstile"], iframe[src*="cloudflare-challenge"]';
+        const hasIframe = await page.$(cfIframeSelector).catch(() => null);
+
+        const textCheck = pageText.toLowerCase();
+        const titleCheck = pageTitle.toLowerCase();
+        
+        const isCloudflare = titleCheck.includes("just a moment") || 
+                             textCheck.includes("security") || 
+                             textCheck.includes("cloudflare") || 
+                             textCheck.includes("verifying") || 
+                             textCheck.includes("bot") ||
+                             hasIframe !== null;
 
         if (isCloudflare) {
-            console.log("[⚠️] Cloudflare Page Detected! Waiting for widget...");
+            console.log("[⚠️] Cloudflare Page Detected! Starting Bypass Sequence...");
             
-            // Turnstile aur Cloudflare dono ke iframe selectors
-            const cfIframeSelector = 'iframe[src*="turnstile"], iframe[src*="cloudflare-challenge"]';
-            
-            // 15 seconds tak widget ka wait karega
-            const elementHandle = await page.waitForSelector(cfIframeSelector, { timeout: 15000 }).catch(()=>null);
-            
-            if (elementHandle) {
-                console.log("[🖱️] Widget found. Attempting human-like click...");
-                await new Promise(r => setTimeout(r, 2000));
+            let redirectSuccessful = false;
+            let attempts = 0;
+            const maxAttempts = 3;
+
+            while (attempts < maxAttempts && !redirectSuccessful) {
+                attempts++;
+                console.log(`[🔄] Attempt ${attempts} of ${maxAttempts} to bypass...`);
                 
-                const box = await elementHandle.boundingBox();
-                if (box) {
-                    const clickX = box.x + (box.width / 2);
-                    const clickY = box.y + (box.height / 2);
-                    
-                    await page.mouse.move(clickX, clickY, { steps: 10 });
-                    await page.mouse.down();
-                    await new Promise(r => setTimeout(r, 100));
-                    await page.mouse.up();
-                    console.log("[✅] Click successful.");
+                // Widget ko load hone ke liye 4 seconds extra wait
+                await new Promise(r => setTimeout(r, 4000));
+                
+                const elementHandle = await page.$(cfIframeSelector);
+                
+                if (elementHandle) {
+                    console.log("[🖱️] Widget found. Clicking...");
+                    const box = await elementHandle.boundingBox();
+                    if (box) {
+                        const clickX = box.x + (box.width / 2);
+                        const clickY = box.y + (box.height / 2);
+                        
+                        await page.mouse.move(clickX, clickY, { steps: 15 });
+                        await page.mouse.down();
+                        await new Promise(r => setTimeout(r, 150));
+                        await page.mouse.up();
+                    }
+                } else {
+                    console.log("[⚠️] Widget bounding box nahi mila is attempt mein.");
+                }
+
+                console.log("[⏳] Waiting 5 seconds to see if it redirects...");
+                try {
+                    await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 5000 });
+                    redirectSuccessful = true;
+                    console.log("[🚀] Redirect successful! Moving to video.");
+                } catch (navError) {
+                    console.log("[⚠️] No redirect yet. Trying again...");
                 }
             }
-            
-            // 🌟 CRUCIAL STEP: Click karne ke baad dusre URL par REDIRECT hone ka wait karega
-            console.log("[⏳] Waiting for the website to REDIRECT to the actual video page...");
-            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
-            console.log("[🚀] Redirect complete! Now searching for video...");
+
+            if (!redirectSuccessful) {
+                console.log("[❌] Failed to bypass Cloudflare after maximum attempts.");
+            }
+        } else {
+            console.log("[✅] No Cloudflare detected. Normal video page processing.");
         }
     } catch (e) {
-        // Agar error aayi toh iska matlab seedha video page khul gaya hai
+        console.log(`[❌] Debug Check Error: ${e.message}`);
     }
 }
-
 
 
 
