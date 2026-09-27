@@ -1554,22 +1554,22 @@ async function checkBackgroundHealth(page) {
 // =========================================================================================
 // 🛡️ CLOUDFLARE BYPASS, REDIRECT SHIELD & PAGE DEBUGGER
 // =========================================================================================
+// =========================================================================================
+// 🛡️ CLOUDFLARE BYPASS, REDIRECT SHIELD & PAGE DEBUGGER
+// =========================================================================================
 async function handleCloudflareChallenge(page) {
     if (!page) return;
     try {
         console.log("\n==================================================");
         console.log("[🔍] PAGE DEBUG INFO (Page Par Kya Hai):");
         
-        // Page ka data fetch karna
         const pageUrl = page.url();
         const pageTitle = await page.title();
         console.log(`[🔗] URL   : ${pageUrl}`);
         console.log(`[🏷️] TITLE : ${pageTitle}`);
 
-        // Page ko thoda set hone ka time dete hain
         await new Promise(r => setTimeout(r, 2500));
 
-        // Screen par jo text hai usko read karna (pehle 250 characters)
         const pageText = await page.evaluate(() => {
             return document.body ? document.body.innerText.substring(0, 250).replace(/\n/g, ' ') : "NO BODY TEXT";
         });
@@ -1578,7 +1578,6 @@ async function handleCloudflareChallenge(page) {
 
         console.log("[🛡️] Checking for Cloudflare / Redirects...");
 
-        // Ab hum Title, Text, aur Iframe teeno cheezon se Cloudflare ko verify karenge
         const cfIframeSelector = 'iframe[src*="turnstile"], iframe[src*="cloudflare-challenge"]';
         const hasIframe = await page.$(cfIframeSelector).catch(() => null);
 
@@ -1603,7 +1602,6 @@ async function handleCloudflareChallenge(page) {
                 attempts++;
                 console.log(`[🔄] Attempt ${attempts} of ${maxAttempts} to bypass...`);
                 
-                // Widget ko load hone ke liye 4 seconds extra wait
                 await new Promise(r => setTimeout(r, 4000));
                 
                 const elementHandle = await page.$(cfIframeSelector);
@@ -1619,9 +1617,13 @@ async function handleCloudflareChallenge(page) {
                         await page.mouse.down();
                         await new Promise(r => setTimeout(r, 150));
                         await page.mouse.up();
+                    } else {
+                        console.log("[⚠️] Widget bounding box nahi mila is attempt mein. Initiating 80% Screen Click Loop...");
+                        await executeCarpetClick(page);
                     }
                 } else {
-                    console.log("[⚠️] Widget bounding box nahi mila is attempt mein.");
+                    console.log("[⚠️] Widget bounding box nahi mila is attempt mein. Initiating 80% Screen Click Loop...");
+                    await executeCarpetClick(page);
                 }
 
                 console.log("[⏳] Waiting 5 seconds to see if it redirects...");
@@ -1645,6 +1647,33 @@ async function handleCloudflareChallenge(page) {
     }
 }
 
+// 🎯 NEW FUNCTION: Har jagah click karne ke liye (Top to 80%)
+async function executeCarpetClick(page) {
+    try {
+        console.log("[🖱️] Grid Clicks Start: Top se lekar 80% screen par click kar rahe hain...");
+        
+        // Page ka resolution nikalna
+        const viewport = await page.evaluate(() => {
+            return { width: window.innerWidth, height: window.innerHeight };
+        });
+        
+        const maxX = viewport.width;
+        const maxY = viewport.height * 0.8; // Sirf 80% height tak click karega
+        
+        // Har 60-80 pixels ke gap par click karega taake koi point reh na jaye
+        // (Cloudflare ka box lagbhag 300x65 ka hota hai, toh yeh gap guaranteed hit karega)
+        for (let y = 10; y <= maxY; y += 60) {
+            for (let x = 10; x <= maxX; x += 80) {
+                // Ignore errors agar kisi specific point par click nahi ho pata
+                await page.mouse.click(x, y).catch(() => {});
+            }
+        }
+        
+        console.log("[✅] 80% Screen Clicks completed.");
+    } catch (error) {
+        console.log(`[❌] Screen Click Loop Error: ${error.message}`);
+    }
+}
 
 
 async function startWatchdog() {
