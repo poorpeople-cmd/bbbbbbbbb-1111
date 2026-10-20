@@ -1,9 +1,3 @@
-
-
-
-
-
-
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -188,14 +182,12 @@ let backupPage = null;
 // =========================================================================================
 // 🧠 SMART URL ENGINE MEMORY (Remembers whether URL needs OLD or NEW/KING1 mode)
 // =========================================================================================
-const urlEngineMemory = {}; // e.g., { 'dlhd.pk': 'NEW', 'dadocric.st': 'OLD' }
+const urlEngineMemory = {}; 
 
-// 🟢 URL ke hisaab se Automatic Engine Builder (OLD vs NEW)
 function getBrowserArgsForUrl(targetUrl) {
-    let mode = 'OLD'; // By default OLD tareeqa
+    let mode = 'OLD'; 
     const urlStr = typeof targetUrl === 'string' ? targetUrl : '';
     
-    // Check if domain is in memory
     for (let domain in urlEngineMemory) {
         if (urlStr.includes(domain)) {
             mode = urlEngineMemory[domain];
@@ -216,13 +208,10 @@ function getBrowserArgsForUrl(targetUrl) {
     ];
 
     if (mode === 'OLD') {
-        // 🔴 OLD MODE FLAGS (Web security disabled + Extensions/Firewall allowed)
         args.push('--disable-web-security');
         args.push('--allow-running-insecure-content');
         args.push(`--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`);
         args.push(`--load-extension=${path.join(process.cwd(), 'ublock-lite')}`);
-    } else {
-        // 🟢 NEW MODE FLAGS (King1 clean mode - No web security override, no ublock extension to prevent fake playback error)
     }
 
     if (PROXY_ENGINE.includes('Cloudflare')) args.push('--proxy-server=socks5://127.0.0.1:40000');
@@ -239,14 +228,9 @@ async function createBrowserInstance(targetUrl) {
     });
 }
 
-// 🟢 Error Detector & Memory Updater function
-// 🟢 Error Detector & Memory Updater function (ADVANCED: Scans inside IFrames)
-// 🟢 Error Detector & Memory Updater function (BULLETPROOF: IFrames + 3Sec Delay Check)
 async function detectAndRememberError(page, currentUrl) {
     try {
         let hasError = false;
-        
-        // ⏱️ 3 Dafa check karega (Har 1 second baad) taakey delayed error miss na ho
         for (let attempt = 0; attempt < 5; attempt++) {
             for (const frame of page.frames()) {
                 if (frame.isDetached()) continue;
@@ -259,17 +243,10 @@ async function detectAndRememberError(page, currentUrl) {
                                bodyText.includes('error loading media') ||
                                bodyText.includes('stream unavailable');
                     });
-                    
-                    if (textFound) {
-                        hasError = true;
-                        break; // Frame loop break
-                    }
+                    if (textFound) { hasError = true; break; }
                 } catch (err) {}
             }
-            
-            if (hasError) break; // Main attempt loop break
-            
-            // Agar error nahi mila toh 1 second wait karke dobara check karega
+            if (hasError) break;
             await new Promise(r => setTimeout(r, 1000));
         }
 
@@ -283,9 +260,6 @@ async function detectAndRememberError(page, currentUrl) {
     return false;
 }
 
-// =========================================================================================
-// 🛡️ SMART BROWSER RECOVERY & FIREWALL
-// =========================================================================================
 async function preparePage(page) {
     if (!page) return;
     await setupNetworkAdBlocker(page);
@@ -304,7 +278,6 @@ async function createFreshBackupBrowser() {
     backupPage = pages[0];
     await preparePage(backupPage);
     
-    // 🛡️ STOP FOCUS STEALING: Backup Chrome ko foran active chrome ke peechay bhej do
     try { if (activePage) await activePage.bringToFront(); } catch(e) {}
 
     backupBrowser.on('targetcreated', async (target) => {
@@ -348,7 +321,6 @@ async function setupNetworkAdBlocker(page) {
                 const targetUrl = request.url().toLowerCase();
                 const adKeywords = ['popads', 'exoclick', 'adsterra', 'onclickads', 'jerkmate', 'adrevenue', 'fanduel', 'bet', 'casino'];
                 if (adKeywords.some(keyword => targetUrl.includes(keyword))) {
-                    console.log(`[🛡️] NAVIGATION SHIELD: Blocked malicious ad redirection to -> ${targetUrl.substring(0, 70)}...`);
                     request.abort().catch(()=>{});
                     return;
                 }
@@ -360,7 +332,7 @@ async function setupNetworkAdBlocker(page) {
                 request.continue().catch(()=>{});
             }
         });
-    } catch (e) { console.log('[⚠️] Request interception setup failed.'); }
+    } catch (e) {}
 }
 
 async function applyPreloadFirewall(page) {
@@ -373,20 +345,17 @@ async function applyPreloadFirewall(page) {
                 const shadowRoot = originalAttachShadow.call(this, init);
                 const observer = new MutationObserver(() => {
                     const adElements = shadowRoot.querySelectorAll('in-page-message, [id^="note-"], [id^="missclick-"], [id^="close-"], [src*="adexchangerapid"]');
-                    if (adElements.length > 0) { console.log('[🛡️] SHIELD: Shadow DOM Ad Detected & Destroyed!'); this.remove(); }
+                    if (adElements.length > 0) { this.remove(); }
                 });
                 observer.observe(shadowRoot, { childList: true, subtree: true });
                 return shadowRoot;
             };
-            Element.prototype.attachShadow.toString = function() { return "function attachShadow() { [native code] }"; };
             window.alert = function() {}; window.confirm = function() { return true; }; window.prompt = function() { return null; }; window.open = function() { return null; };
-            Object.defineProperty(window, 'onbeforeunload', { configurable: true, get: function() { return null; }, set: function() { return null; } });
             document.addEventListener('click', (e) => {
                 const target = e.target;
                 if (target && (target.tagName === 'A' || target.closest('a'))) {
                     const link = target.tagName === 'A' ? target : target.closest('a');
                     if (link.href && !link.href.includes(window.location.hostname) && !link.href.includes('javascript')) {
-                        console.log("[🛡️] RE-DIRECT SHIELD: Blocked external ad navigation.");
                         e.preventDefault(); e.stopPropagation(); return false;
                     }
                 }
@@ -425,8 +394,6 @@ async function showLoadingUI(page, title, sub) {
                         @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
                         .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
                         .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
-                        .stream-blink { animation: blinker 1.5s linear infinite; color: #e50914; font-weight: bold; }
-                        @keyframes blinker { 50% { opacity: 0.3; } }
                     </style>
                     <div class="stream-spinner"></div>
                     <div class="progress-container"><div class="progress-bar-fill"></div></div>
@@ -442,7 +409,6 @@ async function showLoadingUI(page, title, sub) {
 async function hideLoadingUI(page) {
     try {
         await page.evaluate(() => {
-            // Destroys any stuck loading overlays permanently
             const overlays = document.querySelectorAll('#smart-stream-overlay');
             overlays.forEach(overlay => overlay.remove());
         });
@@ -461,11 +427,9 @@ async function showRecoveryUI(page) {
                 <style>
                     #stream-recovery-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: rgba(0, 0, 0, 0.95) !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; color: #ffffff !important; font-family: Arial, sans-serif !important; pointer-events: all !important; backdrop-filter: blur(8px); }
                     .recovery-radar { width: 100px; height: 100px; border-radius: 50%; border: 3px solid transparent; border-top-color: #ff9800; border-bottom-color: #ff9800; animation: radar-spin 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite; margin-bottom: 20px; box-shadow: 0 0 30px rgba(255, 152, 0, 0.3); }
-                    .recovery-radar::before { content: ''; position: absolute; top: 10px; left: 10px; right: 10px; bottom: 10px; border-radius: 50%; border: 3px solid transparent; border-left-color: #f44336; border-right-color: #f44336; animation: radar-spin 2s linear infinite reverse; }
                     @keyframes radar-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
                     .warn-title { font-size: 32px !important; font-weight: 800 !important; color: #ff9800 !important; letter-spacing: 2px !important; margin-bottom: 10px !important; text-transform: uppercase !important; }
-                    .warn-sub { font-size: 18px !important; color: #dddddd !important; animation: pulse-text 1.5s infinite; }
-                    @keyframes pulse-text { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+                    .warn-sub { font-size: 18px !important; color: #dddddd !important; }
                 </style>
                 <div class="recovery-radar"></div>
                 <div class="warn-title">SIGNAL LOST</div>
@@ -480,9 +444,7 @@ async function hideRecoveryUI(page) {
     try { 
         await page.evaluate(() => { 
             const overlay = document.getElementById('stream-recovery-overlay'); 
-            if (overlay) { 
-                overlay.remove(); // Completely destroys the overlay element
-            } 
+            if (overlay) { overlay.remove(); } 
         }); 
     } catch (e) {}
 }
@@ -521,7 +483,6 @@ function attachAntiAdListeners(page) {
     page.on('dialog', async dialog => { try { await dialog.dismiss(); } catch(e){} });
 }
 
-// 🛡️ Force Fullscreen instantly
 async function forcePlayerFullscreen(page) {
     if (!page) return;
     try {
@@ -574,12 +535,10 @@ async function forcePlayerFullscreen(page) {
     } catch(e) {}
 }
 
-// 🛡️ NEW: Advanced Visual Readiness Verification (Checks actual Video Element & Playback)
-// 🛡️ FIXED: Advanced Visual Readiness Verification (Searches ALL frames)
 async function waitForActiveVisualReady(page) {
     if (!page) return false;
     let readyCount = 0;
-    for (let i = 0; i < 40; i++) { // Max 20 seconds wait (500ms intervals)
+    for (let i = 0; i < 40; i++) { 
         try {
             let isReady = false;
             for (const frame of page.frames()) {
@@ -587,7 +546,6 @@ async function waitForActiveVisualReady(page) {
                     if (frame.isDetached()) continue;
                     const frameReady = await frame.evaluate(() => {
                         let v = document.querySelector('video');
-                        // Video element exists, has size, and is actively playing
                         return (v && v.clientWidth > 50 && !v.paused && v.currentTime > 0);
                     });
                     if (frameReady) { isReady = true; break; }
@@ -595,7 +553,7 @@ async function waitForActiveVisualReady(page) {
             }
 
             if (isReady) readyCount++; else readyCount = 0;
-            if (readyCount >= 3) return true; // 3 consecutive passes required!
+            if (readyCount >= 3) return true; 
         } catch(e) {}
         await new Promise(r => setTimeout(r, 500));
     }
@@ -685,10 +643,8 @@ async function initializeVideo(page, startMuted, isActivePage) {
             try { const isRealLiveStream = await frame.evaluate(() => { const vid = document.querySelector('video'); return vid && vid.clientWidth > 50 && vid.clientHeight > 50; }); if (isRealLiveStream) { targetFrame = frame; break; } } catch (e) { }
         }
 
-        // Apply force fullscreen immediately once
         await forcePlayerFullscreen(page);
 
-        // Keep maintaining it
         await page.evaluate(() => {
             setInterval(() => {
                 try {
@@ -701,49 +657,50 @@ async function initializeVideo(page, startMuted, isActivePage) {
             }, 500); 
         }).catch(() => {});
 
-        await targetFrame.evaluate((muteVideo) => {
-            window.isStreamMuted = muteVideo; 
-            setInterval(() => {
-                try {
-                    const style = document.createElement('style');
-                    style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
-                    document.head.appendChild(style);
+        if (targetFrame) {
+            await targetFrame.evaluate((muteVideo) => {
+                window.isStreamMuted = muteVideo; 
+                setInterval(() => {
+                    try {
+                        const style = document.createElement('style');
+                        style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
+                        document.head.appendChild(style);
 
-                    const mediaElements = document.querySelectorAll('video, audio');
-                    const videos = Array.from(document.querySelectorAll('video'));
-                    let realVideo = null;
+                        const mediaElements = document.querySelectorAll('video, audio');
+                        const videos = Array.from(document.querySelectorAll('video'));
+                        let realVideo = null;
 
-                    mediaElements.forEach(media => { media.muted = window.isStreamMuted; media.volume = window.isStreamMuted ? 0.0 : 1.0; });
-                    if (!window.isStreamMuted) document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
+                        mediaElements.forEach(media => { media.muted = window.isStreamMuted; media.volume = window.isStreamMuted ? 0.0 : 1.0; });
+                        if (!window.isStreamMuted) document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
 
-                    for (const v of videos) { if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; } }
-                    if (!realVideo && videos.length > 0) realVideo = videos[0];
+                        for (const v of videos) { if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; } }
+                        if (!realVideo && videos.length > 0) realVideo = videos[0];
 
-                    if (realVideo) { 
-                        let playerWrap = realVideo.closest('.jwplayer, #player, .plyr, .vjs-player, .shaka-video-container, [data-player]') || realVideo;
-                        playerWrap.style.setProperty('position', 'fixed', 'important');
-                        playerWrap.style.setProperty('top', '0px', 'important');
-                        playerWrap.style.setProperty('left', '0px', 'important');
-                        playerWrap.style.setProperty('width', '100vw', 'important');
-                        playerWrap.style.setProperty('height', '100vh', 'important');
-                        playerWrap.style.setProperty('z-index', '2147483646', 'important'); 
-                        playerWrap.style.setProperty('background-color', 'black', 'important');
-                        playerWrap.style.setProperty('opacity', '1', 'important');
-                        playerWrap.style.setProperty('visibility', 'visible', 'important');
-                        playerWrap.style.setProperty('display', 'block', 'important');
-                        if (playerWrap !== realVideo) { realVideo.style.setProperty('width', '100%', 'important'); realVideo.style.setProperty('height', '100%', 'important'); }
-                        realVideo.style.setProperty('object-fit', 'contain', 'important');
-                    }
-                } catch(err) {}
-            }, 500); 
-        }, startMuted).catch(() => {});
+                        if (realVideo) { 
+                            let playerWrap = realVideo.closest('.jwplayer, #player, .plyr, .vjs-player, .shaka-video-container, [data-player]') || realVideo;
+                            playerWrap.style.setProperty('position', 'fixed', 'important');
+                            playerWrap.style.setProperty('top', '0px', 'important');
+                            playerWrap.style.setProperty('left', '0px', 'important');
+                            playerWrap.style.setProperty('width', '100vw', 'important');
+                            playerWrap.style.setProperty('height', '100vh', 'important');
+                            playerWrap.style.setProperty('z-index', '2147483646', 'important'); 
+                            playerWrap.style.setProperty('background-color', 'black', 'important');
+                            playerWrap.style.setProperty('opacity', '1', 'important');
+                            playerWrap.style.setProperty('visibility', 'visible', 'important');
+                            playerWrap.style.setProperty('display', 'block', 'important');
+                            if (playerWrap !== realVideo) { realVideo.style.setProperty('width', '100%', 'important'); realVideo.style.setProperty('height', '100%', 'important'); }
+                            realVideo.style.setProperty('object-fit', 'contain', 'important');
+                        }
+                    } catch(err) {}
+                }, 500); 
+            }, startMuted).catch(() => {});
+        }
 
     } catch (e) { }
 
     if (!startMuted) { await triggerSmartUnmute(page); await new Promise(r => setTimeout(r, 1000)); }
 }
 
-// 🛡️ Active Tab Health Checker
 async function checkPageStatus(page) {
     if (!page) return { status: 'DEAD' };
     try {
@@ -781,7 +738,6 @@ async function checkPageStatus(page) {
     return { status: 'DEAD' };
 }
 
-// 🛡️ NEW: Dedicated Background Health Checker
 async function checkBackgroundHealth(page) {
     if (!page) return { status: 'DEAD', currentTime: -1, decodedFrames: -1 };
     try {
@@ -791,13 +747,9 @@ async function checkBackgroundHealth(page) {
                 const result = await Promise.race([
                     frame.evaluate(() => {
                         const bodyText = document.body ? document.body.innerText.toLowerCase() : "";
-if (
-    bodyText.includes('stream error') || bodyText.includes('not found') || bodyText.includes('stream unavailable') || bodyText.includes('404') || bodyText.includes('domain is blocked') ||
-    bodyText.includes('error: forbidden') || bodyText.includes('does not have permission') || bodyText.includes('access denied') ||
-    (bodyText.includes('cloudflare') && bodyText.includes('blocked'))
-) {
-    return { status: 'CRITICAL_ERROR', currentTime: -1, decodedFrames: -1 };
-}
+                        if (bodyText.includes('stream error') || bodyText.includes('not found') || bodyText.includes('stream unavailable') || bodyText.includes('404') || bodyText.includes('domain is blocked') || bodyText.includes('error: forbidden') || bodyText.includes('does not have permission') || bodyText.includes('access denied') || (bodyText.includes('cloudflare') && bodyText.includes('blocked'))) {
+                            return { status: 'CRITICAL_ERROR', currentTime: -1, decodedFrames: -1 };
+                        }
                         const videos = Array.from(document.querySelectorAll('video'));
                         let targetV = null;
                         for (const v of videos) {
@@ -855,7 +807,6 @@ async function startWatchdog() {
     let backupWarmupTime = Date.now(); 
     const WARMUP_MAX_TIME = 15000; 
 
-    // 🛡️ The Backup Rebuild Lock (Mutex)
     let isBackupRebuilding = false;
 
     let activeUrlStr = urlList[currentUrlIndex].url; 
@@ -946,9 +897,6 @@ async function startWatchdog() {
         let activeHangThresholdMs = urlList[currentUrlIndex].hangTime;
         let activeStatus = await checkPageStatus(activePage);
 
-        // =========================================================================================
-        // 🛡️ INDEPENDENT BACKGROUND SHIELD (Mutex Locked)
-        // =========================================================================================
         let backgroundReady = false;
         if (!isBackupRebuilding && (Date.now() - backupWarmupTime > 30000)) { 
             let verifyStatus = await checkBackgroundHealth(backupPage);
@@ -975,7 +923,7 @@ async function startWatchdog() {
                 
                 backupUrlIndex = getSafeBackupIndex(currentUrlIndex, backupUrlIndex, urlList); 
                 backupUrlStr = urlList[backupUrlIndex].url;
-                isBackupRebuilding = true; // Lock ON
+                isBackupRebuilding = true;
 
                 (async () => {
                     try {
@@ -989,7 +937,6 @@ async function startWatchdog() {
                         await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                         await initializeVideo(backupPage, true, false);
                         
-                        // 🟢 Check Backup Browser for Error during Watchdog Rebuild
                         const isBackupBlockedRebuild = await detectAndRememberError(backupPage, backupUrlStr);
                         if (isBackupBlockedRebuild) {
                             console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
@@ -1004,7 +951,7 @@ async function startWatchdog() {
                     } catch(e) {
                         console.log(`[🖤] BACKGROUND REBUILD ERROR: ${e.message}`);
                     } finally {
-                        isBackupRebuilding = false; // Lock OFF
+                        isBackupRebuilding = false;
                         backupWarmupTime = Date.now();
                     }
                 })();
@@ -1017,7 +964,7 @@ async function startWatchdog() {
             if (elapsedMs > FORCE_REFRESH_MS) { if (!isExempted) { activeStatus.status = 'FORCE_REFRESH'; } }
         }
 
-if (activeStatus.status === 'HEALTHY') {
+        if (activeStatus.status === 'HEALTHY') {
             let isTimeStuck = (lastActiveTime !== -1 && activeStatus.currentTime === lastActiveTime);
 
             if (isTimeStuck) {
@@ -1026,10 +973,8 @@ if (activeStatus.status === 'HEALTHY') {
             } else {
                 lastActiveTime = activeStatus.currentTime; lastDecodedFrames = activeStatus.decodedFrames; frozenCheckTimestamp = Date.now();
                 
-                // Remove Recovery UI
                 if (isRecoveryUIShown) { await hideRecoveryUI(activePage); isRecoveryUIShown = false; }
                 
-                // 🛡️ BULLETPROOF FALLBACK: Force remove Loading UI if stream is actually healthy
                 await hideLoadingUI(activePage); 
 
                 for (const frame of activePage.frames()) {
@@ -1060,35 +1005,21 @@ if (activeStatus.status === 'HEALTHY') {
             console.log(`[▶️] CURRENTLY LIVE             : Server [${currentUrlIndex}] -> ${activeUrlStr}`);
             console.log(`--------------------------------------------------`);
             console.log(`[🖤] BACKUP HEARTBEAT (${backupBrowserName}): Status=${logBackupStatus.status} | Time=${logBackupStatus.currentTime !== undefined && logBackupStatus.currentTime !== -1 ? logBackupStatus.currentTime.toFixed(1) : 'N/A'} | Frames=${logBackupStatus.decodedFrames !== undefined && logBackupStatus.decodedFrames !== -1 ? logBackupStatus.decodedFrames : 'N/A'}`);
-            if (!backgroundReady && !isBackupRebuilding && watchdogTicks > 1) {
-                console.log(`[🖤] BACKGROUND BACKUP IS NOT HEALTHY (Waiting for repair...)`);
-            }
             console.log(`[🔄] RUNNING IN BACKGROUND      : Server [${backupUrlIndex}] -> ${backupUrlStr}`);
             console.log(`==================================================\n`);
         }
 
-        // =========================================================================================
-        // 🔄 2. ACTIVE TAB HOT-SWAP SHIELD (SCENARIO A, B, C)
-        // =========================================================================================
         if (activeStatus.status === 'FROZEN' || activeStatus.status === 'CRITICAL_ERROR' || activeStatus.status === 'DEAD' || activeStatus.status === 'FORCE_REFRESH') {
             
             if (isWarmupPhase && (Date.now() - streamSetupTime < WARMUP_MAX_TIME)) { 
-                console.log(`[⏳] Watchdog detected '${activeStatus.status}', but stream is in WARM-UP phase. Waiting...`);
                 await new Promise(r => setTimeout(r, 2000));
                 continue; 
             }
 
             let isProactiveRefresh = (activeStatus.status === 'FORCE_REFRESH');
-            if (isProactiveRefresh) console.log(`\n[!] 🔄 PROACTIVE REFRESH TRIGGERED`);
-            else console.log(`\n[!] ❌ WATCHDOG DETECTED ISSUE: ${activeStatus.status}`);
-            
-            console.log(`[*] Checking Backup Tab status before switching...`);
             let backupStatusTest = await checkBackgroundHealth(backupPage);
             let isBackupHealthyForSwap = (backupStatusTest.status === 'VIDEO_FOUND' && backupStatusTest.currentTime > 0 && backupStatusTest.decodedFrames > 0);
 
-            // --------------------------------------------------------------------
-            // ⚡ SCENARIO A: INSTANT SEAMLESS HOT-SWAP
-            // --------------------------------------------------------------------
             if (isBackupHealthyForSwap && !isProactiveRefresh) {
                 console.log('\n[⚡] BACKUP STREAM ALREADY HEALTHY. PROMOTING INSTANTLY.');
 
@@ -1110,7 +1041,6 @@ if (activeStatus.status === 'HEALTHY') {
                             await frame.evaluate(() => { 
                                 window.isStreamMuted = false;
                                 document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
-                                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
                             });
                         }
                     } catch(e) {}
@@ -1122,26 +1052,18 @@ if (activeStatus.status === 'HEALTHY') {
                 streamSetupTime = Date.now(); currentStreamStartTime = Date.now();
                 isWarmupPhase = true; 
                 
-                // 🛡️ 3. WAIT FOR VISUAL READINESS (No premature removal!)
-                console.log(`[🛡️] SYSTEM SHIELD: Verifying stream layout before removing overlay...`);
                 const activeVisualReady = await waitForActiveVisualReady(activePage);
-
                 if (activeVisualReady) {
-                    console.log(`[✅] Stream visually verified. Removing RECONNECTING shield.`);
                     await hideLoadingUI(activePage);
                 } else {
-                    console.log(`[🛡️] STREAM NOT VISUALLY READY. RECONNECTING SHIELD REMAINS ON.`);
                     await showLoadingUI(activePage, "RECONNECTING", "Waiting for live video signal...");
                 }
 
                 isWarmupPhase = false; 
-                console.log(`[📺] NEW ACTIVE STREAM : Server [${currentUrlIndex}] -> ${activeUrlStr}`);
 
-                // SAFE BACKGROUND REBUILD (IIFE)
                 isBackupRebuilding = true;
                 (async () => {
                     try {
-                        console.log(`[⏳] Starting background buffer rebuilding safely...`);
                         lastBackupTime = -1;
                         lastBackupDecodedFrames = -1;
                         backupFrozenCheckTimestamp = Date.now();
@@ -1151,73 +1073,7 @@ if (activeStatus.status === 'HEALTHY') {
                         await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                         await initializeVideo(backupPage, true, false);
                         
-                        // 🟢 Check Backup Browser for Error during Watchdog Rebuild
-                        const isBackupBlockedRebuild = await detectAndRememberError(backupPage, backupUrlStr);
-                        if (isBackupBlockedRebuild) {
-                            console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
-                            try { await backupBrowser.close(); } catch(e){}
-                            backupBrowser = await createBrowserInstance(backupUrlStr);
-                            backupPage = (await backupBrowser.pages())[0];
-                            await preparePage(backupPage);
-                            await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(()=>{});
-                            await initializeVideo(backupPage, true, false);
-                        }
-                        
-                    
-                        console.log(`[🖤] BACKGROUND REBUILD COMPLETE -> Server [${backupUrlIndex}]`);
-                    } catch (e) {
-                        console.log(`[🖤] BACKGROUND REBUILD ERROR: ${e.message}`);
-                    } finally {
-                        isBackupRebuilding = false;
-                        backupWarmupTime = Date.now();
-                    }
-                })();
-            }
-
-            // --------------------------------------------------------------------
-            // 🔄 SCENARIO B: PROACTIVE REFRESH OR FORCED RECONNECTION
-            // --------------------------------------------------------------------
-            else if (isProactiveRefresh || (isBackupHealthyForSwap && isProactiveRefresh)) {
-                for (const frame of activePage.frames()) { try { if (!frame.isDetached()) await frame.evaluate(() => { window.isStreamMuted = true; document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {} }
-                
-                await showLoadingUI(backupPage, "REFRESHING CONNECTION", "Optimizing current server stream...");
-                await backupPage.bringToFront();
-                await new Promise(r => setTimeout(r, 1000)); 
-                try { await backupPage.mouse.click(10, 10); } catch(e){} 
-
-                await initializeVideo(backupPage, false, true); 
-                
-                let brokenPage = activePage; activePage = backupPage; backupPage = brokenPage;
-                let brokenBrowser = activeBrowser; activeBrowser = backupBrowser; backupBrowser = brokenBrowser;
-                let brokenName = activeBrowserName; activeBrowserName = backupBrowserName; backupBrowserName = brokenName;
-                
-                lastActiveTime = -1; frozenCheckTimestamp = Date.now(); isRecoveryUIShown = false; 
-                let previousActiveIndex = currentUrlIndex; currentUrlIndex = backupUrlIndex; activeUrlStr = urlList[currentUrlIndex].url; 
-                backupUrlIndex = getSafeBackupIndex(currentUrlIndex, previousActiveIndex, urlList); backupUrlStr = urlList[backupUrlIndex].url;
-
-                const activeVisualReady = await waitForActiveVisualReady(activePage);
-                if (activeVisualReady) {
-                    await hideLoadingUI(activePage);
-                } else {
-                    await showLoadingUI(activePage, "RECONNECTING", "Waiting for live video signal...");
-                }
-
-                isBackupRebuilding = true;
-                (async () => {
-                    try {
-                        console.log(`[⏳] Starting background buffer rebuilding safely...`);
-                        lastBackupTime = -1;
-                        lastBackupDecodedFrames = -1;
-                        backupFrozenCheckTimestamp = Date.now();
-                        await backupPage.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(()=>{}); 
-                        await applyPreloadFirewall(backupPage);
-                        await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
-                        await initializeVideo(backupPage, true, false);
-                        
-                        // 🟢 Check Backup Browser for Error during Watchdog Rebuild
-                        const isBackupBlockedRebuild = await detectAndRememberError(backupPage, backupUrlStr);
-                        if (isBackupBlockedRebuild) {
-                            console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
+                        if (await detectAndRememberError(backupPage, backupUrlStr)) {
                             try { await backupBrowser.close(); } catch(e){}
                             backupBrowser = await createBrowserInstance(backupUrlStr);
                             backupPage = (await backupBrowser.pages())[0];
@@ -1230,13 +1086,7 @@ if (activeStatus.status === 'HEALTHY') {
                         backupWarmupTime = Date.now();
                     }
                 })();
-                
-                streamSetupTime = Date.now(); isWarmupPhase = true; currentStreamStartTime = Date.now(); 
             }
-
-            // --------------------------------------------------------------------
-            // ❌ SCENARIO C: BOTH TABS FAILED (Fresh Hunting Mode)
-            // --------------------------------------------------------------------
             else {
                 console.log(`\n[!] ❌ BOTH TABS FAILED. FRESH HUNTING MODE ACTIVATED.`);
                 try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch (e) {}
@@ -1252,34 +1102,23 @@ if (activeStatus.status === 'HEALTHY') {
                 attachAntiAdListeners(activePage); attachAntiAdListeners(backupPage);
                 await applyPreloadFirewall(activePage); await applyPreloadFirewall(backupPage);
 
-try {
+                try {
                     await activePage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 });
                     await showLoadingUI(activePage, "SEARCHING SERVER", "Hunting for a stable stream connection...");
                     await initializeVideo(activePage, false, true); 
 
-                    // 🟢 Check if playback blocked in Hunting Mode
-                    // 🟢 Check if playback blocked in Hunting Mode with STRICT SHIELD
-                    // 🟢 Check if playback blocked in Hunting Mode with STRICT SHIELD
-                    const isPlaybackBlockedWatchdog = await detectAndRememberError(activePage, activeUrlStr);
-                    if (isPlaybackBlockedWatchdog) {
-                        console.log(`[🔄 RESTARTING] Relaunching Active Browser in NEW Mode with Strict Fullscreen Shield...`);
+                    if (await detectAndRememberError(activePage, activeUrlStr)) {
                         try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch (e) {}
-                        
-                        // 🛡️ Use proper function to guarantee ALL popup blockers and firewalls are attached
                         await createFreshActiveBrowser();
                         await activePage.bringToFront();
-
                         try { await activePage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
                         await showLoadingUI(activePage, "OPTIMIZING STREAM", "Applying Safe Mode...");
                         await initializeVideo(activePage, false, true);
                     }
                     
                     const activeVisualReady = await waitForActiveVisualReady(activePage);
-                    if (activeVisualReady) {
-                        await hideLoadingUI(activePage);
-                    } else {
-                        await showLoadingUI(activePage, "SEARCHING SERVER", "Hunting for a stable stream connection...");
-                    }
+                    if (activeVisualReady) { await hideLoadingUI(activePage); }
+                    else { await showLoadingUI(activePage, "SEARCHING SERVER", "Hunting for a stable stream connection..."); }
                 } catch(e) {}
 
                 isBackupRebuilding = true;
@@ -1289,12 +1128,11 @@ try {
                         await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
                         await initializeVideo(backupPage, true, false);
                         
-                        // 🟢 Check Backup Browser for Error during Scenario C
-                        // 🟢 Check Backup Browser for Error during Scenario C (With FOCUS STEAL FIX)
                         if (await detectAndRememberError(backupPage, backupUrlStr)) {
-                            console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
-                            await createFreshBackupBrowser();
-                            try { if (activePage) await activePage.bringToFront(); } catch(e){} // 🛡️ Fix Focus Steal instantly
+                            try { await backupBrowser.close(); } catch(e){}
+                            backupBrowser = await createBrowserInstance(backupUrlStr);
+                            backupPage = (await backupBrowser.pages())[0];
+                            await preparePage(backupPage);
                             await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
                             await initializeVideo(backupPage, true, false);
                         }
@@ -1337,19 +1175,47 @@ async function startDirectStreaming() {
 
     if (isObsConnected) { try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch(e){} }
 
-    browserArgs = [
-        '--no-sandbox', '--disable-setuid-sandbox', `--window-size=${RES_W},${RES_H}`, '--window-position=0,0', '--kiosk', '--start-fullscreen',
-        '--autoplay-policy=no-user-gesture-required', '--disable-dev-shm-usage', '--ignore-certificate-errors', '--disable-web-security',
-        '--ignore-gpu-blocklist', '--use-gl=egl', '--disable-accelerated-video-decode', '--disable-accelerated-video-encode',
-        '--disable-smooth-scrolling', '--disable-blink-features=AutomationControlled',
-        '--disable-features=Translate,BlinkGenPropertyTrees,CalculateNativeWinOcclusion,NetworkServiceInProcess2',
-        '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
-        `--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`, `--load-extension=${path.join(process.cwd(), 'ublock-lite')}`
-    ];
-    if (PROXY_ENGINE.includes('Cloudflare')) browserArgs.push('--proxy-server=socks5://127.0.0.1:40000');
+    activeBrowser = await createBrowserInstance(urlList[currentUrlIndex].url); 
+    activePage = (await activeBrowser.pages())[0];
+    
+    await setupNetworkAdBlocker(activePage);
+    attachAntiAdListeners(activePage);
+    await applyPreloadFirewall(activePage);
+    await activePage.bringToFront();
 
-activeBrowser = await createBrowserInstance(urlList[currentUrlIndex].url); activePage = (await activeBrowser.pages())[0];
-    backupBrowser = await createBrowserInstance(urlList[backupUrlIndex].url); backupPage = (await backupBrowser.pages())[0];
+    await showLoadingUI(activePage, "SYSTEM PRE-SCAN", "Checking stream servers & building memory safely...");
+    console.log('[*] Starting Pre-Scan Phase behind Black Overlay...');
+
+    for (let i = 0; i < urlList.length; i++) {
+        let testUrl = urlList[i].url;
+        console.log(`[🔎 PRE-SCAN] Testing URL [${i + 1}/${urlList.length}]: ${testUrl}`);
+        try {
+            await activePage.goto(testUrl, { waitUntil: 'domcontentloaded', timeout: 35000 }).catch(()=>{});
+            await initializeVideo(activePage, true, true);
+            
+            const hasError = await detectAndRememberError(activePage, testUrl);
+            const hostname = new URL(testUrl).hostname;
+            if (hasError) {
+                urlEngineMemory[hostname] = 'NEW';
+                console.log(`[🧠 MEMORY] Domain ${hostname} permanently set to: NEW (King1)`);
+            } else {
+                if (!urlEngineMemory[hostname]) {
+                    urlEngineMemory[hostname] = 'OLD';
+                    console.log(`[🧠 MEMORY] Domain ${hostname} set to default: OLD`);
+                }
+            }
+        } catch (err) {}
+    }
+
+    console.log('[+] Pre-Scan Complete! All server modes locked in memory:', urlEngineMemory);
+
+    try { await activeBrowser.close(); } catch(e){}
+
+    activeBrowser = await createBrowserInstance(urlList[currentUrlIndex].url); 
+    activePage = (await activeBrowser.pages())[0];
+    
+    backupBrowser = await createBrowserInstance(urlList[backupUrlIndex].url); 
+    backupPage = (await backupBrowser.pages())[0];
 
     activeBrowser.on('targetcreated', async (target) => { if (target.type() === 'page') { const newPage = await target.page(); setTimeout(async () => { if (newPage && newPage !== activePage) { try { await newPage.close(); } catch(e) {} } }, 500); } });
     backupBrowser.on('targetcreated', async (target) => { if (target.type() === 'page') { const newPage = await target.page(); setTimeout(async () => { if (newPage && newPage !== backupPage) { try { await newPage.close(); } catch(e) {} } }, 500); } });
@@ -1363,53 +1229,20 @@ activeBrowser = await createBrowserInstance(urlList[currentUrlIndex].url); activ
     try { await activePage.goto(urlList[currentUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
     await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection...");
     await initializeVideo(activePage, false, true); 
+    
+    const activeVisualReady = await waitForActiveVisualReady(activePage);
+    
+    await new Promise(r => setTimeout(r, 2000));
+    await forcePlayerFullscreen(activePage); 
 
-    // 🟢 Check if old mode gave a playback error, if so, switch to NEW mode instantly!
-    // 🟢 Check if old mode gave a playback error, if so, switch to NEW mode with STRICT SHIELD
-    // 🟢 Check if old mode gave a playback error, if so, switch to NEW mode with STRICT SHIELD
-    const isPlaybackBlocked = await detectAndRememberError(activePage, urlList[currentUrlIndex].url);
-    if (isPlaybackBlocked) {
-        console.log(`[🔄 RESTARTING] Relaunching Active Browser in NEW Mode with Strict Fullscreen Shield...`);
-        try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch (e) {}
-        
-        // 🛡️ Use proper function to guarantee ALL popup blockers and firewalls are attached
-        await createFreshActiveBrowser();
-        await activePage.bringToFront();
+    if (activeVisualReady) await hideLoadingUI(activePage); 
 
-        try { await activePage.goto(urlList[currentUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
-        await showLoadingUI(activePage, "OPTIMIZING STREAM", "Applying Safe Mode...");
-                await initializeVideo(activePage, false, true);
-                await forcePlayerFullscreen(activePage); // EXPLICIT FORCE
-            }
-            
-            // 🛡️ WAIT FOR VISUAL READINESS (Initial Load)
-            
-            // 🛡️ WAIT FOR VISUAL READINESS (Initial Load)
-            const activeVisualReady = await waitForActiveVisualReady(activePage);
-            
-            // 🛡️ STRICT SETTLEMENT DELAY: Parda hatane se pehle 2.5 seconds wait karo taakey website CSS fully destroy ho jaye
-            await new Promise(r => setTimeout(r, 2500));
-            await forcePlayerFullscreen(activePage); 
-
-            if (activeVisualReady) await hideLoadingUI(activePage); 
-
-            if (isObsConnected) { try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {} }
+    if (isObsConnected) { try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {} }
 
     try { await backupPage.goto(urlList[backupUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
     await initializeVideo(backupPage, true, false);
     
-    // 🟢 Check Backup Browser for Error
-    // 🟢 Check Backup Browser for Error
-            const isBackupBlockedInit = await detectAndRememberError(backupPage, urlList[backupUrlIndex].url);
-            if (isBackupBlockedInit) {
-                console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
-                await createFreshBackupBrowser();
-                try { if (activePage) await activePage.bringToFront(); } catch(e){} // Push behind instantly
-                await backupPage.goto(urlList[backupUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
-                await initializeVideo(backupPage, true, false);
-            }
-            
-            try { if (activePage) await activePage.bringToFront(); } catch(e){}
+    try { if (activePage) await activePage.bringToFront(); } catch(e){}
     try { await activePage.mouse.click(10, 10); } catch(e){} 
 
     console.log(`\n[🎥] INITIAL CAPTURE STATUS: Ready to Broadcast`);
@@ -1473,7 +1306,24 @@ mainLoop();
 
 
 
-// =============== combine logic old + new (king 1) ==================== 1 =================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // const puppeteer = require('puppeteer-extra');
 // const StealthPlugin = require('puppeteer-extra-plugin-stealth');
@@ -1774,6 +1624,9 @@ mainLoop();
 //     const pages = await backupBrowser.pages();
 //     backupPage = pages[0];
 //     await preparePage(backupPage);
+    
+//     // 🛡️ STOP FOCUS STEALING: Backup Chrome ko foran active chrome ke peechay bhej do
+//     try { if (activePage) await activePage.bringToFront(); } catch(e) {}
 
 //     backupBrowser.on('targetcreated', async (target) => {
 //         if (target.type() === 'page') {
@@ -2726,14 +2579,19 @@ mainLoop();
 //                     await initializeVideo(activePage, false, true); 
 
 //                     // 🟢 Check if playback blocked in Hunting Mode
+//                     // 🟢 Check if playback blocked in Hunting Mode with STRICT SHIELD
+//                     // 🟢 Check if playback blocked in Hunting Mode with STRICT SHIELD
 //                     const isPlaybackBlockedWatchdog = await detectAndRememberError(activePage, activeUrlStr);
 //                     if (isPlaybackBlockedWatchdog) {
-//                         console.log(`[🔄 RESTARTING] Relaunching Active Browser in NEW Mode due to playback error...`);
-//                         try { await activeBrowser.close(); } catch(e){}
-//                         activeBrowser = await createBrowserInstance(activeUrlStr);
-//                         activePage = (await activeBrowser.pages())[0];
-//                         await preparePage(activePage);
-//                         await activePage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 });
+//                         console.log(`[🔄 RESTARTING] Relaunching Active Browser in NEW Mode with Strict Fullscreen Shield...`);
+//                         try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch (e) {}
+                        
+//                         // 🛡️ Use proper function to guarantee ALL popup blockers and firewalls are attached
+//                         await createFreshActiveBrowser();
+//                         await activePage.bringToFront();
+
+//                         try { await activePage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
+//                         await showLoadingUI(activePage, "OPTIMIZING STREAM", "Applying Safe Mode...");
 //                         await initializeVideo(activePage, false, true);
 //                     }
                     
@@ -2753,13 +2611,11 @@ mainLoop();
 //                         await initializeVideo(backupPage, true, false);
                         
 //                         // 🟢 Check Backup Browser for Error during Scenario C
-//                         const isBackupBlockedScenC = await detectAndRememberError(backupPage, backupUrlStr);
-//                         if (isBackupBlockedScenC) {
+//                         // 🟢 Check Backup Browser for Error during Scenario C (With FOCUS STEAL FIX)
+//                         if (await detectAndRememberError(backupPage, backupUrlStr)) {
 //                             console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
-//                             try { await backupBrowser.close(); } catch(e){}
-//                             backupBrowser = await createBrowserInstance(backupUrlStr);
-//                             backupPage = (await backupBrowser.pages())[0];
-//                             await preparePage(backupPage);
+//                             await createFreshBackupBrowser();
+//                             try { if (activePage) await activePage.bringToFront(); } catch(e){} // 🛡️ Fix Focus Steal instantly
 //                             await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
 //                             await initializeVideo(backupPage, true, false);
 //                         }
@@ -2830,39 +2686,51 @@ mainLoop();
 //     await initializeVideo(activePage, false, true); 
 
 //     // 🟢 Check if old mode gave a playback error, if so, switch to NEW mode instantly!
+//     // 🟢 Check if old mode gave a playback error, if so, switch to NEW mode with STRICT SHIELD
+//     // 🟢 Check if old mode gave a playback error, if so, switch to NEW mode with STRICT SHIELD
 //     const isPlaybackBlocked = await detectAndRememberError(activePage, urlList[currentUrlIndex].url);
 //     if (isPlaybackBlocked) {
-//         console.log(`[🔄 RESTARTING] Relaunching Active Browser in NEW Mode due to playback error...`);
-//         try { await activeBrowser.close(); } catch(e){}
-//         activeBrowser = await createBrowserInstance(urlList[currentUrlIndex].url);
-//         activePage = (await activeBrowser.pages())[0];
-//         await preparePage(activePage);
-//         await activePage.goto(urlList[currentUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-//         await initializeVideo(activePage, false, true);
-//     }
-    
-//     // 🛡️ WAIT FOR VISUAL READINESS (Initial Load)
-//     const activeVisualReady = await waitForActiveVisualReady(activePage);
-//     if (activeVisualReady) await hideLoadingUI(activePage); 
+//         console.log(`[🔄 RESTARTING] Relaunching Active Browser in NEW Mode with Strict Fullscreen Shield...`);
+//         try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch (e) {}
+        
+//         // 🛡️ Use proper function to guarantee ALL popup blockers and firewalls are attached
+//         await createFreshActiveBrowser();
+//         await activePage.bringToFront();
 
-//     if (isObsConnected) { try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {} }
+//         try { await activePage.goto(urlList[currentUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
+//         await showLoadingUI(activePage, "OPTIMIZING STREAM", "Applying Safe Mode...");
+//                 await initializeVideo(activePage, false, true);
+//                 await forcePlayerFullscreen(activePage); // EXPLICIT FORCE
+//             }
+            
+//             // 🛡️ WAIT FOR VISUAL READINESS (Initial Load)
+            
+//             // 🛡️ WAIT FOR VISUAL READINESS (Initial Load)
+//             const activeVisualReady = await waitForActiveVisualReady(activePage);
+            
+//             // 🛡️ STRICT SETTLEMENT DELAY: Parda hatane se pehle 2.5 seconds wait karo taakey website CSS fully destroy ho jaye
+//             await new Promise(r => setTimeout(r, 2500));
+//             await forcePlayerFullscreen(activePage); 
+
+//             if (activeVisualReady) await hideLoadingUI(activePage); 
+
+//             if (isObsConnected) { try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {} }
 
 //     try { await backupPage.goto(urlList[backupUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
 //     await initializeVideo(backupPage, true, false);
     
 //     // 🟢 Check Backup Browser for Error
-//     const isBackupBlockedInit = await detectAndRememberError(backupPage, urlList[backupUrlIndex].url);
-//     if (isBackupBlockedInit) {
-//         console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
-//         try { await backupBrowser.close(); } catch(e){}
-//         backupBrowser = await createBrowserInstance(urlList[backupUrlIndex].url);
-//         backupPage = (await backupBrowser.pages())[0];
-//         await preparePage(backupPage);
-//         await backupPage.goto(urlList[backupUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
-//         await initializeVideo(backupPage, true, false);
-//     }
-    
-//     await activePage.bringToFront();
+//     // 🟢 Check Backup Browser for Error
+//             const isBackupBlockedInit = await detectAndRememberError(backupPage, urlList[backupUrlIndex].url);
+//             if (isBackupBlockedInit) {
+//                 console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
+//                 await createFreshBackupBrowser();
+//                 try { if (activePage) await activePage.bringToFront(); } catch(e){} // Push behind instantly
+//                 await backupPage.goto(urlList[backupUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
+//                 await initializeVideo(backupPage, true, false);
+//             }
+            
+//             try { if (activePage) await activePage.bringToFront(); } catch(e){}
 //     try { await activePage.mouse.click(10, 10); } catch(e){} 
 
 //     console.log(`\n[🎥] INITIAL CAPTURE STATUS: Ready to Broadcast`);
@@ -2918,6 +2786,15 @@ mainLoop();
 // }
 
 // mainLoop();
+
+
+
+
+
+
+
+
+// =============== combine logic old + new (king 1) ==================== 1 =================
 
 
 
