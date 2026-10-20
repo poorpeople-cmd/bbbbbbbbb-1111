@@ -380,15 +380,41 @@ async function applyPreloadFirewall(page) {
                 if (target && (target.tagName === 'A' || target.closest('a'))) {
                     const link = target.tagName === 'A' ? target : target.closest('a');
                     if (link.href && !link.href.includes(window.location.hostname) && !link.href.includes('javascript')) {
-                        console.log("[🛡️] RE-DIRECT SHIELD: Blocked external ad navigation.");
                         e.preventDefault(); e.stopPropagation(); return false;
                     }
                 }
             }, true);
 
-            const style = document.createElement('style');
-            style.textContent = `html, body { background-color: #000000 !important; overflow: hidden !important; } in-page-message, [id^="note-"], [id^="missclick-"], [id^="close-"] { display: none !important; opacity: 0 !important; pointer-events: none !important; }`;
-            document.documentElement.appendChild(style);
+            // =========================================================
+            // 🛡️ STRICT INSTANT OVERLAY SHIELD (BLOCKS NAKED LOADING)
+            // =========================================================
+            if (window.self === window.top) {
+                const style = document.createElement('style');
+                style.id = 'strict-preload-shield-style';
+                style.textContent = `
+                    html, body { background-color: #000000 !important; overflow: hidden !important; }
+                    #smart-stream-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: #000000 !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; color: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; pointer-events: all !important; }
+                    .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
+                    .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
+                    .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+                    @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                    @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
+                    .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
+                    .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
+                    in-page-message, [id^="note-"], [id^="missclick-"], [id^="close-"] { display: none !important; opacity: 0 !important; pointer-events: none !important; }
+                `;
+                document.documentElement.appendChild(style);
+
+                const overlay = document.createElement('div');
+                overlay.id = 'smart-stream-overlay';
+                overlay.innerHTML = `
+                    <div class="stream-spinner"></div>
+                    <div class="progress-container"><div class="progress-bar-fill"></div></div>
+                    <div class="stream-title" id="overlay-t">INITIALIZING</div>
+                    <div class="stream-sub" id="overlay-s">Securing connection...</div>
+                `;
+                document.documentElement.appendChild(overlay);
+            }
         });
     } catch (e) {}
 }
@@ -399,33 +425,22 @@ async function showLoadingUI(page, title, sub) {
             if (window.self !== window.top) return; 
             let overlay = document.getElementById('smart-stream-overlay');
             if (overlay) {
-                const titleEl = overlay.querySelector('.stream-title');
-                const subEl = overlay.querySelector('.stream-sub');
+                const titleEl = document.getElementById('overlay-t') || overlay.querySelector('.stream-title');
+                const subEl = document.getElementById('overlay-s') || overlay.querySelector('.stream-sub');
                 if (titleEl) titleEl.innerHTML = t;
                 if (subEl) subEl.innerHTML = s;
                 overlay.style.setProperty('display', 'flex', 'important');
                 overlay.style.setProperty('opacity', '1', 'important');
                 overlay.style.setProperty('z-index', '2147483647', 'important');
             } else {
+                // Fallback creation just in case evaluateOnNewDocument was missed
                 overlay = document.createElement('div');
                 overlay.id = 'smart-stream-overlay';
                 overlay.innerHTML = `
-                    <style>
-                        #smart-stream-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: #000000 !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; color: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; pointer-events: all !important; }
-                        .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
-                        .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
-                        .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-                        @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                        @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
-                        .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
-                        .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
-                        .stream-blink { animation: blinker 1.5s linear infinite; color: #e50914; font-weight: bold; }
-                        @keyframes blinker { 50% { opacity: 0.3; } }
-                    </style>
+                    <style> /* Fallback Styles */ #smart-stream-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: #000000 !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; color: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; pointer-events: all !important; } .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; } .stream-title { font-size: 36px !important; font-weight: 800 !important; margin-bottom: 15px !important; } .stream-sub { font-size: 20px !important; color: #cccccc !important; } @keyframes spin-overlay { 100% { transform: rotate(360deg); } } </style>
                     <div class="stream-spinner"></div>
-                    <div class="progress-container"><div class="progress-bar-fill"></div></div>
-                    <div class="stream-title">${t}</div>
-                    <div class="stream-sub">${s}</div>
+                    <div class="stream-title" id="overlay-t">${t}</div>
+                    <div class="stream-sub" id="overlay-s">${s}</div>
                 `;
                 document.documentElement.appendChild(overlay);
             }
@@ -436,8 +451,8 @@ async function showLoadingUI(page, title, sub) {
 async function hideLoadingUI(page) {
     try {
         await page.evaluate(() => {
-            // Destroys any stuck loading overlays permanently
-            const overlays = document.querySelectorAll('#smart-stream-overlay');
+            // Destroys both the HTML overlay and the strict black background CSS
+            const overlays = document.querySelectorAll('#smart-stream-overlay, #strict-preload-shield-style');
             overlays.forEach(overlay => overlay.remove());
         });
     } catch (e) {}
