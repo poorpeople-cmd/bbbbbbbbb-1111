@@ -1132,17 +1132,7 @@ if (activeStatus.status === 'HEALTHY') {
                             await initializeVideo(backupPage, true, false);
                         }
                         
-                        // 🟢 Check Backup Browser for Error during Watchdog Rebuild
-                        const isBackupBlockedRebuild = await detectAndRememberError(backupPage, backupUrlStr);
-                        if (isBackupBlockedRebuild) {
-                            console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
-                            try { await backupBrowser.close(); } catch(e){}
-                            backupBrowser = await createBrowserInstance(backupUrlStr);
-                            backupPage = (await backupBrowser.pages())[0];
-                            await preparePage(backupPage);
-                            await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(()=>{});
-                            await initializeVideo(backupPage, true, false);
-                        }
+                    
                         console.log(`[🖤] BACKGROUND REBUILD COMPLETE -> Server [${backupUrlIndex}]`);
                     } catch (e) {
                         console.log(`[🖤] BACKGROUND REBUILD ERROR: ${e.message}`);
