@@ -1,3 +1,7 @@
+
+
+
+
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -179,25 +183,20 @@ let obsProcess = null;
 let activePage = null;
 let backupPage = null;
 
-// =========================================================================================
-// 🧠 SMART URL ENGINE MEMORY (Remembers whether URL needs OLD or NEW/KING1 mode)
-// =========================================================================================
-const urlEngineMemory = {}; // e.g., { 'dlhd.pk': 'NEW', 'dadocric.st': 'OLD' }
+// 🧠 SMART URL ENGINE MEMORY: By default OLD, switches to 'NEW' (king1) if Playback Error occurs
+const urlEngineMemory = {}; 
 
-// 🟢 URL ke hisaab se Automatic Engine Builder (OLD vs NEW)
+function getUrlMode(targetUrl) {
+    if (!targetUrl) return 'OLD';
+    try {
+        const hostname = new URL(targetUrl).hostname;
+        return urlEngineMemory[hostname] || 'OLD';
+    } catch (e) { return 'OLD'; }
+}
+
 function getBrowserArgsForUrl(targetUrl) {
-    let mode = 'OLD'; // By default OLD tareeqa
-    const urlStr = typeof targetUrl === 'string' ? targetUrl : '';
-    
-    // Check if domain is in memory
-    for (let domain in urlEngineMemory) {
-        if (urlStr.includes(domain)) {
-            mode = urlEngineMemory[domain];
-            break;
-        }
-    }
-
-    console.log(`[🧠 MEMORY ENGINE] URL: ${urlStr.substring(0, 30)}... | Assigned Mode: ${mode}`);
+    const mode = getUrlMode(targetUrl);
+    console.log(`[🧠 MEMORY ENGINE] URL: ${targetUrl ? targetUrl.substring(0, 35) : 'Default'}... | Mode: ${mode}`);
 
     let args = [
         '--no-sandbox', '--disable-setuid-sandbox', `--window-size=${RES_W},${RES_H}`, '--window-position=0,0', '--kiosk', '--start-fullscreen',
@@ -210,96 +209,73 @@ function getBrowserArgsForUrl(targetUrl) {
     ];
 
     if (mode === 'OLD') {
-        // 🔴 OLD MODE FLAGS (Web security disabled + Extensions/Firewall allowed)
+        // 🔴 OLD TAREEQA (Default): Web security off + uBlock extension
         args.push('--disable-web-security');
-        args.push('--allow-running-insecure-content');
         args.push(`--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`);
         args.push(`--load-extension=${path.join(process.cwd(), 'ublock-lite')}`);
-    } else {
-        // 🟢 NEW MODE FLAGS (King1 clean mode - No web security override, no ublock extension to prevent fake playback error)
     }
+    // 🟢 NEW TAREEQA (king1): Clean flags (No --disable-web-security, No extension)
 
     if (PROXY_ENGINE.includes('Cloudflare')) args.push('--proxy-server=socks5://127.0.0.1:40000');
     return args;
 }
 
-async function createBrowserInstance(targetUrl) {
-    const customArgs = getBrowserArgsForUrl(targetUrl);
+async function createBrowserInstance(targetUrlOrArgs) {
+    const finalArgs = Array.isArray(targetUrlOrArgs) ? targetUrlOrArgs : getBrowserArgsForUrl(targetUrlOrArgs);
     return await puppeteer.launch({
         headless: false, 
         defaultViewport: { width: RES_W, height: RES_H },
         ignoreDefaultArgs: ['--enable-automation'], 
-        args: customArgs
+        args: finalArgs
     });
-}
-
-// 🟢 Error Detector & Memory Updater function
-// 🟢 Error Detector & Memory Updater function (ADVANCED: Scans inside IFrames)
-// 🟢 Error Detector & Memory Updater function (BULLETPROOF: IFrames + 3Sec Delay Check)
-async function detectAndRememberError(page, currentUrl) {
-    try {
-        let hasError = false;
-        
-        // ⏱️ 3 Dafa check karega (Har 1 second baad) taakey delayed error miss na ho
-        for (let attempt = 0; attempt < 5; attempt++) {
-            for (const frame of page.frames()) {
-                if (frame.isDetached()) continue;
-                try {
-                    const textFound = await frame.evaluate(() => {
-                        const bodyText = document.body ? document.body.innerText.toLowerCase() : '';
-                        return bodyText.includes('playback error') || 
-                               bodyText.includes('protected content') || 
-                               bodyText.includes('domain is blocked') ||
-                               bodyText.includes('error loading media') ||
-                               bodyText.includes('stream unavailable');
-                    });
-                    
-                    if (textFound) {
-                        hasError = true;
-                        break; // Frame loop break
-                    }
-                } catch (err) {}
-            }
-            
-            if (hasError) break; // Main attempt loop break
-            
-            // Agar error nahi mila toh 1 second wait karke dobara check karega
-            await new Promise(r => setTimeout(r, 1000));
-        }
-
-        if (hasError) {
-            const hostname = new URL(currentUrl).hostname;
-            urlEngineMemory[hostname] = 'NEW';
-            console.log(`[🚨 MEMORY ALERT] Fake Playback Error detected inside iFrame on ${hostname}! Switching engine to NEW (King1 Mode).`);
-            return true;
-        }
-    } catch(e) {}
-    return false;
 }
 
 // =========================================================================================
 // 🛡️ SMART BROWSER RECOVERY & FIREWALL
 // =========================================================================================
-async function preparePage(page) {
+async function preparePage(page, targetUrl = '') {
     if (!page) return;
-    await setupNetworkAdBlocker(page);
+    const mode = getUrlMode(targetUrl);
     attachAntiAdListeners(page);
-    await applyPreloadFirewall(page);
+    if (mode === 'OLD') {
+        await setupNetworkAdBlocker(page);
+        await applyPreloadFirewall(page);
+    }
 }
 
-async function createFreshBackupBrowser() {
-    console.log('\n[🛠️] BACKUP RECOVERY: Creating fresh backup Chrome...');
-    try { if (backupBrowser && backupBrowser.isConnected()) { const pages = await backupBrowser.pages(); for (const p of pages) { try { await p.close(); } catch (e) {} } } } catch (e) {}
-    try { if (backupBrowser && !backupBrowser.isConnected()) backupBrowser = null; } catch (e) { backupBrowser = null; }
+// 🟢 Iframe Playback Error Detector & Memory Updater
+async function detectAndRememberPlaybackError(page, currentUrl) {
+    if (!page || !currentUrl || getUrlMode(currentUrl) === 'NEW') return false;
+    try {
+        for (const frame of page.frames()) {
+            try {
+                if (frame.isDetached()) continue;
+                const hasError = await frame.evaluate(() => {
+                    const txt = document.body ? document.body.innerText : '';
+                    return txt.includes('Playback error') || txt.includes('protected content');
+                });
+                if (hasError) {
+                    const hostname = new URL(currentUrl).hostname;
+                    urlEngineMemory[hostname] = 'NEW';
+                    console.log(`\n[🚨 MEMORY SAVED] 'Playback error' detected on [${hostname}]! Saved as NEW (King1) Mode in memory.\n`);
+                    return true;
+                }
+            } catch (e) {}
+        }
+    } catch (e) {}
+    return false;
+}
 
-    const targetUrl = (urlList[backupUrlIndex] && urlList[backupUrlIndex].url) ? urlList[backupUrlIndex].url : '';
-    backupBrowser = await createBrowserInstance(targetUrl);
+async function createFreshBackupBrowser(targetUrl = '') {
+    const urlToUse = targetUrl || (urlList[backupUrlIndex] ? urlList[backupUrlIndex].url : '');
+    console.log(`\n[🛠️] BACKUP RECOVERY: Creating fresh backup Chrome (${getUrlMode(urlToUse)} Mode)...`);
+    try { if (backupBrowser) await backupBrowser.close().catch(()=>{}); } catch (e) {}
+    backupBrowser = null;
+
+    backupBrowser = await createBrowserInstance(urlToUse);
     const pages = await backupBrowser.pages();
     backupPage = pages[0];
-    await preparePage(backupPage);
-    
-    // 🛡️ STOP FOCUS STEALING: Backup Chrome ko foran active chrome ke peechay bhej do
-    try { if (activePage) await activePage.bringToFront(); } catch(e) {}
+    await preparePage(backupPage, urlToUse);
 
     backupBrowser.on('targetcreated', async (target) => {
         if (target.type() === 'page') {
@@ -310,16 +286,16 @@ async function createFreshBackupBrowser() {
     return true;
 }
 
-async function createFreshActiveBrowser() {
-    console.log('\n[🛠️] ACTIVE RECOVERY: Creating fresh active Chrome...');
-    try { if (activeBrowser && activeBrowser.isConnected()) { const pages = await activeBrowser.pages(); for (const p of pages) { try { await p.close(); } catch (e) {} } } } catch (e) {}
-    try { if (activeBrowser && !activeBrowser.isConnected()) activeBrowser = null; } catch (e) { activeBrowser = null; }
+async function createFreshActiveBrowser(targetUrl = '') {
+    const urlToUse = targetUrl || (urlList[currentUrlIndex] ? urlList[currentUrlIndex].url : '');
+    console.log(`\n[🛠️] ACTIVE RECOVERY: Creating fresh active Chrome (${getUrlMode(urlToUse)} Mode)...`);
+    try { if (activeBrowser) await activeBrowser.close().catch(()=>{}); } catch (e) {}
+    activeBrowser = null;
 
-    const targetUrl = (urlList[currentUrlIndex] && urlList[currentUrlIndex].url) ? urlList[currentUrlIndex].url : '';
-    activeBrowser = await createBrowserInstance(targetUrl);
+    activeBrowser = await createBrowserInstance(urlToUse);
     const pages = await activeBrowser.pages();
     activePage = pages[0];
-    await preparePage(activePage);
+    await preparePage(activePage, urlToUse);
 
     activeBrowser.on('targetcreated', async (target) => {
         if (target.type() === 'page') {
@@ -380,41 +356,15 @@ async function applyPreloadFirewall(page) {
                 if (target && (target.tagName === 'A' || target.closest('a'))) {
                     const link = target.tagName === 'A' ? target : target.closest('a');
                     if (link.href && !link.href.includes(window.location.hostname) && !link.href.includes('javascript')) {
+                        console.log("[🛡️] RE-DIRECT SHIELD: Blocked external ad navigation.");
                         e.preventDefault(); e.stopPropagation(); return false;
                     }
                 }
             }, true);
 
-            // =========================================================
-            // 🛡️ STRICT INSTANT OVERLAY SHIELD (BLOCKS NAKED LOADING)
-            // =========================================================
-            if (window.self === window.top) {
-                const style = document.createElement('style');
-                style.id = 'strict-preload-shield-style';
-                style.textContent = `
-                    html, body { background-color: #000000 !important; overflow: hidden !important; }
-                    #smart-stream-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: #000000 !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; color: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; pointer-events: all !important; }
-                    .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
-                    .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
-                    .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-                    @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                    @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
-                    .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
-                    .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
-                    in-page-message, [id^="note-"], [id^="missclick-"], [id^="close-"] { display: none !important; opacity: 0 !important; pointer-events: none !important; }
-                `;
-                document.documentElement.appendChild(style);
-
-                const overlay = document.createElement('div');
-                overlay.id = 'smart-stream-overlay';
-                overlay.innerHTML = `
-                    <div class="stream-spinner"></div>
-                    <div class="progress-container"><div class="progress-bar-fill"></div></div>
-                    <div class="stream-title" id="overlay-t">INITIALIZING</div>
-                    <div class="stream-sub" id="overlay-s">Securing connection...</div>
-                `;
-                document.documentElement.appendChild(overlay);
-            }
+            const style = document.createElement('style');
+            style.textContent = `html, body { background-color: #000000 !important; overflow: hidden !important; } in-page-message, [id^="note-"], [id^="missclick-"], [id^="close-"] { display: none !important; opacity: 0 !important; pointer-events: none !important; }`;
+            document.documentElement.appendChild(style);
         });
     } catch (e) {}
 }
@@ -425,22 +375,33 @@ async function showLoadingUI(page, title, sub) {
             if (window.self !== window.top) return; 
             let overlay = document.getElementById('smart-stream-overlay');
             if (overlay) {
-                const titleEl = document.getElementById('overlay-t') || overlay.querySelector('.stream-title');
-                const subEl = document.getElementById('overlay-s') || overlay.querySelector('.stream-sub');
+                const titleEl = overlay.querySelector('.stream-title');
+                const subEl = overlay.querySelector('.stream-sub');
                 if (titleEl) titleEl.innerHTML = t;
                 if (subEl) subEl.innerHTML = s;
                 overlay.style.setProperty('display', 'flex', 'important');
                 overlay.style.setProperty('opacity', '1', 'important');
                 overlay.style.setProperty('z-index', '2147483647', 'important');
             } else {
-                // Fallback creation just in case evaluateOnNewDocument was missed
                 overlay = document.createElement('div');
                 overlay.id = 'smart-stream-overlay';
                 overlay.innerHTML = `
-                    <style> /* Fallback Styles */ #smart-stream-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: #000000 !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; color: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; pointer-events: all !important; } .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; } .stream-title { font-size: 36px !important; font-weight: 800 !important; margin-bottom: 15px !important; } .stream-sub { font-size: 20px !important; color: #cccccc !important; } @keyframes spin-overlay { 100% { transform: rotate(360deg); } } </style>
+                    <style>
+                        #smart-stream-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: #000000 !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; color: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; pointer-events: all !important; }
+                        .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
+                        .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
+                        .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+                        @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                        @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
+                        .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
+                        .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
+                        .stream-blink { animation: blinker 1.5s linear infinite; color: #e50914; font-weight: bold; }
+                        @keyframes blinker { 50% { opacity: 0.3; } }
+                    </style>
                     <div class="stream-spinner"></div>
-                    <div class="stream-title" id="overlay-t">${t}</div>
-                    <div class="stream-sub" id="overlay-s">${s}</div>
+                    <div class="progress-container"><div class="progress-bar-fill"></div></div>
+                    <div class="stream-title">${t}</div>
+                    <div class="stream-sub">${s}</div>
                 `;
                 document.documentElement.appendChild(overlay);
             }
@@ -451,8 +412,8 @@ async function showLoadingUI(page, title, sub) {
 async function hideLoadingUI(page) {
     try {
         await page.evaluate(() => {
-            // Destroys both the HTML overlay and the strict black background CSS
-            const overlays = document.querySelectorAll('#smart-stream-overlay, #strict-preload-shield-style');
+            // Destroys any stuck loading overlays permanently
+            const overlays = document.querySelectorAll('#smart-stream-overlay');
             overlays.forEach(overlay => overlay.remove());
         });
     } catch (e) {}
@@ -661,11 +622,17 @@ async function initializeVideo(page, startMuted, isActivePage) {
         while (!isVideoPlaying && attempts < 15) {
             for (const frame of page.frames()) {
                 try {
-                    const autoPlayed = await frame.evaluate(() => {
+                    if (frame.isDetached()) continue;
+                    const autoPlayed = await frame.evaluate((shouldMute) => {
                         let playing = false;
-                        document.querySelectorAll('video').forEach(v => { if (v.clientWidth > 50 && !v.paused && v.currentTime > 0) { v.muted = false; v.volume = 1.0; playing = true; } });
+                        document.querySelectorAll('video').forEach(v => { 
+                            if (v.clientWidth > 50) {
+                                if (v.paused) { v.muted = true; v.play().catch(()=>{}); }
+                                if (!v.paused && v.currentTime > 0) { v.muted = shouldMute; v.volume = shouldMute ? 0.0 : 1.0; playing = true; } 
+                            }
+                        });
                         return playing;
-                    });
+                    }, startMuted);
                     if (autoPlayed) { isVideoPlaying = true; break; }
 
                     const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, [class*="unmute"], .fp-play');
@@ -980,10 +947,17 @@ async function startWatchdog() {
 
             if (!backgroundReady) {
                 console.log(`[🔴] BACKGROUND FAILED/FROZEN : Server [${backupUrlIndex}]`);
-                console.log(`[🔎] BACKGROUND : MOVING TO NEXT SERVER`);
                 
-                backupUrlIndex = getSafeBackupIndex(currentUrlIndex, backupUrlIndex, urlList); 
-                backupUrlStr = urlList[backupUrlIndex].url;
+                // 🧠 Check if Backup failed due to Fake Playback Error
+                const wasBlocked = await detectAndRememberPlaybackError(backupPage, backupUrlStr);
+                if (!wasBlocked) {
+                    console.log(`[🔎] BACKGROUND : MOVING TO NEXT SERVER`);
+                    backupUrlIndex = getSafeBackupIndex(currentUrlIndex, backupUrlIndex, urlList); 
+                    backupUrlStr = urlList[backupUrlIndex].url;
+                } else {
+                    console.log(`[🧠] BACKGROUND : Retrying SAME Server [${backupUrlIndex}] with newly learned NEW (King1) Mode!`);
+                }
+                
                 isBackupRebuilding = true; // Lock ON
 
                 (async () => {
@@ -993,23 +967,12 @@ async function startWatchdog() {
                         lastBackupDecodedFrames = -1;
                         backupFrozenCheckTimestamp = Date.now();
 
-                        await backupPage.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(()=>{}); 
-                        await applyPreloadFirewall(backupPage);
+                        // Launch Backup Chrome with the exact mode remembered for backupUrlStr
+                        await createFreshBackupBrowser(backupUrlStr);
                         await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                         await initializeVideo(backupPage, true, false);
-                        
-                        // 🟢 Check Backup Browser for Error during Watchdog Rebuild
-                        const isBackupBlockedRebuild = await detectAndRememberError(backupPage, backupUrlStr);
-                        if (isBackupBlockedRebuild) {
-                            console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
-                            try { await backupBrowser.close(); } catch(e){}
-                            backupBrowser = await createBrowserInstance(backupUrlStr);
-                            backupPage = (await backupBrowser.pages())[0];
-                            await preparePage(backupPage);
-                            await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(()=>{});
-                            await initializeVideo(backupPage, true, false);
-                        }
-                        console.log(`[🖤] BACKGROUND REBUILD COMPLETE -> Server [${backupUrlIndex}]`);
+                        await detectAndRememberPlaybackError(backupPage, backupUrlStr);
+                        console.log(`[🖤] BACKGROUND REBUILD COMPLETE -> Server [${backupUrlIndex}] (${getUrlMode(backupUrlStr)} Mode)`);
                     } catch(e) {
                         console.log(`[🖤] BACKGROUND REBUILD ERROR: ${e.message}`);
                     } finally {
@@ -1155,25 +1118,20 @@ if (activeStatus.status === 'HEALTHY') {
                         lastBackupDecodedFrames = -1;
                         backupFrozenCheckTimestamp = Date.now();
 
-                        await backupPage.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(()=>{}); 
-                        await applyPreloadFirewall(backupPage);
+                        // 🧠 Launch fresh Backup Chrome using the remembered Mode (OLD vs NEW) for backupUrlStr
+                        await createFreshBackupBrowser(backupUrlStr);
                         await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                         await initializeVideo(backupPage, true, false);
-                        
-                        // 🟢 Check Backup Browser for Error during Watchdog Rebuild
-                        const isBackupBlockedRebuild = await detectAndRememberError(backupPage, backupUrlStr);
-                        if (isBackupBlockedRebuild) {
-                            console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
-                            try { await backupBrowser.close(); } catch(e){}
-                            backupBrowser = await createBrowserInstance(backupUrlStr);
-                            backupPage = (await backupBrowser.pages())[0];
-                            await preparePage(backupPage);
-                            await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(()=>{});
+
+                        // 🧠 If this URL triggered a Playback Error in OLD mode, remember it & relaunch immediately in NEW mode
+                        if (await detectAndRememberPlaybackError(backupPage, backupUrlStr)) {
+                            console.log(`[🔄] Relaunching Backup Chrome in NEW (King1) Mode for Server [${backupUrlIndex}]...`);
+                            await createFreshBackupBrowser(backupUrlStr);
+                            await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                             await initializeVideo(backupPage, true, false);
                         }
-                        
-                    
-                        console.log(`[🖤] BACKGROUND REBUILD COMPLETE -> Server [${backupUrlIndex}]`);
+
+                        console.log(`[🖤] BACKGROUND REBUILD COMPLETE -> Server [${backupUrlIndex}] (${getUrlMode(backupUrlStr)} Mode)`);
                     } catch (e) {
                         console.log(`[🖤] BACKGROUND REBUILD ERROR: ${e.message}`);
                     } finally {
@@ -1218,20 +1176,15 @@ if (activeStatus.status === 'HEALTHY') {
                         lastBackupTime = -1;
                         lastBackupDecodedFrames = -1;
                         backupFrozenCheckTimestamp = Date.now();
-                        await backupPage.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(()=>{}); 
-                        await applyPreloadFirewall(backupPage);
+                        
+                        // 🧠 Launch fresh Backup Chrome using the remembered Mode (OLD vs NEW)
+                        await createFreshBackupBrowser(backupUrlStr);
                         await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                         await initializeVideo(backupPage, true, false);
-                        
-                        // 🟢 Check Backup Browser for Error during Watchdog Rebuild
-                        const isBackupBlockedRebuild = await detectAndRememberError(backupPage, backupUrlStr);
-                        if (isBackupBlockedRebuild) {
-                            console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
-                            try { await backupBrowser.close(); } catch(e){}
-                            backupBrowser = await createBrowserInstance(backupUrlStr);
-                            backupPage = (await backupBrowser.pages())[0];
-                            await preparePage(backupPage);
-                            await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(()=>{});
+
+                        if (await detectAndRememberPlaybackError(backupPage, backupUrlStr)) {
+                            await createFreshBackupBrowser(backupUrlStr);
+                            await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                             await initializeVideo(backupPage, true, false);
                         }
                     } catch (e) {} finally {
@@ -1250,36 +1203,35 @@ if (activeStatus.status === 'HEALTHY') {
                 console.log(`\n[!] ❌ BOTH TABS FAILED. FRESH HUNTING MODE ACTIVATED.`);
                 try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch (e) {}
 
-                currentUrlIndex = getSafeBackupIndex(currentUrlIndex, currentUrlIndex, urlList); activeUrlStr = urlList[currentUrlIndex].url;
-                backupUrlIndex = getSafeBackupIndex(currentUrlIndex, currentUrlIndex, urlList); backupUrlStr = urlList[backupUrlIndex].url;
+                // 🧠 First check if Active Page failed due to 'Playback error' in OLD mode
+                const activeWasBlocked = await detectAndRememberPlaybackError(activePage, activeUrlStr);
+                if (!activeWasBlocked) {
+                    // Only move to next URL if it wasn't a newly discovered Playback Error
+                    currentUrlIndex = getSafeBackupIndex(currentUrlIndex, currentUrlIndex, urlList); 
+                    activeUrlStr = urlList[currentUrlIndex].url;
+                } else {
+                    console.log(`[🧠] ACTIVE : Retrying SAME Server [${currentUrlIndex}] in newly learned NEW (King1) Mode!`);
+                }
+                
+                backupUrlIndex = getSafeBackupIndex(currentUrlIndex, currentUrlIndex, urlList); 
+                backupUrlStr = urlList[backupUrlIndex].url;
 
-                try { await activePage.close(); } catch(e) {}
-                try { await backupPage.close(); } catch(e) {}
+                // 🧠 Launch fresh Active Browser with the right mode for activeUrlStr
+                await createFreshActiveBrowser(activeUrlStr);
+                await activePage.bringToFront();
 
-                activePage = await activeBrowser.newPage(); backupPage = await backupBrowser.newPage();
-                await setupNetworkAdBlocker(activePage); await setupNetworkAdBlocker(backupPage);
-                attachAntiAdListeners(activePage); attachAntiAdListeners(backupPage);
-                await applyPreloadFirewall(activePage); await applyPreloadFirewall(backupPage);
-
-try {
+                try {
                     await activePage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 });
                     await showLoadingUI(activePage, "SEARCHING SERVER", "Hunting for a stable stream connection...");
                     await initializeVideo(activePage, false, true); 
 
-                    // 🟢 Check if playback blocked in Hunting Mode
-                    // 🟢 Check if playback blocked in Hunting Mode with STRICT SHIELD
-                    // 🟢 Check if playback blocked in Hunting Mode with STRICT SHIELD
-                    const isPlaybackBlockedWatchdog = await detectAndRememberError(activePage, activeUrlStr);
-                    if (isPlaybackBlockedWatchdog) {
-                        console.log(`[🔄 RESTARTING] Relaunching Active Browser in NEW Mode with Strict Fullscreen Shield...`);
-                        try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch (e) {}
-                        
-                        // 🛡️ Use proper function to guarantee ALL popup blockers and firewalls are attached
-                        await createFreshActiveBrowser();
+                    // 🧠 If this newly hunted URL also gives Playback Error in OLD mode, switch it immediately!
+                    if (await detectAndRememberPlaybackError(activePage, activeUrlStr)) {
+                        console.log(`[🔄] Relaunching Active Chrome in NEW (King1) Mode...`);
+                        await createFreshActiveBrowser(activeUrlStr);
                         await activePage.bringToFront();
-
-                        try { await activePage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
-                        await showLoadingUI(activePage, "OPTIMIZING STREAM", "Applying Safe Mode...");
+                        await activePage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 });
+                        await showLoadingUI(activePage, "SEARCHING SERVER", "Switching to King1 Engine...");
                         await initializeVideo(activePage, false, true);
                     }
                     
@@ -1294,16 +1246,13 @@ try {
                 isBackupRebuilding = true;
                 (async () => {
                     try {
-                        await backupPage.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(()=>{}); 
+                        // 🧠 Launch fresh Backup Browser with the right mode for backupUrlStr
+                        await createFreshBackupBrowser(backupUrlStr);
                         await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
-                        await initializeVideo(backupPage, true, false);
-                        
-                        // 🟢 Check Backup Browser for Error during Scenario C
-                        // 🟢 Check Backup Browser for Error during Scenario C (With FOCUS STEAL FIX)
-                        if (await detectAndRememberError(backupPage, backupUrlStr)) {
-                            console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
-                            await createFreshBackupBrowser();
-                            try { if (activePage) await activePage.bringToFront(); } catch(e){} // 🛡️ Fix Focus Steal instantly
+                        await initializeVideo(backupPage, true, false); 
+
+                        if (await detectAndRememberPlaybackError(backupPage, backupUrlStr)) {
+                            await createFreshBackupBrowser(backupUrlStr);
                             await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
                             await initializeVideo(backupPage, true, false);
                         }
@@ -1344,94 +1293,53 @@ async function startDirectStreaming() {
         } catch (e) { await new Promise(r => setTimeout(r, 2000)); }
     }
 
-    // 🛡️ 1. LOCK OBS TO WAITING SCENE IMMEDIATELY
     if (isObsConnected) { try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch(e){} }
 
-    // Launch initial browser instance for pre-scanning
-    activeBrowser = await createBrowserInstance(urlList[currentUrlIndex].url); 
-    activePage = (await activeBrowser.pages())[0];
-    
-    await setupNetworkAdBlocker(activePage);
-    attachAntiAdListeners(activePage);
-    await applyPreloadFirewall(activePage);
-    await activePage.bringToFront();
+    const initialActiveUrl = urlList[currentUrlIndex].url;
+    const initialBackupUrl = urlList[backupUrlIndex].url;
 
-    // 🛡️ 2. ACTIVATE STRICT BLACK OVERLAY SHIELD DURING PRE-SCAN
-    await showLoadingUI(activePage, "SYSTEM PRE-SCAN", "Checking stream servers & building memory safely...");
-    console.log('[*] Starting Pre-Scan Phase behind Black Overlay...');
-
-    // 🔎 3. PRE-SCAN ALL URLS TO POPULATE ENGINE MEMORY BEFORE GOING LIVE
-    for (let i = 0; i < urlList.length; i++) {
-        let testUrl = urlList[i].url;
-        console.log(`[🔎 PRE-SCAN] Testing URL [${i + 1}/${urlList.length}]: ${testUrl}`);
-        try {
-            await activePage.goto(testUrl, { waitUntil: 'domcontentloaded', timeout: 35000 }).catch(()=>{});
-            await initializeVideo(activePage, true, true); // Muted test
-            
-            // Detect if this URL requires NEW mode
-            const hasError = await detectAndRememberError(activePage, testUrl);
-            const hostname = new URL(testUrl).hostname;
-            if (hasError) {
-                urlEngineMemory[hostname] = 'NEW';
-                console.log(`[🧠 MEMORY] Domain ${hostname} permanently set to: NEW (King1)`);
-            } else {
-                if (!urlEngineMemory[hostname]) {
-                    urlEngineMemory[hostname] = 'OLD';
-                    console.log(`[🧠 MEMORY] Domain ${hostname} set to default: OLD`);
-                }
-            }
-        } catch (err) {
-            console.log(`[⚠️ PRE-SCAN WARNING] Could not fully scan ${testUrl}`);
-        }
-    }
-
-    console.log('[+] Pre-Scan Complete! All server modes locked in memory:', urlEngineMemory);
-
-    // Close temporary pre-scan page and launch fresh clean instances based on updated memory
-    try { await activeBrowser.close(); } catch(e){}
-
-    // Now launch actual Active and Backup browsers with correct memory applied
-    activeBrowser = await createBrowserInstance(urlList[currentUrlIndex].url); 
-    activePage = (await activeBrowser.pages())[0];
-    
-    backupBrowser = await createBrowserInstance(urlList[backupUrlIndex].url); 
-    backupPage = (await backupBrowser.pages())[0];
-
-    activeBrowser.on('targetcreated', async (target) => { if (target.type() === 'page') { const newPage = await target.page(); setTimeout(async () => { if (newPage && newPage !== activePage) { try { await newPage.close(); } catch(e) {} } }, 500); } });
-    backupBrowser.on('targetcreated', async (target) => { if (target.type() === 'page') { const newPage = await target.page(); setTimeout(async () => { if (newPage && newPage !== backupPage) { try { await newPage.close(); } catch(e) {} } }, 500); } });
-
-    await setupNetworkAdBlocker(activePage); await setupNetworkAdBlocker(backupPage);
-    attachAntiAdListeners(activePage); attachAntiAdListeners(backupPage);
-    await applyPreloadFirewall(activePage); await applyPreloadFirewall(backupPage);
+    // Launch both browsers using Memory (Default is OLD mode)
+    await createFreshActiveBrowser(initialActiveUrl);
+    await createFreshBackupBrowser(initialBackupUrl);
 
     await activePage.bringToFront(); 
 
-    // Load actual stream with Overlay still active
-    try { await activePage.goto(urlList[currentUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
+    try { await activePage.goto(initialActiveUrl, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
     await showLoadingUI(activePage, "STREAM LOADING", "Optimizing live video connection...");
     await initializeVideo(activePage, false, true); 
-    
-    // 🛡️ WAIT FOR VISUAL READINESS (Synchronous check from original clean code)
-    const activeVisualReady = await waitForActiveVisualReady(activePage);
-    
-    // Extra safety settlement delay
-    await new Promise(r => setTimeout(r, 2000));
-    await forcePlayerFullscreen(activePage); 
 
+    // 🧠 Check if URL 1 gave 'Playback error' in OLD mode -> Save in Memory & Immediately Relaunch URL 1 in NEW Mode!
+    if (await detectAndRememberPlaybackError(activePage, initialActiveUrl)) {
+        console.log(`[🔄] Relaunching Active Chrome for URL 1 in NEW (King1) Mode...`);
+        await createFreshActiveBrowser(initialActiveUrl);
+        await activePage.bringToFront();
+        try { await activePage.goto(initialActiveUrl, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
+        await showLoadingUI(activePage, "STREAM LOADING", "Switching to King1 Engine...");
+        await initializeVideo(activePage, false, true);
+    }
+    
+    // 🛡️ WAIT FOR VISUAL READINESS (Initial Load)
+    const activeVisualReady = await waitForActiveVisualReady(activePage);
     if (activeVisualReady) await hideLoadingUI(activePage); 
 
-    // Finally switch OBS to MainScene safely after everything is verified
     if (isObsConnected) { try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {} }
 
-    try { await backupPage.goto(urlList[backupUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
+    try { await backupPage.goto(initialBackupUrl, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
     await initializeVideo(backupPage, true, false);
+
+    // 🧠 Check if Backup URL gave 'Playback error' in OLD mode -> Save in Memory & Relaunch Backup in NEW Mode!
+    if (await detectAndRememberPlaybackError(backupPage, initialBackupUrl)) {
+        console.log(`[🔄] Relaunching Backup Chrome in NEW (King1) Mode...`);
+        await createFreshBackupBrowser(initialBackupUrl);
+        try { await backupPage.goto(initialBackupUrl, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
+        await initializeVideo(backupPage, true, false);
+    }
     
-    try { if (activePage) await activePage.bringToFront(); } catch(e){}
+    await activePage.bringToFront();
     try { await activePage.mouse.click(10, 10); } catch(e){} 
 
     console.log(`\n[🎥] INITIAL CAPTURE STATUS: Ready to Broadcast`);
     await startWatchdog();
-}
 
 async function mainLoop() {
     while (true) {
@@ -1482,9 +1390,6 @@ else {
 }
 
 mainLoop();
-
-
-
 
 
 
