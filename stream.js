@@ -957,6 +957,18 @@ async function startWatchdog() {
                         await applyPreloadFirewall(backupPage);
                         await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                         await initializeVideo(backupPage, true, false);
+                        
+                        // 🟢 Check Backup Browser for Error during Watchdog Rebuild
+                        const isBackupBlockedRebuild = await detectAndRememberError(backupPage, backupUrlStr);
+                        if (isBackupBlockedRebuild) {
+                            console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
+                            try { await backupBrowser.close(); } catch(e){}
+                            backupBrowser = await createBrowserInstance(backupUrlStr);
+                            backupPage = (await backupBrowser.pages())[0];
+                            await preparePage(backupPage);
+                            await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(()=>{});
+                            await initializeVideo(backupPage, true, false);
+                        }
                         console.log(`[🖤] BACKGROUND REBUILD COMPLETE -> Server [${backupUrlIndex}]`);
                     } catch(e) {
                         console.log(`[🖤] BACKGROUND REBUILD ERROR: ${e.message}`);
@@ -1107,6 +1119,30 @@ if (activeStatus.status === 'HEALTHY') {
                         await applyPreloadFirewall(backupPage);
                         await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                         await initializeVideo(backupPage, true, false);
+                        
+                        // 🟢 Check Backup Browser for Error during Watchdog Rebuild
+                        const isBackupBlockedRebuild = await detectAndRememberError(backupPage, backupUrlStr);
+                        if (isBackupBlockedRebuild) {
+                            console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
+                            try { await backupBrowser.close(); } catch(e){}
+                            backupBrowser = await createBrowserInstance(backupUrlStr);
+                            backupPage = (await backupBrowser.pages())[0];
+                            await preparePage(backupPage);
+                            await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(()=>{});
+                            await initializeVideo(backupPage, true, false);
+                        }
+                        
+                        // 🟢 Check Backup Browser for Error during Watchdog Rebuild
+                        const isBackupBlockedRebuild = await detectAndRememberError(backupPage, backupUrlStr);
+                        if (isBackupBlockedRebuild) {
+                            console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
+                            try { await backupBrowser.close(); } catch(e){}
+                            backupBrowser = await createBrowserInstance(backupUrlStr);
+                            backupPage = (await backupBrowser.pages())[0];
+                            await preparePage(backupPage);
+                            await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(()=>{});
+                            await initializeVideo(backupPage, true, false);
+                        }
                         console.log(`[🖤] BACKGROUND REBUILD COMPLETE -> Server [${backupUrlIndex}]`);
                     } catch (e) {
                         console.log(`[🖤] BACKGROUND REBUILD ERROR: ${e.message}`);
@@ -1156,6 +1192,18 @@ if (activeStatus.status === 'HEALTHY') {
                         await applyPreloadFirewall(backupPage);
                         await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                         await initializeVideo(backupPage, true, false);
+                        
+                        // 🟢 Check Backup Browser for Error during Watchdog Rebuild
+                        const isBackupBlockedRebuild = await detectAndRememberError(backupPage, backupUrlStr);
+                        if (isBackupBlockedRebuild) {
+                            console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
+                            try { await backupBrowser.close(); } catch(e){}
+                            backupBrowser = await createBrowserInstance(backupUrlStr);
+                            backupPage = (await backupBrowser.pages())[0];
+                            await preparePage(backupPage);
+                            await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(()=>{});
+                            await initializeVideo(backupPage, true, false);
+                        }
                     } catch (e) {} finally {
                         isBackupRebuilding = false;
                         backupWarmupTime = Date.now();
@@ -1213,7 +1261,19 @@ try {
                     try {
                         await backupPage.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(()=>{}); 
                         await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
-                        await initializeVideo(backupPage, true, false); 
+                        await initializeVideo(backupPage, true, false);
+                        
+                        // 🟢 Check Backup Browser for Error during Scenario C
+                        const isBackupBlockedScenC = await detectAndRememberError(backupPage, backupUrlStr);
+                        if (isBackupBlockedScenC) {
+                            console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
+                            try { await backupBrowser.close(); } catch(e){}
+                            backupBrowser = await createBrowserInstance(backupUrlStr);
+                            backupPage = (await backupBrowser.pages())[0];
+                            await preparePage(backupPage);
+                            await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
+                            await initializeVideo(backupPage, true, false);
+                        }
                     } catch(e) {} finally {
                         isBackupRebuilding = false;
                         backupWarmupTime = Date.now();
@@ -1300,6 +1360,18 @@ activeBrowser = await createBrowserInstance(urlList[currentUrlIndex].url); activ
 
     try { await backupPage.goto(urlList[backupUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
     await initializeVideo(backupPage, true, false);
+    
+    // 🟢 Check Backup Browser for Error
+    const isBackupBlockedInit = await detectAndRememberError(backupPage, urlList[backupUrlIndex].url);
+    if (isBackupBlockedInit) {
+        console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
+        try { await backupBrowser.close(); } catch(e){}
+        backupBrowser = await createBrowserInstance(urlList[backupUrlIndex].url);
+        backupPage = (await backupBrowser.pages())[0];
+        await preparePage(backupPage);
+        await backupPage.goto(urlList[backupUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
+        await initializeVideo(backupPage, true, false);
+    }
     
     await activePage.bringToFront();
     try { await activePage.mouse.click(10, 10); } catch(e){} 
