@@ -238,17 +238,43 @@ async function createBrowserInstance(targetUrl) {
 }
 
 // 🟢 Error Detector & Memory Updater function
+// 🟢 Error Detector & Memory Updater function (ADVANCED: Scans inside IFrames)
+// 🟢 Error Detector & Memory Updater function (BULLETPROOF: IFrames + 3Sec Delay Check)
 async function detectAndRememberError(page, currentUrl) {
     try {
-        const hasError = await page.evaluate(() => {
-            const bodyText = document.body ? document.body.innerText : '';
-            return bodyText.includes('Playback error') || bodyText.includes('protected content');
-        });
+        let hasError = false;
+        
+        // ⏱️ 3 Dafa check karega (Har 1 second baad) taakey delayed error miss na ho
+        for (let attempt = 0; attempt < 5; attempt++) {
+            for (const frame of page.frames()) {
+                if (frame.isDetached()) continue;
+                try {
+                    const textFound = await frame.evaluate(() => {
+                        const bodyText = document.body ? document.body.innerText.toLowerCase() : '';
+                        return bodyText.includes('playback error') || 
+                               bodyText.includes('protected content') || 
+                               bodyText.includes('domain is blocked') ||
+                               bodyText.includes('error loading media') ||
+                               bodyText.includes('stream unavailable');
+                    });
+                    
+                    if (textFound) {
+                        hasError = true;
+                        break; // Frame loop break
+                    }
+                } catch (err) {}
+            }
+            
+            if (hasError) break; // Main attempt loop break
+            
+            // Agar error nahi mila toh 1 second wait karke dobara check karega
+            await new Promise(r => setTimeout(r, 1000));
+        }
 
         if (hasError) {
             const hostname = new URL(currentUrl).hostname;
             urlEngineMemory[hostname] = 'NEW';
-            console.log(`[🚨 MEMORY ALERT] Fake Playback Error detected on ${hostname}! Switching engine to NEW (King1 Mode) permanently for this domain.`);
+            console.log(`[🚨 MEMORY ALERT] Fake Playback Error detected inside iFrame on ${hostname}! Switching engine to NEW (King1 Mode).`);
             return true;
         }
     } catch(e) {}
