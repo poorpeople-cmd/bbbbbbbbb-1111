@@ -1256,28 +1256,19 @@ try {
 
                     // 🟢 Check if playback blocked in Hunting Mode
                     // 🟢 Check if playback blocked in Hunting Mode with STRICT SHIELD
+                    // 🟢 Check if playback blocked in Hunting Mode with STRICT SHIELD
                     const isPlaybackBlockedWatchdog = await detectAndRememberError(activePage, activeUrlStr);
                     if (isPlaybackBlockedWatchdog) {
                         console.log(`[🔄 RESTARTING] Relaunching Active Browser in NEW Mode with Strict Fullscreen Shield...`);
-                        
                         try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch (e) {}
-                        try { await activeBrowser.close(); } catch(e){}
-
-                        activeBrowser = await createBrowserInstance(activeUrlStr);
-                        activePage = (await activeBrowser.pages())[0];
-                        await preparePage(activePage);
+                        
+                        // 🛡️ Use proper function to guarantee ALL popup blockers and firewalls are attached
+                        await createFreshActiveBrowser();
                         await activePage.bringToFront();
 
                         try { await activePage.goto(activeUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
-                        await showLoadingUI(activePage, "OPTIMIZING STREAM", "Switching to high-compatibility player...");
-
+                        await showLoadingUI(activePage, "OPTIMIZING STREAM", "Applying Safe Mode...");
                         await initializeVideo(activePage, false, true);
-                        await forcePlayerFullscreen(activePage);
-
-                        const activeVisualReady = await waitForActiveVisualReady(activePage);
-                        if (activeVisualReady) await hideLoadingUI(activePage);
-
-                        try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
                     }
                     
                     const activeVisualReady = await waitForActiveVisualReady(activePage);
@@ -1374,33 +1365,19 @@ activeBrowser = await createBrowserInstance(urlList[currentUrlIndex].url); activ
 
     // 🟢 Check if old mode gave a playback error, if so, switch to NEW mode instantly!
     // 🟢 Check if old mode gave a playback error, if so, switch to NEW mode with STRICT SHIELD
+    // 🟢 Check if old mode gave a playback error, if so, switch to NEW mode with STRICT SHIELD
     const isPlaybackBlocked = await detectAndRememberError(activePage, urlList[currentUrlIndex].url);
     if (isPlaybackBlocked) {
         console.log(`[🔄 RESTARTING] Relaunching Active Browser in NEW Mode with Strict Fullscreen Shield...`);
-        
-        // 1. OBS ko safely WaitingScene par bhejo taake website na dikhe
         try { await obs.call('SetCurrentProgramScene', { sceneName: 'WaitingScene' }); } catch (e) {}
-        try { await activeBrowser.close(); } catch(e){}
-
-        // 2. Fresh Browser Instance
-        activeBrowser = await createBrowserInstance(urlList[currentUrlIndex].url);
-        activePage = (await activeBrowser.pages())[0];
-        await preparePage(activePage);
+        
+        // 🛡️ Use proper function to guarantee ALL popup blockers and firewalls are attached
+        await createFreshActiveBrowser();
         await activePage.bringToFront();
 
-        // 3. Navigation + Instant Black Overlay Shield
         try { await activePage.goto(urlList[currentUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
-        await showLoadingUI(activePage, "OPTIMIZING STREAM", "Switching to high-compatibility player...");
-
-        // 4. Fullscreen & Video Setup
+        await showLoadingUI(activePage, "OPTIMIZING STREAM", "Applying Safe Mode...");
         await initializeVideo(activePage, false, true);
-        await forcePlayerFullscreen(activePage);
-
-        // 5. Strict Visual Readiness Verification before hiding overlay & revealing scene
-        const activeVisualReady = await waitForActiveVisualReady(activePage);
-        if (activeVisualReady) await hideLoadingUI(activePage);
-
-        try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {}
     }
     
     // 🛡️ WAIT FOR VISUAL READINESS (Initial Load)
