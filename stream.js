@@ -1341,6 +1341,8 @@ async function startDirectStreaming() {
     console.log(`\n[🎥] INITIAL CAPTURE STATUS: Ready to Broadcast`);
     await startWatchdog();
 
+}
+
 async function mainLoop() {
     while (true) {
         try { await startDirectStreaming(); } 
