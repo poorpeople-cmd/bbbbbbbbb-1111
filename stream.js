@@ -303,6 +303,9 @@ async function createFreshBackupBrowser() {
     const pages = await backupBrowser.pages();
     backupPage = pages[0];
     await preparePage(backupPage);
+    
+    // 🛡️ STOP FOCUS STEALING: Backup Chrome ko foran active chrome ke peechay bhej do
+    try { if (activePage) await activePage.bringToFront(); } catch(e) {}
 
     backupBrowser.on('targetcreated', async (target) => {
         if (target.type() === 'page') {
@@ -1287,13 +1290,11 @@ try {
                         await initializeVideo(backupPage, true, false);
                         
                         // 🟢 Check Backup Browser for Error during Scenario C
-                        const isBackupBlockedScenC = await detectAndRememberError(backupPage, backupUrlStr);
-                        if (isBackupBlockedScenC) {
+                        // 🟢 Check Backup Browser for Error during Scenario C (With FOCUS STEAL FIX)
+                        if (await detectAndRememberError(backupPage, backupUrlStr)) {
                             console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
-                            try { await backupBrowser.close(); } catch(e){}
-                            backupBrowser = await createBrowserInstance(backupUrlStr);
-                            backupPage = (await backupBrowser.pages())[0];
-                            await preparePage(backupPage);
+                            await createFreshBackupBrowser();
+                            try { if (activePage) await activePage.bringToFront(); } catch(e){} // 🛡️ Fix Focus Steal instantly
                             await backupPage.goto(backupUrlStr, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
                             await initializeVideo(backupPage, true, false);
                         }
@@ -1377,31 +1378,38 @@ activeBrowser = await createBrowserInstance(urlList[currentUrlIndex].url); activ
 
         try { await activePage.goto(urlList[currentUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
         await showLoadingUI(activePage, "OPTIMIZING STREAM", "Applying Safe Mode...");
-        await initializeVideo(activePage, false, true);
-    }
-    
-    // 🛡️ WAIT FOR VISUAL READINESS (Initial Load)
-    const activeVisualReady = await waitForActiveVisualReady(activePage);
-    if (activeVisualReady) await hideLoadingUI(activePage); 
+                await initializeVideo(activePage, false, true);
+                await forcePlayerFullscreen(activePage); // EXPLICIT FORCE
+            }
+            
+            // 🛡️ WAIT FOR VISUAL READINESS (Initial Load)
+            
+            // 🛡️ WAIT FOR VISUAL READINESS (Initial Load)
+            const activeVisualReady = await waitForActiveVisualReady(activePage);
+            
+            // 🛡️ STRICT SETTLEMENT DELAY: Parda hatane se pehle 2.5 seconds wait karo taakey website CSS fully destroy ho jaye
+            await new Promise(r => setTimeout(r, 2500));
+            await forcePlayerFullscreen(activePage); 
 
-    if (isObsConnected) { try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {} }
+            if (activeVisualReady) await hideLoadingUI(activePage); 
+
+            if (isObsConnected) { try { await obs.call('SetCurrentProgramScene', { sceneName: 'MainScene' }); } catch (e) {} }
 
     try { await backupPage.goto(urlList[backupUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
     await initializeVideo(backupPage, true, false);
     
     // 🟢 Check Backup Browser for Error
-    const isBackupBlockedInit = await detectAndRememberError(backupPage, urlList[backupUrlIndex].url);
-    if (isBackupBlockedInit) {
-        console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
-        try { await backupBrowser.close(); } catch(e){}
-        backupBrowser = await createBrowserInstance(urlList[backupUrlIndex].url);
-        backupPage = (await backupBrowser.pages())[0];
-        await preparePage(backupPage);
-        await backupPage.goto(urlList[backupUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
-        await initializeVideo(backupPage, true, false);
-    }
-    
-    await activePage.bringToFront();
+    // 🟢 Check Backup Browser for Error
+            const isBackupBlockedInit = await detectAndRememberError(backupPage, urlList[backupUrlIndex].url);
+            if (isBackupBlockedInit) {
+                console.log(`[🔄 RESTARTING BACKUP] Relaunching Backup Browser in NEW Mode due to playback error...`);
+                await createFreshBackupBrowser();
+                try { if (activePage) await activePage.bringToFront(); } catch(e){} // Push behind instantly
+                await backupPage.goto(urlList[backupUrlIndex].url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(()=>{});
+                await initializeVideo(backupPage, true, false);
+            }
+            
+            try { if (activePage) await activePage.bringToFront(); } catch(e){}
     try { await activePage.mouse.click(10, 10); } catch(e){} 
 
     console.log(`\n[🎥] INITIAL CAPTURE STATUS: Ready to Broadcast`);
