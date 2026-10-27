@@ -609,35 +609,29 @@ async function triggerSmartUnmute(page) {
         try {
             if (frame.isDetached()) continue;
             await frame.evaluate(() => {
-                // 1. Check karo ke kya koi video pehle se UNMUTED (Audio ON) chal rahi hai?
-                const videos = Array.from(document.querySelectorAll('video'));
-                const activeVideo = videos.find(v => v.clientWidth > 50 && !v.paused && v.currentTime > 0);
-
-                // Agar video chal rahi hai aur pehle se Unmuted hai (muted === false && volume > 0),
-                // toh sirf check karo ke koi "UNMUTE" overlay banner toh nahi hai. Generic AUDIO/VOLUME button mat dabao!
-                const potentialElements = Array.from(document.querySelectorAll('button, div, span, a, i'));
-                potentialElements.forEach(el => {
-                    const text = (el.innerText || el.textContent || '').trim().toUpperCase();
-                    const onClickStr = (el.getAttribute('onclick') || '').toLowerCase();
-                    
-                    // Removed 'AUDIO' and 'volume' so it never clicks a normal volume toggle button when audio is already ON
-                    const matchesText = text.includes('UNMUTE') || text.includes('MUTE ME') || text.includes('STREAM UNMUTE');
-                    const matchesJS = onClickStr.includes('unmute');
-                    
-                    if (matchesText || matchesJS) {
-                        const rect = el.getBoundingClientRect();
-                        const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none';
-                        if (isVisible) { try { el.click(); } catch(e) {} try { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e) {} }
-                    }
-                });
-
-                document.querySelectorAll('video, audio').forEach(media => { 
-                    if (media.muted || media.volume === 0) { 
-                        media.muted = false; 
-                        media.volume = 1.0; 
-                    } 
-                });
-            }).catch(() => {});
+                        const videos = Array.from(document.querySelectorAll('video, audio'));
+                        // Check if it is ALREADY playing with Audio ON
+                        const isAlreadyUnmuted = videos.length > 0 && videos.every(v => !v.muted && v.volume > 0);
+                        
+                        if (!isAlreadyUnmuted) {
+                            const potentialElements = Array.from(document.querySelectorAll('button, div, span, a, i'));
+                            potentialElements.forEach(el => {
+                                const text = (el.innerText || el.textContent || '').trim().toUpperCase();
+                                const onClickStr = (el.getAttribute('onclick') || '').toLowerCase();
+                                const matchesText = text.includes('UNMUTE') || text.includes('MUTE ME') || text.includes('STREAM UNMUTE') || text.includes('AUDIO');
+                                const matchesJS = onClickStr.includes('unmute') || onClickStr.includes('volume') || onClickStr.includes('audio');
+                                if (matchesText || matchesJS) {
+                                    const rect = el.getBoundingClientRect();
+                                    const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none';
+                                    if (isVisible) { try { el.click(); } catch(e) {} try { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e) {} }
+                                }
+                            });
+                            // Extra Safety: Simulate click on player to bypass browser gesture policies
+                            if (videos[0]) { try { videos[0].click(); } catch(e) {} }
+                        }
+                        
+                        videos.forEach(media => { media.muted = false; media.volume = 1.0; });
+                    }).catch(() => {});
         } catch (e) {}
     }
 }
@@ -676,7 +670,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     });
                     if (autoPlayed) { isVideoPlaying = true; break; }
 
-                   const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, .fp-play');
+                    const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, [class*="unmute"], .fp-play');
                     if (playBtn) {
                         const isVisible = await frame.evaluate(el => { const style = window.getComputedStyle(el); return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0'; }, playBtn);
                         if (isVisible) { await frame.evaluate(el => el.click(), playBtn); await new Promise(r => setTimeout(r, 3000)); isVideoPlaying = true; break; }
@@ -726,24 +720,21 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
                     document.head.appendChild(style);
 
-                    const mediaElements = document.querySelectorAll('video, audio');
+                   const mediaElements = document.querySelectorAll('video, audio');
                     const videos = Array.from(document.querySelectorAll('video'));
                     let realVideo = null;
 
+                    let needsUnmuteClick = false;
                     mediaElements.forEach(media => { 
+                        if (media.muted || media.volume === 0) needsUnmuteClick = true;
                         media.muted = window.isStreamMuted; 
                         media.volume = window.isStreamMuted ? 0.0 : 1.0; 
                     });
-                    if (!window.isStreamMuted) {
-                        // Direct Player APIs (Safe Unmute without accidental toggle)
-                        try { if (window.jwplayer && typeof window.jwplayer().setMute === 'function') { window.jwplayer().setMute(false); window.jwplayer().setVolume(100); } } catch(e) {}
-                        try { if (window.player && typeof window.player.unMute === 'function') { window.player.unMute(); window.player.setVolume(100); } } catch(e) {}
-                        // Only click UI icon if video is STILL muted in DOM
-                        const anyMuted = Array.from(mediaElements).some(m => m.muted || m.volume === 0);
-                        if (anyMuted) {
-                            document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"], .media-control-icon.hd-off[data-media-control]').forEach(btn => { try { btn.click(); } catch(e){} });
-                        }
+                    
+                    if (!window.isStreamMuted && needsUnmuteClick) {
+                        document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
                     }
+
                     for (const v of videos) { if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; } }
                     if (!realVideo && videos.length > 0) realVideo = videos[0];
 
@@ -1065,8 +1056,14 @@ if (activeStatus.status === 'HEALTHY') {
                         if (!frame.isDetached()) {
                             frame.evaluate(() => { 
                                 window.isStreamMuted = false;
-                                document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
-                                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
+                                let needsUnmuteClick = false;
+                                document.querySelectorAll('video, audio').forEach(m => { 
+                                    if (m.muted || m.volume === 0) needsUnmuteClick = true;
+                                    m.muted = false; m.volume = 1.0; 
+                                }); 
+                                if (needsUnmuteClick) {
+                                    document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
+                                }
                             }).catch(()=>{});
                         }
                     } catch(e) {}
@@ -1137,8 +1134,14 @@ if (activeStatus.status === 'HEALTHY') {
                         if (!frame.isDetached()) {
                             await frame.evaluate(() => { 
                                 window.isStreamMuted = false;
-                                document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
-                                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
+                                let needsUnmuteClick = false;
+                                document.querySelectorAll('video, audio').forEach(m => { 
+                                    if (m.muted || m.volume === 0) needsUnmuteClick = true;
+                                    m.muted = false; m.volume = 1.0; 
+                                }); 
+                                if (needsUnmuteClick) {
+                                    document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
+                                }
                             });
                         }
                     } catch(e) {}
