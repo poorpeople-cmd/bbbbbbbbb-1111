@@ -597,56 +597,58 @@ async function waitForActiveVisualReady(page) {
     return false;
 }
 
-// 🟢 NEW CODE (Updated)
+// 🟢 NEW CODE (Updated for 2026 Player APIs & Native OS Clicks)
 async function triggerSmartUnmute(page) {
     for (const frame of page.frames()) {
         try {
             if (frame.isDetached()) continue;
+            
+            // Step 1: 2026 Direct Player APIs (Bypasses UI completely)
             await frame.evaluate(() => {
-                // 1. First, forcefully unmute HTML5 video/audio elements directly
+                // JW Player
+                try { if (typeof jwplayer === 'function') { const jw = jwplayer(); if (jw && jw.setMute) { jw.setMute(false); jw.setVolume(100); } } } catch(e){}
+                // VideoJS
+                try { if (typeof videojs === 'function') { const players = videojs.getPlayers(); Object.values(players).forEach(p => { p.muted(false); p.volume(1); }); } } catch(e){}
+                // Clappr
+                try { if (window.player && typeof window.player.unmute === 'function') { window.player.unmute(); window.player.setVolume(100); } } catch(e){}
+                try { if (window.clappr && typeof window.clappr.unmute === 'function') { window.clappr.unmute(); window.clappr.setVolume(100); } } catch(e){}
+                
+                // Native HTML5 Force
                 document.querySelectorAll('video, audio').forEach(media => { 
                     media.muted = false; 
                     media.volume = 1.0; 
                 });
+            }).catch(() => {});
 
-                // 2. Click specific UI Mute buttons (JW Player, Clappr, VideoJS, Plyr)
-                const unmuteSelectors = [
-                    '.jw-icon-volume.jw-off', // JW Player Left Side (Image 1)
-                    '[aria-label="Mute button"]', // JW Player ARIA
-                    '.media-control-button[data-volume]', // Clappr Right Side (Image 3)
-                    '.vjs-vol-muted', // VideoJS
-                    '.plyr__control--pressed[data-plyr="mute"]', // Plyr
-                    '.dplayer-volume-icon', // DPlayer
-                    '[class*="unmute"]', // Generic unmute class
-                    '[class*="volume-mute"]' // Generic volume-mute class
-                ].join(', ');
+            // Step 2: Puppeteer Native Trusted Clicks (Asli Mouse Simulation)
+            const unmuteSelectors = [
+                '.jw-icon-volume.jw-off', 
+                '[aria-label="Mute button"]', 
+                '.media-control-button[data-volume]', 
+                '.vjs-vol-muted', 
+                '.plyr__control--pressed[data-plyr="mute"]',
+                '.clappr-watermark[data-watermark]' // Kabhi kabhi unmute watermark ke peeche hota hai
+            ];
 
-                document.querySelectorAll(unmuteSelectors).forEach(btn => {
-                    try { btn.click(); } catch(e) {}
-                });
-
-                // 3. Fallback: Text/JS based generic clicking
-                const potentialElements = Array.from(document.querySelectorAll('button, div, span, a, i'));
-                potentialElements.forEach(el => {
-                    const text = (el.innerText || el.textContent || '').trim().toUpperCase();
-                    const onClickStr = (el.getAttribute('onclick') || '').toLowerCase();
-                    const matchesText = text.includes('UNMUTE') || text.includes('MUTE ME') || text.includes('STREAM UNMUTE') || text.includes('AUDIO');
-                    const matchesJS = onClickStr.includes('unmute') || onClickStr.includes('volume') || onClickStr.includes('audio');
-                    
-                    if (matchesText || matchesJS) {
-                        const rect = el.getBoundingClientRect();
-                        const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none';
-                        if (isVisible) { 
-                            try { el.click(); } catch(e) {} 
-                            try { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e) {} 
+            for (const selector of unmuteSelectors) {
+                try {
+                    const btns = await frame.$$(selector);
+                    for (const btn of btns) {
+                        const isVisible = await frame.evaluate(el => {
+                            const rect = el.getBoundingClientRect();
+                            return rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).visibility !== 'hidden' && window.getComputedStyle(el).display !== 'none';
+                        }, btn);
+                        
+                        if (isVisible) {
+                            await btn.click(); // Yeh fake JS click nahi hai, OS level ka mouse click hai
+                            await new Promise(r => setTimeout(r, 200));
                         }
                     }
-                });
-            }).catch(() => {});
+                } catch(err) {}
+            }
         } catch (e) {}
     }
 }
-
 async function initializeVideo(page, startMuted, isActivePage) {
     if (!page) return;
     try {
@@ -723,24 +725,44 @@ async function initializeVideo(page, startMuted, isActivePage) {
             }, 500); 
         }).catch(() => {});
 
-        await targetFrame.evaluate((muteVideo) => {
-            window.isStreamMuted = muteVideo; 
-            setInterval(() => {
-                try {
-                    const style = document.createElement('style');
-                    style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
-                    document.head.appendChild(style);
+        // 🟢 NEW CODE (Updated for 2026 - Handles Clappr 2nd Volume & JW Player)
+        await targetFrame.evaluate((muteVideo) => {
+            window.isStreamMuted = muteVideo; 
+            setInterval(() => {
+                try {
+                    const style = document.createElement('style');
+                    // 🛡️ Added .media-control to hide Clappr UI properly
+                    style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls, .media-control { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
+                    document.head.appendChild(style);
 
-                    const mediaElements = document.querySelectorAll('video, audio');
-                    const videos = Array.from(document.querySelectorAll('video'));
-                    let realVideo = null;
+                    const videos = Array.from(document.querySelectorAll('video'));
+                    let realVideo = null;
+                    for (const v of videos) { if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; } }
+                    if (!realVideo && videos.length > 0) realVideo = videos[0];
 
-                    mediaElements.forEach(media => { media.muted = window.isStreamMuted; media.volume = window.isStreamMuted ? 0.0 : 1.0; });
-                    if (!window.isStreamMuted) {
-    const unmuteSelectors = '.jw-icon-volume.jw-off, [aria-label="Mute button"], .media-control-button[data-volume], .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"], .dplayer-volume-icon, [class*="unmute"], [class*="volume-mute"]';
-    document.querySelectorAll(unmuteSelectors).forEach(btn => { try { btn.click(); } catch(e){} });
-}
+                    if (realVideo) {
+                        // 1. Core HTML5 Audio Override
+                        realVideo.muted = window.isStreamMuted;
+                        realVideo.volume = window.isStreamMuted ? 0.0 : 1.0;
+                    }
 
+                    // 2. Handle 1st Player (JW) & 2nd Player (Clappr) Safely
+                    if (!window.isStreamMuted) {
+                        // 🔥 2026 API Injections for Clappr & JW
+                        try { if (typeof jwplayer === 'function') { jwplayer().setMute(false); } } catch(e){}
+                        try { if (window.player && typeof window.player.unmute === 'function') { window.player.unmute(); window.player.setVolume(100); } } catch(e){}
+                        try { if (window.clappr && typeof window.clappr.unmute === 'function') { window.clappr.unmute(); window.clappr.setVolume(100); } } catch(e){}
+
+                        // 🔥 Click Fallback (ONLY if video is still stuck on mute, taakey infinite loop na bane)
+                        if (realVideo && (realVideo.muted || realVideo.volume === 0)) {
+                            // First Image (JW) + Third Image (Clappr Right Side)
+                            const unmuteBtns = document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .media-control-button[data-volume]');
+                            unmuteBtns.forEach(btn => { try { btn.click(); } catch(e){} });
+                        }
+                    }
+
+
+                    
                     for (const v of videos) { if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; } }
                     if (!realVideo && videos.length > 0) realVideo = videos[0];
 
