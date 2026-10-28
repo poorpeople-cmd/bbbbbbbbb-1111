@@ -1,3 +1,4 @@
+
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -282,6 +283,11 @@ async function detectAndRememberError(page, currentUrl) {
 // =========================================================================================
 async function preparePage(page) {
     if (!page) return;
+    // 🔊 Mute/Unmute events ko terminal me print karne ka listener
+    page.on('console', msg => {
+        const text = msg.text();
+        if (text.includes('[🔊]')) console.log(text);
+    });
     await setupNetworkAdBlocker(page);
     attachAntiAdListeners(page);
     await applyPreloadFirewall(page);
@@ -653,8 +659,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     });
                     if (autoPlayed) { isVideoPlaying = true; break; }
 
-                    // Clappr ka play button handle karne ke liye '.media-control-button' add kiya gaya hai
-                    const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, [class*="unmute"], .fp-play, .media-control-button');
+                    const playBtn = await frame.$('.jw-icon-display[aria-label="Play"], button[data-plyr="play"], .vjs-big-play-button, [class*="unmute"], .fp-play');
                     if (playBtn) {
                         const isVisible = await frame.evaluate(el => { const style = window.getComputedStyle(el); return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0'; }, playBtn);
                         if (isVisible) { await frame.evaluate(el => el.click(), playBtn); await new Promise(r => setTimeout(r, 3000)); isVideoPlaying = true; break; }
@@ -700,35 +705,33 @@ async function initializeVideo(page, startMuted, isActivePage) {
             window.isStreamMuted = muteVideo; 
             setInterval(() => {
                 try {
+                    const style = document.createElement('style');
+                    style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls { display: none !important; opacity: 0 !important; visibility: hidden !important; }`;
+                    document.head.appendChild(style);
 
-const mediaElements = document.querySelectorAll('video, audio');
+                    const mediaElements = document.querySelectorAll('video, audio');
                     const videos = Array.from(document.querySelectorAll('video'));
                     let realVideo = null;
 
-                    mediaElements.forEach(media => { media.muted = window.isStreamMuted; media.volume = window.isStreamMuted ? 0.0 : 1.0; });
-
-                    // 1. NATIVE BUTTONS, SLIDER & API TRIGGER (Controls hide hone se pehle click karega)
+                    let didUnmute = false;
+                    mediaElements.forEach(media => {
+                        if (!window.isStreamMuted && (media.muted || media.volume === 0)) { didUnmute = true; }
+                        media.muted = window.isStreamMuted;
+                        media.volume = window.isStreamMuted ? 0.0 : 1.0;
+                    });
                     if (!window.isStreamMuted) {
-                        document.querySelectorAll('.jw-icon-volume.jw-off, .jw-icon-volume[aria-label="Unmute"], div[aria-label="Volume"].jw-off, button[aria-label="Unmute"], .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
-                        document.querySelectorAll('.jw-horizontal-volume-container').forEach(slider => { 
-                            try { slider.setAttribute('aria-valuenow', '100'); slider.setAttribute('aria-valuetext', 'Volume 100%'); } catch(e){} 
+                        document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => {
+                            const style = window.getComputedStyle(btn);
+                            if (style.display !== 'none' && style.opacity !== '0') {
+                                didUnmute = true;
+                                try { btn.click(); } catch(e){}
+                            }
                         });
-                        try { if (typeof jwplayer === 'function') { jwplayer().setMute(false); jwplayer().setVolume(100); } } catch(e){}
+                    }
+                    if (didUnmute && !window.isStreamMuted) {
+                        console.log('[🔊] BROWSER SHIELD: Stream mute hui thi! System ne automatically UNMUTE kar diya.');
                     }
 
-                    // 2. NATIVE FULLSCREEN TRIGGER
-                    try {
-                        const fsBtn = document.querySelector('.jw-icon-fullscreen, .jw-tooltip-fullscreen, button[aria-label="Fullscreen"]');
-                        if (fsBtn && !document.fullscreenElement) { fsBtn.click(); }
-                        if (typeof jwplayer === 'function' && !document.fullscreenElement) jwplayer().setFullscreen(true);
-                    } catch(e){}
-
-                    // 3. AB UI HIDE KAREIN (Sab actions mukammal hone ke baad)
-                    const style = document.createElement('style');
-                    style.innerHTML = `.jw-controls, .jw-ui, .plyr__controls, .vjs-control-bar, [data-player] .controls, .media-control { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }`;
-                    document.head.appendChild(style);
-                    
-                    
                     for (const v of videos) { if (v.clientWidth > 100 && v.clientHeight > 100) { realVideo = v; break; } }
                     if (!realVideo && videos.length > 0) realVideo = videos[0];
 
@@ -1048,11 +1051,21 @@ if (activeStatus.status === 'HEALTHY') {
                 for (const frame of activePage.frames()) {
                     try {
                         if (!frame.isDetached()) {
-                            frame.evaluate(() => { 
+                            let actionTaken = await frame.evaluate(() => { 
                                 window.isStreamMuted = false;
-                                document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
-                                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
-                            }).catch(()=>{});
+                                let fixed = false;
+                                document.querySelectorAll('video, audio').forEach(m => { 
+                                    if (m.muted || m.volume === 0) { m.muted = false; m.volume = 1.0; fixed = true; } 
+                                }); 
+                                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { 
+                                    try { btn.click(); fixed = true; } catch(e){} 
+                                });
+                                return fixed;
+                            }).catch(() => false);
+                            
+                            if (actionTaken) {
+                                console.log(`[🔊] WATCHDOG EVENT: Active stream was muted. System forced UNMUTE!`);
+                            }
                         }
                     } catch(e) {}
                 }
@@ -1120,11 +1133,21 @@ if (activeStatus.status === 'HEALTHY') {
                 for (const frame of activePage.frames()) {
                     try {
                         if (!frame.isDetached()) {
-                            await frame.evaluate(() => { 
+                            let actionTaken = await frame.evaluate(() => { 
                                 window.isStreamMuted = false;
-                                document.querySelectorAll('video, audio').forEach(m => { m.muted = false; m.volume = 1.0; }); 
-                                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { try { btn.click(); } catch(e){} });
-                            });
+                                let fixed = false;
+                                document.querySelectorAll('video, audio').forEach(m => { 
+                                    if (m.muted || m.volume === 0) { m.muted = false; m.volume = 1.0; fixed = true; } 
+                                }); 
+                                document.querySelectorAll('.jw-icon-volume.jw-off, .vjs-vol-muted, .plyr__control--pressed[data-plyr="mute"]').forEach(btn => { 
+                                    try { btn.click(); fixed = true; } catch(e){} 
+                                });
+                                return fixed;
+                            }).catch(() => false);
+                            
+                            if (actionTaken) {
+                                console.log(`[🔊] WATCHDOG EVENT: Active stream was muted. System forced UNMUTE!`);
+                            }
                         }
                     } catch(e) {}
                 }
@@ -1478,8 +1501,6 @@ else {
 }
 
 mainLoop();
-
-
 
 
 
