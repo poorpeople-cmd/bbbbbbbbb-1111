@@ -250,17 +250,15 @@ function getBrowserArgsForUrl(targetUrl) {
     let args = [
         '--no-sandbox', '--disable-setuid-sandbox', `--window-size=${RES_W},${RES_H}`, '--window-position=0,0', '--kiosk', '--start-fullscreen',
         '--autoplay-policy=no-user-gesture-required', '--disable-dev-shm-usage', '--ignore-certificate-errors',
-        '--disable-smooth-scrolling', '--disable-blink-features=AutomationControlled',
+        '--disable-smooth-scrolling',
         '--enable-widevine',
         '--enable-features=EncryptedMedia,Widevine',
-        '--disable-features=PermissionsPolicyHeader,WebRtcHideLocalIpsWithMdns,DisableLoadExtensionCommandLineSwitch,Translate,CalculateNativeWinOcclusion',
-        '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-        '--enforce-webrtc-ip-permission-check',
+        '--disable-features=PermissionsPolicyHeader,DisableLoadExtensionCommandLineSwitch,Translate,CalculateNativeWinOcclusion',
         '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
         '--alsa-output-device=default'
     ];
 
-    // Load uBlock WITHOUT --disable-extensions-except (which kills Chrome's internal Widevine DRM component)
+    // Load uBlock WITHOUT --disable-extensions-except (keeps Chrome's internal Widevine DRM component active)
     const ublockPath = path.join(process.cwd(), 'ublock-lite');
     if (fs.existsSync(path.join(ublockPath, 'manifest.json'))) {
         args.push(`--load-extension=${ublockPath}`);
@@ -277,12 +275,11 @@ function getBrowserArgsForUrl(targetUrl) {
 async function createBrowserInstance(targetUrl, slotName = 'main') {
     const customArgs = getBrowserArgsForUrl(targetUrl);
     const userDataDir = prepareDrmUserProfile(slotName);
-    const chromePaths = ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome'];
-    const executablePath = chromePaths.find(p => fs.existsSync(p));
+    const executablePath = '/usr/bin/google-chrome-stable';
 
     return await puppeteer.launch({
         headless: false,
-        executablePath: executablePath || undefined,
+        executablePath: fs.existsSync(executablePath) ? executablePath : '/usr/bin/google-chrome',
         userDataDir: userDataDir,
         defaultViewport: { width: RES_W, height: RES_H },
         ignoreDefaultArgs: [
@@ -378,29 +375,42 @@ async function detectAndRememberError(page, currentUrl) {
 // =========================================================================================
 // 🛡️ DRM-SAFE CDP AD-BLOCKER + PRELOAD FIREWALL (NO RequestInterception Corruption!)
 // =========================================================================================
-const AD_BLOCK_PATTERNS = [
-    '*popads*', '*popcash*', '*exoclick*', '*adsterra*', '*onclickads*',
-    '*doubleclick*', '*googlesyndication*', '*adexchangerapid*', '*bet365*', '*1xbet*',
-    '*propellerads*', '*hilltopads*', '*trafficjunky*', '*juicyads*', '*clickadu*',
-    '*adcash*', '*galaksion*', '*bidvertiser*', '*revcontent*', '*mgid*',
-    '*taboola*', '*outbrain*', '*acscdn*', '*histats*', '*usrpubtrk*',
-    '*clarity.ms*', '*yandex.ru/metrika*', '*adsco.re*', '*a-ads.com*', '*bidgear*',
-    '*jerkmate*', '*fanduel*', '*adrevenue*'
+const AD_DOMAINS = [
+    'popads', 'popcash', 'exoclick', 'adsterra', 'onclickads',
+    'doubleclick', 'googlesyndication', 'adexchangerapid', 'bet365', '1xbet',
+    'propellerads', 'hilltopads', 'trafficjunky', 'juicyads', 'clickadu',
+    'adcash', 'galaksion', 'bidvertiser', 'revcontent', 'mgid',
+    'taboola', 'outbrain', 'acscdn', 'histats', 'usrpubtrk',
+    'clarity.ms', 'yandex.ru/metrika', 'adsco.re', 'a-ads.com', 'bidgear',
+    'jerkmate', 'fanduel', 'adrevenue'
 ];
 
 async function attachCdpAdBlocker(target) {
-    try {
-        const client = await target.createCDPSession();
-        await client.send('Network.enable');
-        await client.send('Network.setBlockedURLs', { urls: AD_BLOCK_PATTERNS });
-    } catch (e) {}
+    // Disabled CDP wildcard blocking so child iframes/workers never corrupt XHR/DRM requests
 }
 
 async function setupNetworkAdBlocker(page) {
     if (!page) return;
     try {
-        await attachCdpAdBlocker(page.target());
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
+        await page.setRequestInterception(true);
+
+        page.on('request', req => {
+            if (req.isInterceptResolutionHandled()) return;
+            const url = req.url();
+            const type = req.resourceType();
+            const critical = ['media', 'xhr', 'fetch'].includes(type) ||
+                /\.(m3u8|ts|m4s|mpd|key)(\?|$)|license|\/key\/|jwplayer|jwpcdn/i.test(url);
+
+            if (critical) return req.continue();
+            if (AD_DOMAINS.some(d => url.includes(d))) return req.abort();
+            return req.continue();
+        });
+
+        page.on('response', r => {
+            if (r.status() === 403) {
+                console.log('[403]:', r.url());
+            }
+        });
     } catch (e) {}
 }
 
@@ -408,20 +418,7 @@ async function applyPreloadFirewall(page) {
     if (!page) return;
     try {
         await page.evaluateOnNewDocument(() => {
-            // 1. Spoof Windows 11 + NVIDIA GPU to bypass Anti-Bot & 403 CDN blocks
-            Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
-            Object.defineProperty(navigator, 'webdriver', { get: () => false });
-            Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
-            Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
-
-            const getParameter = WebGLRenderingContext.prototype.getParameter;
-            WebGLRenderingContext.prototype.getParameter = function(param) {
-                if (param === 37445) return 'Google Inc. (NVIDIA)';
-                if (param === 37446) return 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)';
-                return getParameter.apply(this, arguments);
-            };
-
-            // 2. Shadow DOM Ad Destroyer
+            // 1. Shadow DOM Ad Destroyer
             const originalAttachShadow = Element.prototype.attachShadow;
             Element.prototype.attachShadow = function(init) {
                 if (init && init.mode === 'closed') init.mode = 'open'; 
@@ -435,15 +432,16 @@ async function applyPreloadFirewall(page) {
             };
             Element.prototype.attachShadow.toString = function() { return "function attachShadow() { [native code] }"; };
 
-            // 3. Inject encrypted-media into every iframe BEFORE it loads
-            const drmAllow = 'autoplay; encrypted-media; fullscreen; picture-in-picture; clipboard-write';
+            // 2. Inject allow="encrypted-media; autoplay; fullscreen" into every iframe
+            const drmAllow = 'encrypted-media; autoplay; fullscreen';
             const patchIframe = (el) => {
                 if (el && el.tagName === 'IFRAME') {
-                    if (!el.allow || !el.allow.includes('encrypted-media')) {
-                        el.setAttribute('allow', drmAllow);
-                    }
+                    el.setAttribute('allow', drmAllow);
                 }
             };
+            document.addEventListener('DOMContentLoaded', () => {
+                document.querySelectorAll('iframe').forEach(patchIframe);
+            });
             const drmObs = new MutationObserver((mutations) => {
                 for (const m of mutations) {
                     for (const node of m.addedNodes) {
@@ -789,8 +787,35 @@ async function triggerSmartUnmute(page) {
     }
 }
 
+async function verifyWidevineSupport(page) {
+    if (!page) return;
+    try {
+        const ok = await page.evaluate(async () => {
+            try {
+                await navigator.requestMediaKeySystemAccess('com.widevine.alpha', [{
+                    initDataTypes: ['cenc'],
+                    videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"' }]
+                }]);
+                return true;
+            } catch (e) {
+                return String(e);
+            }
+        });
+        console.log('[🔐 Widevine Check]:', ok);
+    } catch (e) {}
+}
+
 async function initializeVideo(page, startMuted, isActivePage) {
     if (!page) return;
+    await verifyWidevineSupport(page);
+
+    // Ensure all existing iframes on page also have encrypted-media permission
+    await page.evaluate(() => {
+        document.querySelectorAll('iframe').forEach(ifr => {
+            ifr.setAttribute('allow', 'encrypted-media; autoplay; fullscreen');
+        });
+    }).catch(() => {});
+
     const shouldMute = startMuted || !ENABLE_STREAM_AUDIO;
     try {
         if (SERVER_SELECTION !== 'None') {
