@@ -797,6 +797,43 @@ async function triggerSmartUnmute(page) {
     }
 }
 
+async function navigateWithIframeProtection(p, targetUrl) {
+    const daddyMatch = targetUrl.match(/^(https?:\/\/[^/]+)\/(stream|cast|watch|plus|casting|player)\/stream-(\d+)\.php/i);
+    if (daddyMatch) {
+        const origin = daddyMatch[1];
+        const streamFolder = daddyMatch[2].toLowerCase();
+        const streamId = daddyMatch[3];
+        const parentWatchUrl = `${origin}/watch.php?id=${streamId}`;
+
+        console.log(`[🛡️] Direct Embed URL Detected (${streamFolder}/stream-${streamId}.php) -> Loading via Parent Wrapper: ${parentWatchUrl}`);
+        await p.goto(parentWatchUrl, { referer: `${origin}/`, waitUntil: 'domcontentloaded', timeout: 45000 });
+        await new Promise(r => setTimeout(r, 2000));
+
+        // Force the parent page's player iframe to load the exact requested stream/cast URL with genuine Sec-Fetch-Dest: iframe!
+        await p.evaluate((exactIframeSrc) => {
+            const iframes = Array.from(document.querySelectorAll('iframe'));
+            let playerIframe = iframes.find(f => /stream|cast|watch|plus|casting|player|embed/i.test(f.src || '')) || iframes[0];
+            if (!playerIframe) {
+                playerIframe = document.createElement('iframe');
+                playerIframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
+                playerIframe.setAttribute('allowfullscreen', 'true');
+                document.body.appendChild(playerIframe);
+            }
+            playerIframe.style.cssText = 'position:fixed !important;top:0 !important;left:0 !important;width:100vw !important;height:100vh !important;z-index:2147483645 !important;border:none !important;background:#000 !important;';
+            if (!playerIframe.src || !playerIframe.src.includes(exactIframeSrc)) {
+                playerIframe.src = exactIframeSrc;
+            }
+        }, targetUrl).catch(() => {});
+
+        await new Promise(r => setTimeout(r, 3500));
+        return;
+    }
+
+    let refererUrl = '';
+    try { refererUrl = new URL(targetUrl).origin + '/'; } catch (e) {}
+    await p.goto(targetUrl, { referer: refererUrl || undefined, waitUntil: 'domcontentloaded', timeout: 45000 });
+}
+
 async function initializeVideo(page, startMuted, isActivePage) {
     if (!page) return;
     const shouldMute = startMuted || !ENABLE_STREAM_AUDIO;
@@ -831,7 +868,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         document.querySelectorAll('video').forEach(v => {
                             v.muted = muteFlag;
                             v.volume = muteFlag ? 0.0 : 1.0;
-                            // Use v.play() API only — NEVER call v.click() as it triggers ad popunders & pauses video!
                             if (v.paused) v.play().catch(() => {});
                             if (!v.paused && v.readyState >= 2 && v.currentTime > 0) playing = true;
                         });
@@ -850,7 +886,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
 
         await forcePlayerFullscreen(page);
 
-        // Continuous frame maintainer across all frames
         for (const frame of page.frames()) {
             if (frame.isDetached()) continue;
             await frame.evaluate((muteFlag) => {
